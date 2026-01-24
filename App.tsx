@@ -388,17 +388,19 @@ const AppMain: React.FC = () => {
     return theme === 'light' ? 'Modo claro' : 'Modo escuro';
   }, [theme]);
 
-  if (isInitialLoading) {
-    // Timeout de segurança adicional no render
-    useEffect(() => {
-      const safetyTimeout = setTimeout(() => {
-        console.error('Safety timeout triggered - forcing app to load');
-        setIsInitialLoading(false);
-      }, 6000);
-      
-      return () => clearTimeout(safetyTimeout);
-    }, []);
+  // Timeout de segurança adicional para garantir que o loading sempre termine
+  useEffect(() => {
+    if (!isInitialLoading) return;
     
+    const safetyTimeout = setTimeout(() => {
+      console.error('Safety timeout triggered - forcing app to load');
+      setIsInitialLoading(false);
+    }, 6000);
+    
+    return () => clearTimeout(safetyTimeout);
+  }, [isInitialLoading]);
+
+  if (isInitialLoading) {
     return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><LoadingState message="Protegendo sua conexão..." /></div>;
   }
 
