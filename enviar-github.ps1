@@ -1,37 +1,96 @@
-# Envia o SmartPonto para GitHub (projeto na raiz do repo = Vercel sem Root Directory)
+# ============================================================
+# Script para enviar SmartPonto para GitHub
 # Execute no PowerShell como Administrador: .\enviar-github.ps1
+# ============================================================
 
-$ErrorActionPreference = "Stop"
+Write-Host "🚀 Enviando SmartPonto para GitHub..." -ForegroundColor Cyan
+
+# Mudar para o diretório do projeto
 Set-Location "D:\APP Smartponto"
 
-Write-Host "=== Enviar SmartPonto para GitHub ===" -ForegroundColor Cyan
+# Remover lock do Git se existir
+if (Test-Path ".git\index.lock") {
+    Write-Host "⚠️  Removendo lock do Git..." -ForegroundColor Yellow
+    try {
+        Remove-Item ".git\index.lock" -Force -ErrorAction Stop
+        Write-Host "✅ Lock removido" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ Erro ao remover lock. Feche outros processos Git e tente novamente." -ForegroundColor Red
+        Write-Host "   Ou remova manualmente: .git\index.lock" -ForegroundColor Yellow
+        exit 1
+    }
+}
 
-# Remove locks residuais
-Remove-Item -Path ".git\index.lock" -Force -ErrorAction SilentlyContinue
-Remove-Item -Path ".git\config.lock" -Force -ErrorAction SilentlyContinue
+# Configurar Git (se necessário)
+git config core.autocrlf input
 
-Write-Host "`n1. git add -A" -ForegroundColor Yellow
+# 1. Adicionar TODOS os arquivos
+Write-Host "`n📦 Adicionando arquivos..." -ForegroundColor Cyan
 git add -A
 
-Write-Host "`n2. git status" -ForegroundColor Yellow
-git status --short
+# 2. Verificar status
+Write-Host "`n📋 Status do repositório:" -ForegroundColor Cyan
+git status
 
-$st = git status --porcelain
-if (-not $st) {
-    Write-Host "`nNada para commitar." -ForegroundColor Gray
+# 3. Verificar se há mudanças para commitar
+$status = git status --porcelain
+if ([string]::IsNullOrWhiteSpace($status)) {
+    Write-Host "`n✅ Nenhuma mudança para commitar. Working tree está limpo." -ForegroundColor Green
+    Write-Host "`n🔄 Sincronizando com remoto..." -ForegroundColor Cyan
+    git pull origin main --rebase
+    Write-Host "`n✅ Sincronização concluída!" -ForegroundColor Green
     exit 0
 }
 
-Write-Host "`n3. git commit" -ForegroundColor Yellow
-git commit -m "feat: SmartPonto - projeto na raiz, Vercel 404 fix, docs"
+# 4. Fazer commit
+Write-Host "`n💾 Fazendo commit..." -ForegroundColor Cyan
+$commitMessage = "feat: adicionar todas as melhorias e implementações recentes
 
-Write-Host "`n4. git push (projeto na raiz; force para substituir estrutura antiga)" -ForegroundColor Yellow
-git push -u origin main --force
+- Notificações in-app (centro de notificações)
+- Permissões granulares (roles e permissões)
+- Export Excel (.xlsx)
+- Acessibilidade (ARIA labels, navegação por teclado)
+- Internacionalização (i18n pt-BR/en-US)
+- Modo escuro automático
+- Analytics avançado (métricas comparativas)
+- Integração calendário (feriados)
+- Storage bucket photos
+- Audit logs em banco
+- Export PDF
+- Push/lembretes
+- Testes (Vitest)
+- Segurança (zod, headers)
+- Monitoramento (Sentry)
+- Documentação completa"
 
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "`nOK! Enviado para https://github.com/oluaphms/APP-Smartponto" -ForegroundColor Green
-    Write-Host "Vercel: deixe Root Directory VAZIO (projeto ja esta na raiz)." -ForegroundColor Cyan
-} else {
-    Write-Host "`nErro no push. Use Personal Access Token como senha se pedir." -ForegroundColor Red
+git commit -m $commitMessage
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "`n❌ Erro ao fazer commit" -ForegroundColor Red
     exit 1
 }
+
+Write-Host "✅ Commit realizado com sucesso!" -ForegroundColor Green
+
+# 5. Sincronizar com remoto
+Write-Host "`n🔄 Sincronizando com remoto (pull --rebase)..." -ForegroundColor Cyan
+git pull origin main --rebase
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "`n⚠️  Conflitos detectados. Resolva manualmente e execute novamente." -ForegroundColor Yellow
+    exit 1
+}
+
+# 6. Enviar para GitHub
+Write-Host "`n📤 Enviando para GitHub..." -ForegroundColor Cyan
+git push origin main
+
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "`n✅ Sucesso! Código enviado para GitHub." -ForegroundColor Green
+    Write-Host "`n🔗 Repositório: https://github.com/oluaphms/APP-Smartponto.git" -ForegroundColor Cyan
+} else {
+    Write-Host "`n❌ Erro ao enviar para GitHub" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "`n✨ Concluído!" -ForegroundColor Green
