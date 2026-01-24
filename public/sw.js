@@ -11,8 +11,9 @@ const RUNTIME_CACHE = 'smartponto-runtime-v1';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
-  '/index.css',
-  '/manifest.json'
+  '/manifest.json',
+  '/favicon.ico',
+  '/favicon.svg'
 ];
 
 // Instalação do Service Worker
@@ -152,8 +153,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'SmartPonto';
   const options = {
     body: data.body || 'Nova notificação',
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/icon-96x96.png',
+    icon: '/favicon.svg',
+    badge: '/favicon.ico',
     vibrate: [200, 100, 200],
     data: data
   };

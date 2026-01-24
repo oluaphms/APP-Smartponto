@@ -1,6 +1,7 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import './index.css';
 import { initSentry } from './lib/sentry';
 import { ThemeService } from './services/themeService';
 import { i18n } from './lib/i18n';
