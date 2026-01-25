@@ -696,7 +696,6 @@ const AppMain: React.FC = () => {
                     e.stopPropagation();
                     
                     const typeToUse = pendingPunchType;
-                    console.log('🔵 Botão Registro por Foto clicado, pendingPunchType:', typeToUse);
                     
                     if (typeToUse) {
                       // Atualizar todos os estados de uma vez
@@ -706,9 +705,6 @@ const AppMain: React.FC = () => {
                       // Fechar o modal de seleção - ele fecha automaticamente quando punchType é definido
                       // mas vamos fechar explicitamente também para garantir
                       setShowMethodSelection(false);
-                      console.log('✅ Estados atualizados: method=PHOTO, punchType=', typeToUse);
-                    } else {
-                      console.warn('⚠️ pendingPunchType é null!');
                     }
                   }}
                   type="button"
