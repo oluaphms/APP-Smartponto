@@ -666,7 +666,7 @@ const AppMain: React.FC = () => {
       </Suspense>
       
       {/* Diálogo de seleção de método de registro */}
-      {showMethodSelection && (
+      {showMethodSelection && !punchType && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10">
             <div className="p-10 text-center">
@@ -682,14 +682,20 @@ const AppMain: React.FC = () => {
               
               <div className="space-y-4">
                 <button
-                  onClick={() => {
-                    setShowMethodSelection(false);
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
                     if (pendingPunchType) {
-                      // Garantir que o modal abra no modo Foto para acionar a câmera imediatamente
+                      // Atualizar todos os estados de forma síncrona
+                      // Definir o método e tipo - isso fará o modal de seleção fechar automaticamente
+                      // e o PunchModal abrir
                       setSelectedMethod(PunchMethod.PHOTO);
                       setPunchType(pendingPunchType);
+                      // O modal de seleção fecha automaticamente quando punchType é definido
                     }
                   }}
+                  type="button"
                   className="w-full p-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all shadow-xl shadow-indigo-600/20 active:scale-95"
                 >
                   <Camera size={24} />
@@ -697,13 +703,17 @@ const AppMain: React.FC = () => {
                 </button>
                 
                 <button
-                  onClick={() => {
-                    setShowMethodSelection(false);
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
                     if (pendingPunchType) {
+                      setSelectedMethod(PunchMethod.MANUAL);
                       setPunchType(pendingPunchType);
-                      // O modal já tem a opção manual, vamos garantir que ela apareça
+                      // O modal de seleção fecha automaticamente quando punchType é definido
                     }
                   }}
+                  type="button"
                   className="w-full p-6 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all border-2 border-slate-200 dark:border-slate-700 active:scale-95"
                 >
                   <Keyboard size={24} />
