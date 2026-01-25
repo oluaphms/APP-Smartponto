@@ -27,7 +27,9 @@ const PunchModal: React.FC<PunchModalProps> = ({ user, type, onClose, onConfirm,
   // Garantir que showTroubleshoot seja false quando o modal abre com método PHOTO
   useEffect(() => {
     if (method === PunchMethod.PHOTO) {
+      console.log('Modal aberto com método PHOTO - resetando showTroubleshoot');
       setShowTroubleshoot(false);
+      setIsCapturing(false);
     }
   }, []);
   
@@ -143,21 +145,12 @@ const PunchModal: React.FC<PunchModalProps> = ({ user, type, onClose, onConfirm,
 
       console.log('Solicitando acesso à câmera...');
 
-      // Verificar se há dispositivos de vídeo conectados (útil para diagnósticos)
-      let devices: MediaDeviceInfo[] = [];
-      try {
-        devices = await navigator.mediaDevices.enumerateDevices();
-      } catch (e) {
-        console.warn('Falha ao enumerar dispositivos:', e);
-      }
-      const hasVideoInput = devices.some(d => d.kind === 'videoinput');
-      if (!hasVideoInput) {
-        setError("Nenhuma câmera encontrada. Verifique se há uma câmera conectada ou integrada.");
-        // Não definir showTroubleshoot - deixar o overlay aparecer
-        return;
-      }
+      // NOTA: Não verificar enumerateDevices() antes de solicitar permissão
+      // porque os dispositivos só aparecem com labels após permissão ser concedida
+      // Vamos tentar getUserMedia diretamente - se não houver câmera, retornará erro específico
 
       // Tentar com configurações progressivas
+      console.log('Tentando obter stream com diferentes configurações...');
       let stream: MediaStream | null = null;
       let lastError: any = null;
       const videoConstraints = [
@@ -179,14 +172,16 @@ const PunchModal: React.FC<PunchModalProps> = ({ user, type, onClose, onConfirm,
         { video: true }
       ];
 
-      for (const constraints of videoConstraints) {
+      for (let i = 0; i < videoConstraints.length; i++) {
+        const constraints = videoConstraints[i];
         try {
+          console.log(`Tentativa ${i + 1}/${videoConstraints.length} com configurações:`, JSON.stringify(constraints));
           stream = await navigator.mediaDevices.getUserMedia(constraints);
-          console.log('Acesso à câmera concedido com configurações:', constraints);
+          console.log('✅ Acesso à câmera concedido com configurações:', JSON.stringify(constraints));
           break;
         } catch (err: any) {
           lastError = err;
-          console.log('Falha com configurações:', constraints, err);
+          console.log(`❌ Falha na tentativa ${i + 1}:`, err.name, err.message);
           if (stream) {
             stream.getTracks().forEach(track => track.stop());
             stream = null;
@@ -237,43 +232,52 @@ const PunchModal: React.FC<PunchModalProps> = ({ user, type, onClose, onConfirm,
         return;
       }
 
+      console.log('Stream obtido, atribuindo ao elemento de vídeo...');
       videoRef.current.srcObject = stream;
+      console.log('Stream atribuído, aguardando metadata...');
       
       // Aguardar o vídeo estar pronto
       await new Promise((resolve, reject) => {
         if (!videoRef.current) {
+          console.error('Elemento de vídeo perdido durante espera de metadata');
           reject(new Error('Elemento de vídeo perdido'));
           return;
         }
 
         const timeout = setTimeout(() => {
+          console.error('Timeout ao carregar vídeo (10s)');
           reject(new Error('Timeout ao carregar vídeo'));
         }, 10000);
 
         videoRef.current.onloadedmetadata = () => {
+          console.log('Metadata do vídeo carregado');
           clearTimeout(timeout);
           resolve(void 0);
         };
 
         videoRef.current.onerror = (e) => {
+          console.error('Erro no elemento de vídeo durante carregamento:', e);
           clearTimeout(timeout);
           reject(e);
         };
       });
       
+      console.log('Tentando reproduzir vídeo...');
       // Tentar reproduzir
       try {
         await videoRef.current.play();
         setIsCapturing(true);
         setError(null);
-        console.log('Vídeo iniciado com sucesso');
+        console.log('✅ Vídeo iniciado com sucesso - câmera ativa!');
       } catch (playErr) {
-        console.error('Erro ao reproduzir vídeo:', playErr);
+        console.error('❌ Erro ao reproduzir vídeo:', playErr);
         setError("Erro ao iniciar a visualização da câmera. Tente recarregar a página.");
+        setIsCapturing(false);
       }
 
     } catch (err: any) {
-      console.error('Erro ao acessar câmera:', err);
+      console.error('❌ Erro ao acessar câmera:', err);
+      console.error('Detalhes do erro:', { name: err.name, message: err.message, stack: err.stack });
       setIsCapturing(false);
       
       // Parar qualquer stream que possa ter sido iniciado
@@ -285,28 +289,35 @@ const PunchModal: React.FC<PunchModalProps> = ({ user, type, onClose, onConfirm,
 
       // Tratar erros específicos mas não definir showTroubleshoot - permitir nova tentativa
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        console.log('Permissão negada - usuário precisa permitir acesso');
         setError("Câmera bloqueada. Toque em 'Ativar Câmera' novamente e permita o acesso quando solicitado.");
       } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        console.log('Nenhuma câmera encontrada');
         setError("Nenhuma câmera encontrada. Verifique se há uma câmera conectada e tente novamente.");
       } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        console.log('Câmera em uso por outro app');
         setError("Câmera está sendo usada por outro aplicativo. Feche outros apps e tente novamente.");
       } else if (err.name === 'OverconstrainedError') {
+        console.log('Configuração não suportada, tentando alternativa...');
         setError("Configuração da câmera não suportada. Tentando configuração alternativa...");
         // Tentar com configuração mais simples
         try {
+           console.log('Tentando com configuração básica...');
            const simpleStream = await navigator.mediaDevices.getUserMedia({ video: true });
            if (videoRef.current) {
              videoRef.current.srcObject = simpleStream;
              await videoRef.current.play();
              setIsCapturing(true);
              setError(null);
+             console.log('✅ Câmera iniciada com configuração alternativa');
            }
         } catch (retryErr) {
-           console.error('Erro na tentativa alternativa:', retryErr);
+           console.error('❌ Erro na tentativa alternativa:', retryErr);
            setError("Não foi possível acessar a câmera. Tente novamente.");
         }
         return;
       } else {
+        console.log('Erro desconhecido:', err);
         setError(`Erro ao acessar a câmera: ${err.message || 'Erro desconhecido'}. Tente novamente.`);
       }
       // Não definir showTroubleshoot aqui - deixar o usuário tentar novamente através do overlay
