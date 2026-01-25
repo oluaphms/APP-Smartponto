@@ -4,6 +4,8 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    const isProduction = mode === 'production';
+    
     return {
       base: '/',
       test: {
@@ -16,7 +18,23 @@ export default defineConfig(({ mode }) => {
         port: 3008,
         host: '0.0.0.0',
       },
-      plugins: [react()],
+      plugins: [
+        react(),
+        // Plugin para garantir que não há referências ao Tailwind CDN no HTML gerado
+        {
+          name: 'remove-tailwind-cdn',
+          transformIndexHtml(html) {
+            if (isProduction) {
+              // Remover qualquer referência ao Tailwind CDN
+              return html.replace(
+                /<script[^>]*src=["']https?:\/\/cdn\.tailwindcss\.com[^"']*["'][^>]*><\/script>/gi,
+                ''
+              );
+            }
+            return html;
+          }
+        }
+      ],
       define: {
         'process.env.API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY)

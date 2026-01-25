@@ -6,7 +6,6 @@
     <title>SmartPonto | Ponto Inteligente</title>
     <meta name="theme-color" content="#4f46e5">
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" href="/favicon.ico" sizes="32x32">
@@ -81,36 +80,39 @@
     <div id="root"></div>
 <script type="module" src="/index.tsx"></script>
 <script>
-  // Limpar Service Workers e caches antigos para evitar problemas de MIME type
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', async () => {
+  // Limpar Service Workers e caches antigos COMPLETAMENTE
+  (async function() {
+    if ('serviceWorker' in navigator) {
       try {
-        // Desregistrar TODOS os Service Workers primeiro
+        // Desregistrar TODOS os Service Workers
         const registrations = await navigator.serviceWorker.getRegistrations();
-        for (let registration of registrations) {
-          await registration.unregister();
-          console.log('SW unregistered:', registration.scope);
-        }
+        let cacheNames = [];
         
-        // Limpar TODOS os caches antigos
         if ('caches' in window) {
-          const cacheNames = await caches.keys();
-          await Promise.all(
-            cacheNames.map(name => {
-              console.log('Deleting cache:', name);
-              return caches.delete(name);
-            })
-          );
+          cacheNames = await caches.keys();
         }
         
-        // NÃO registrar novo Service Worker por enquanto para evitar problemas de cache
-        // O Service Worker será reativado após confirmar que o deploy está funcionando
-        console.log('All SWs and caches cleared');
+        for (let registration of registrations) {
+          const unregistered = await registration.unregister();
+          console.log('SW unregistered:', registration.scope, unregistered);
+        }
+        
+        // Limpar TODOS os caches
+        if (cacheNames.length > 0) {
+          await Promise.all(cacheNames.map(name => caches.delete(name)));
+          console.log('All caches cleared');
+        }
+        
+        // Forçar atualização da página após limpeza (apenas se havia algo para limpar)
+        if (registrations.length > 0 || cacheNames.length > 0) {
+          console.log('Cache cleared, reloading page...');
+          setTimeout(() => window.location.reload(), 100);
+        }
       } catch (error) {
         console.error('SW cleanup failed:', error);
       }
-    });
-  }
+    }
+  })();
 </script>
 </body>
 </html>
