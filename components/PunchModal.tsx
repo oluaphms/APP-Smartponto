@@ -75,7 +75,7 @@ const PunchModal: React.FC<PunchModalProps> = ({ user, type, onClose, onConfirm,
     requestLocation();
   }, []);
 
-  const startCamera = async () => {
+  const startCamera = useCallback(async () => {
     setError(null);
     setIsCapturing(false);
     
@@ -100,6 +100,7 @@ const PunchModal: React.FC<PunchModalProps> = ({ user, type, onClose, onConfirm,
         existingStream.getTracks().forEach(track => track.stop());
       }
 
+      console.log('Solicitando acesso à câmera...');
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
           facingMode: 'user', 
@@ -107,8 +108,10 @@ const PunchModal: React.FC<PunchModalProps> = ({ user, type, onClose, onConfirm,
           height: { ideal: 640 } 
         } 
       });
+      console.log('Acesso à câmera concedido');
       
       if (!videoRef.current) {
+        console.warn('Elemento de vídeo não encontrado após obter stream');
         stream.getTracks().forEach(track => track.stop());
         setError("Elemento de vídeo não encontrado. Recarregue a página.");
         return;
@@ -116,31 +119,17 @@ const PunchModal: React.FC<PunchModalProps> = ({ user, type, onClose, onConfirm,
 
       videoRef.current.srcObject = stream;
       
-      // Aguardar o vídeo estar pronto antes de marcar como capturando
-      const handleLoadedMetadata = () => {
-        if (videoRef.current) {
-          videoRef.current.play()
-            .then(() => {
-              setIsCapturing(true);
-              setError(null);
-            })
-            .catch((err) => {
-              console.error('Erro ao reproduzir vídeo:', err);
-              setError("Erro ao iniciar a câmera. Tente novamente.");
-              setIsCapturing(false);
-              stream.getTracks().forEach(track => track.stop());
-            });
-        }
-      };
-
-      // Remover listener anterior se existir
-      videoRef.current.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      videoRef.current.addEventListener('loadedmetadata', handleLoadedMetadata);
-      
-      // Se o vídeo já estiver carregado, chamar imediatamente
-      if (videoRef.current.readyState >= 2) {
-        handleLoadedMetadata();
+      // Tentar reproduzir imediatamente
+      try {
+        await videoRef.current.play();
+        setIsCapturing(true);
+        setError(null);
+        console.log('Vídeo iniciado com sucesso');
+      } catch (playErr) {
+        console.error('Erro ao reproduzir vídeo:', playErr);
+        setError("Erro ao iniciar a visualização da câmera.");
       }
+
     } catch (err: any) {
       console.error('Erro ao acessar câmera:', err);
       setIsCapturing(false);
@@ -161,49 +150,53 @@ const PunchModal: React.FC<PunchModalProps> = ({ user, type, onClose, onConfirm,
       } else if (err.name === 'OverconstrainedError') {
         setError("Configuração da câmera não suportada. Tentando configuração alternativa...");
         // Tentar com configuração mais simples
-        setTimeout(() => {
-          navigator.mediaDevices.getUserMedia({ video: true })
-            .then(stream => {
-              if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-                videoRef.current.play().then(() => setIsCapturing(true));
-              }
-            })
-            .catch(() => setError("Não foi possível acessar a câmera. Verifique as permissões."));
-        }, 500);
+        try {
+           const simpleStream = await navigator.mediaDevices.getUserMedia({ video: true });
+           if (videoRef.current) {
+             videoRef.current.srcObject = simpleStream;
+             await videoRef.current.play();
+             setIsCapturing(true);
+             setError(null);
+           }
+        } catch (retryErr) {
+           console.error('Erro na tentativa alternativa:', retryErr);
+           setError("Não foi possível acessar a câmera mesmo com configuração básica.");
+        }
         return;
       } else {
         setError(`Erro ao acessar a câmera: ${err.message || 'Erro desconhecido'}. Verifique as permissões e tente novamente.`);
       }
       setShowTroubleshoot(true);
     }
-  };
+  }, [location]);
 
-  const stopCamera = () => {
+  const stopCamera = useCallback(() => {
     if (videoRef.current?.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
       setIsCapturing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    let mounted = true;
+
     if (method === PunchMethod.PHOTO && !photo && !showTroubleshoot) {
-      // Delay maior para garantir que o componente está totalmente montado e o DOM está pronto
-      const timer = setTimeout(() => {
-        if (videoRef.current && !photo) {
-          startCamera();
-        }
-      }, 300);
-      return () => {
-        clearTimeout(timer);
-        stopCamera();
-      };
+      // Pequeno delay apenas para garantir que o modal renderizou o elemento video
+      // Mas usando uma flag mounted para evitar race conditions
+      if (mounted) {
+        startCamera();
+      }
     } else {
       stopCamera();
     }
-    return () => stopCamera();
-  }, [method, photo, showTroubleshoot]);
+    
+    return () => {
+      mounted = false;
+      stopCamera();
+    };
+  }, [method, photo, showTroubleshoot, startCamera, stopCamera]);
 
   const capturePhoto = () => {
     try {
