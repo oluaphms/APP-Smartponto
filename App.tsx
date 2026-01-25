@@ -667,7 +667,16 @@ const AppMain: React.FC = () => {
       
       {/* Diálogo de seleção de método de registro */}
       {showMethodSelection && !punchType && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl animate-in fade-in duration-300">
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl animate-in fade-in duration-300"
+          onClick={(e) => {
+            // Fechar ao clicar no backdrop
+            if (e.target === e.currentTarget) {
+              setShowMethodSelection(false);
+              setPendingPunchType(null);
+            }
+          }}
+        >
           <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10">
             <div className="p-10 text-center">
               <div className="w-20 h-20 bg-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -686,13 +695,20 @@ const AppMain: React.FC = () => {
                     e.preventDefault();
                     e.stopPropagation();
                     
-                    if (pendingPunchType) {
-                      // Atualizar todos os estados de forma síncrona
-                      // Definir o método e tipo - isso fará o modal de seleção fechar automaticamente
-                      // e o PunchModal abrir
+                    const typeToUse = pendingPunchType;
+                    console.log('🔵 Botão Registro por Foto clicado, pendingPunchType:', typeToUse);
+                    
+                    if (typeToUse) {
+                      // Atualizar todos os estados de uma vez
+                      // React vai fazer o batch update automaticamente
                       setSelectedMethod(PunchMethod.PHOTO);
-                      setPunchType(pendingPunchType);
-                      // O modal de seleção fecha automaticamente quando punchType é definido
+                      setPunchType(typeToUse);
+                      // Fechar o modal de seleção - ele fecha automaticamente quando punchType é definido
+                      // mas vamos fechar explicitamente também para garantir
+                      setShowMethodSelection(false);
+                      console.log('✅ Estados atualizados: method=PHOTO, punchType=', typeToUse);
+                    } else {
+                      console.warn('⚠️ pendingPunchType é null!');
                     }
                   }}
                   type="button"

@@ -14,6 +14,8 @@ interface PunchModalProps {
 }
 
 const PunchModal: React.FC<PunchModalProps> = ({ user, type, onClose, onConfirm, initialMethod }) => {
+  console.log('PunchModal renderizado com:', { type, initialMethod });
+  
   const [company, setCompany] = useState<Company | null>(null);
   const [method, setMethod] = useState<PunchMethod>(initialMethod || PunchMethod.PHOTO);
   const [photo, setPhoto] = useState<string | null>(null);
@@ -44,6 +46,19 @@ const PunchModal: React.FC<PunchModalProps> = ({ user, type, onClose, onConfirm,
       }
     });
   }, [user.companyId, initialMethod]);
+
+  // Atualizar método quando initialMethod mudar (importante quando vem do modal de seleção)
+  useEffect(() => {
+    if (initialMethod) {
+      setMethod(initialMethod);
+      // Resetar foto quando mudar de método para garantir que a câmera seja reiniciada
+      if (initialMethod === PunchMethod.PHOTO) {
+        setPhoto(null);
+        setError(null);
+        setShowTroubleshoot(false);
+      }
+    }
+  }, [initialMethod]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -292,9 +307,13 @@ const PunchModal: React.FC<PunchModalProps> = ({ user, type, onClose, onConfirm,
       }, 100);
     };
 
+    console.log('useEffect câmera - method:', method, 'photo:', !!photo, 'showTroubleshoot:', showTroubleshoot);
+    
     if (method === PunchMethod.PHOTO && !photo && !showTroubleshoot) {
+      console.log('Condições atendidas para iniciar câmera');
       initializeCamera();
     } else {
+      console.log('Parando câmera - método não é PHOTO ou há foto/troubleshoot');
       stopCamera();
     }
     
