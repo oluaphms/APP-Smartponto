@@ -287,13 +287,13 @@ const AdminView: React.FC<AdminViewProps> = ({ admin }) => {
                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Painel Administrativo</span>
             </div>
             <h2 className="text-3xl font-bold text-slate-900 dark:text-white leading-none">
-              {adminTab === 'employees' ? 'Gestão de Pessoal' : 
-               adminTab === 'reports' ? 'Relatórios e Auditoria' : 
+              {adminTab === 'employees' ? 'Funcionários' : 
+               adminTab === 'reports' ? 'Relatórios de Ponto' : 
                adminTab === 'analytics' ? 'Inteligência de Dados' : 
-               adminTab === 'punch-distribution' ? 'Fluxo de Marcações' :
+               adminTab === 'punch-distribution' ? 'Espelho de Ponto' :
                adminTab === 'geo-intelligence' ? 'Geo Inteligência AI' :
                adminTab === 'quality' ? 'Qualidade de Software' : 
-               adminTab === 'logs' ? 'Audit Logs' : 'Configurações'}
+               adminTab === 'logs' ? 'Logs e Auditoria' : 'Configurações'}
             </h2>
           </div>
           
@@ -305,14 +305,89 @@ const AdminView: React.FC<AdminViewProps> = ({ admin }) => {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => setAdminTab('employees')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${adminTab === 'employees' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'}`}><Users size={16} /> Pessoal</button>
-          <button onClick={() => setAdminTab('analytics')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${adminTab === 'analytics' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'}`}><BrainCircuit size={16} /> Analytics</button>
-          <button onClick={() => setAdminTab('geo-intelligence')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${adminTab === 'geo-intelligence' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'}`}><Map size={16} /> Geo Intelligence</button>
-          <button onClick={() => setAdminTab('punch-distribution')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${adminTab === 'punch-distribution' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'}`}><BarChart size={16} /> Fluxo</button>
-          <button onClick={() => setAdminTab('reports')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${adminTab === 'reports' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'}`}><BarChart3 size={16} /> Relatórios</button>
-          <button onClick={() => setAdminTab('logs')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${adminTab === 'logs' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 relative'}`}><ClipboardList size={16} /> Logs {criticalNotify && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-slate-900 animate-ping"></span>}</button>
-          <button onClick={() => setAdminTab('quality')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${adminTab === 'quality' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'}`}><ShieldIcon size={16} /> SQA</button>
-          <button onClick={() => setAdminTab('settings')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${adminTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'}`}><Settings size={16} /> Configs</button>
+          <button
+            onClick={() => setAdminTab('employees')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              adminTab === 'employees'
+                ? 'bg-indigo-600 text-white shadow-lg'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+            }`}
+          >
+            <Users size={16} /> Funcionários
+          </button>
+          <button
+            onClick={() => setAdminTab('punch-distribution')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              adminTab === 'punch-distribution'
+                ? 'bg-indigo-600 text-white shadow-lg'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+            }`}
+          >
+            <BarChart size={16} /> Espelho de Ponto
+          </button>
+          <button
+            onClick={() => setAdminTab('reports')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              adminTab === 'reports'
+                ? 'bg-indigo-600 text-white shadow-lg'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+            }`}
+          >
+            <BarChart3 size={16} /> Relatórios
+          </button>
+          <button
+            onClick={() => setAdminTab('settings')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              adminTab === 'settings'
+                ? 'bg-indigo-600 text-white shadow-lg'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+            }`}
+          >
+            <Settings size={16} /> Configurações
+          </button>
+          <button
+            onClick={() => setAdminTab('analytics')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              adminTab === 'analytics'
+                ? 'bg-indigo-600 text-white shadow-lg'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+            }`}
+          >
+            <BrainCircuit size={16} /> Analytics
+          </button>
+          <button
+            onClick={() => setAdminTab('geo-intelligence')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              adminTab === 'geo-intelligence'
+                ? 'bg-indigo-600 text-white shadow-lg'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+            }`}
+          >
+            <Map size={16} /> Geo Intelligence
+          </button>
+          <button
+            onClick={() => setAdminTab('logs')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              adminTab === 'logs'
+                ? 'bg-indigo-600 text-white shadow-lg'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 relative'
+            }`}
+          >
+            <ClipboardList size={16} /> Logs
+            {criticalNotify && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-slate-900 animate-ping"></span>
+            )}
+          </button>
+          <button
+            onClick={() => setAdminTab('quality')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              adminTab === 'quality'
+                ? 'bg-indigo-600 text-white shadow-lg'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+            }`}
+          >
+            <ShieldIcon size={16} /> SQA
+          </button>
         </div>
       </header>
 

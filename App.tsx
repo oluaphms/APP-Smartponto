@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import { User, LogType, DailySummary, PunchMethod, Company } from './types';
 import Layout from './components/Layout';
 import Clock from './components/Clock';
@@ -40,7 +41,21 @@ import {
   Monitor,
   Camera,
   Keyboard,
+  MapPin,
 } from 'lucide-react';
+import { BiometricService } from './services/biometricService';
+import DashboardPage from './src/pages/Dashboard';
+import TimeClockPage from './src/pages/TimeClock';
+import TimeRecordsPage from './src/pages/TimeRecords';
+import EmployeesPage from './src/pages/Employees';
+import SchedulesPage from './src/pages/Schedules';
+import LocationsPage from './src/pages/Locations';
+import DevicesPage from './src/pages/Devices';
+import RequestsPage from './src/pages/Requests';
+import AdjustmentsPage from './src/pages/Adjustments';
+import VacationsPage from './src/pages/Vacations';
+import AbsencesPage from './src/pages/Absences';
+import TimeBalancePage from './src/pages/TimeBalance';
 
 // Lazy loading of complex views
 const AdminView = lazy(() => import('./components/AdminView'));
@@ -84,7 +99,7 @@ function ConfigSupabaseScreen() {
               Crie <code className="bg-slate-200 dark:bg-slate-700 px-1 rounded">.env.local</code> na raiz do projeto com:
             </p>
             <pre className="bg-slate-800 text-slate-100 p-3 rounded-lg text-xs overflow-x-auto text-left">
-{`VITE_SUPABASE_URL=https://seu-projeto.supabase.co
+              {`VITE_SUPABASE_URL=https://seu-projeto.supabase.co
 VITE_SUPABASE_ANON_KEY=sua-chave-anon`}
             </pre>
             <p className="text-slate-600 dark:text-slate-400">
@@ -100,7 +115,7 @@ VITE_SUPABASE_ANON_KEY=sua-chave-anon`}
 const AppMain: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [insights, setInsights] = useState<{insight: string, score: number} | null>(null);
+  const [insights, setInsights] = useState<{ insight: string, score: number } | null>(null);
   const [punchType, setPunchType] = useState<LogType | null>(null);
   const [showMethodSelection, setShowMethodSelection] = useState(false);
   const [pendingPunchType, setPendingPunchType] = useState<LogType | null>(null);
@@ -109,14 +124,23 @@ const AppMain: React.FC = () => {
   const [showCelebration, setShowCelebration] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [company, setCompany] = useState<Company | null>(null);
-  
+
+  // Filtros do histórico
+  const [historyMethodFilter, setHistoryMethodFilter] = useState<'all' | PunchMethod>('all');
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<'all' | LogType>('all');
+  const [historyDateFilter, setHistoryDateFilter] = useState<string>('');
+
+  // Timer visual de jornada
+  const [todayProgress, setTodayProgress] = useState<number>(0);
+  const [todayLabel, setTodayLabel] = useState<string>('00h 00m de 00h 00m');
+
   // Login State
   const [loginStep, setLoginStep] = useState<'choice' | 'form'>('choice');
   const [loginRole, setLoginRole] = useState<'admin' | 'employee' | null>(null);
   const [loginData, setLoginData] = useState({ identifier: '', password: '' });
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
-  
+
   // Theme State (para tela de login)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
@@ -132,11 +156,12 @@ const AppMain: React.FC = () => {
   });
 
   const { records, isLoading: isPunching, error, setError, addRecord } = useRecords(user?.id, user?.companyId);
+  const location = useLocation();
 
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout>;
     let isMounted = true;
-    
+
     const initApp = async () => {
       try {
         // Timeout de segurança: máximo 5 segundos para inicializar
@@ -162,12 +187,12 @@ const AppMain: React.FC = () => {
         const timeoutPromise = new Promise<User | null>((resolve) => {
           setTimeout(() => resolve(null), 3000);
         });
-        
+
         const currentUser = await Promise.race([userPromise, timeoutPromise]).catch((error) => {
           console.error('Error getting current user:', error);
           return null;
         });
-        
+
         if (isMounted && currentUser) {
           setUser(currentUser);
           try {
@@ -175,7 +200,7 @@ const AppMain: React.FC = () => {
               PontoService.getCompany(currentUser.companyId),
               new Promise<Company | null>((resolve) => setTimeout(() => resolve(null), 2000))
             ]).catch(() => null);
-            
+
             if (comp && isMounted) setCompany(comp);
           } catch (error) {
             console.error('Error loading company:', error);
@@ -184,7 +209,7 @@ const AppMain: React.FC = () => {
           const hasSeenOnboarding = localStorage.getItem(`onboarding_${currentUser.id}`);
           if (!hasSeenOnboarding && isMounted) setShowOnboarding(true);
         }
-        
+
         if (isMounted) {
           clearTimeout(timeoutId);
           setIsInitialLoading(false);
@@ -197,16 +222,16 @@ const AppMain: React.FC = () => {
         }
       }
     };
-    
+
     initApp();
-    
+
     // Observar mudanças no estado de autenticação (apenas se Supabase configurado)
     let unsubscribe: (() => void) | null = null;
     if (isSupabaseConfigured) {
       try {
         unsubscribe = authService.onAuthStateChanged((user) => {
           if (!isMounted) return;
-          
+
           if (user) {
             setUser(user);
             PontoService.getCompany(user.companyId).then(comp => {
@@ -223,7 +248,7 @@ const AppMain: React.FC = () => {
         console.error('Error setting up auth state listener:', error);
       }
     }
-    
+
     return () => {
       isMounted = false;
       clearTimeout(timeoutId);
@@ -256,7 +281,7 @@ const AppMain: React.FC = () => {
     }
     const cfg = getReminderConfig();
     if (!cfg.enabled) return;
-    
+
     // Verificar se a permissão já foi concedida anteriormente
     // Não solicitar automaticamente - apenas verificar o status atual
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
@@ -264,7 +289,7 @@ const AppMain: React.FC = () => {
     }
     // Se a permissão não foi concedida, não solicitar automaticamente
     // O usuário pode solicitar manualmente nas configurações
-    
+
     return () => stopReminderCheck();
   }, [user?.id, user?.preferences?.notifications]);
 
@@ -289,7 +314,7 @@ const AppMain: React.FC = () => {
   const handlePunchStart = (type: LogType) => {
     setError(null);
     setPendingPunchType(type);
-    
+
     // Se a empresa exige foto obrigatória, abrir direto o modal de foto
     // Isso é especialmente importante em dispositivos móveis para acionar a câmera imediatamente
     if (company?.settings.requirePhoto) {
@@ -302,10 +327,16 @@ const AppMain: React.FC = () => {
     }
   };
 
-  const handleMethodSelection = (method: 'photo' | 'manual') => {
+  const handleMethodSelection = (method: 'photo' | 'manual' | 'gps' | 'biometric') => {
     setShowMethodSelection(false);
     if (pendingPunchType) {
-      setSelectedMethod(method === 'photo' ? PunchMethod.PHOTO : PunchMethod.MANUAL);
+      const methodMap: Record<string, PunchMethod> = {
+        photo: PunchMethod.PHOTO,
+        manual: PunchMethod.MANUAL,
+        gps: PunchMethod.GPS,
+        biometric: PunchMethod.BIOMETRIC,
+      };
+      setSelectedMethod(methodMap[method] || PunchMethod.PHOTO);
       setPunchType(pendingPunchType);
     }
   };
@@ -320,7 +351,16 @@ const AppMain: React.FC = () => {
         setTimeout(() => setShowCelebration(false), 4000);
       }
       if ('vibrate' in navigator) navigator.vibrate(50);
-    } catch (err) {}
+
+      // Feedback sonoro simples (se o navegador permitir)
+      try {
+        const audio = new Audio('/sounds/punch-success.mp3');
+        audio.volume = 0.5;
+        audio.play().catch(() => {});
+      } catch {
+        // silencioso se falhar
+      }
+    } catch (err) { }
   };
 
   const isWorking = useMemo(() => records[0]?.type === LogType.IN, [records]);
@@ -330,6 +370,71 @@ const AppMain: React.FC = () => {
     balance: "+12h 45m",
     status: isWorking ? 'Em Jornada' : 'Pausa / Descanso'
   }), [records, isWorking]);
+
+  // Calcular progresso diário visual (comparando com jornada padrão da empresa)
+  useEffect(() => {
+    if (!company) {
+      setTodayProgress(0);
+      setTodayLabel('00h 00m de 00h 00m');
+      return;
+    }
+
+    const today = new Date().toDateString();
+    const todayRecords = records
+      .filter(r => r.createdAt.toDateString() === today)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+    let totalMs = 0;
+    let lastInTime: number | null = null;
+    for (const rec of todayRecords) {
+      if (rec.type === LogType.IN) lastInTime = rec.createdAt.getTime();
+      else if (lastInTime && (rec.type === LogType.OUT || rec.type === LogType.BREAK)) {
+        totalMs += rec.createdAt.getTime() - lastInTime;
+        lastInTime = null;
+      }
+    }
+    if (lastInTime) totalMs += new Date().getTime() - lastInTime;
+
+    const workedHours = totalMs / (1000 * 60 * 60);
+
+    const [startH, startM] = company.settings.standardHours.start.split(':').map(Number);
+    const [endH, endM] = company.settings.standardHours.end.split(':').map(Number);
+    const standardMs =
+      (endH * 60 + endM - (startH * 60 + startM)) * 60 * 1000;
+    const standardHours = standardMs / (1000 * 60 * 60);
+
+    if (standardHours <= 0) {
+      setTodayProgress(0);
+      setTodayLabel(`${stats.today}`);
+      return;
+    }
+
+    const progress = Math.min(1, workedHours / standardHours);
+    setTodayProgress(progress);
+
+    const totalHours = Math.floor(standardHours);
+    const totalMinutes = Math.round((standardHours % 1) * 60);
+    setTodayLabel(
+      `${stats.today} de ${totalHours.toString().padStart(2, '0')}h ${totalMinutes
+        .toString()
+        .padStart(2, '0')}m`
+    );
+  }, [records, company, stats.today]);
+
+  // Registros filtrados para a aba de histórico
+  const filteredHistory = useMemo(() => {
+    return records.filter(rec => {
+      if (historyTypeFilter !== 'all' && rec.type !== historyTypeFilter) return false;
+      if (historyMethodFilter !== 'all' && rec.method !== historyMethodFilter) return false;
+
+      if (historyDateFilter) {
+        const recDate = rec.createdAt.toISOString().slice(0, 10);
+        if (recDate !== historyDateFilter) return false;
+      }
+
+      return true;
+    });
+  }, [records, historyTypeFilter, historyMethodFilter, historyDateFilter]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -344,8 +449,8 @@ const AppMain: React.FC = () => {
 
     try {
       const result = await authService.signInWithEmail(
-        loginData.identifier.includes('@') 
-          ? loginData.identifier 
+        loginData.identifier.includes('@')
+          ? loginData.identifier
           : `${loginData.identifier}@smartponto.com`,
         loginData.password
       );
@@ -360,11 +465,14 @@ const AppMain: React.FC = () => {
         setUser(result.user);
         const comp = await PontoService.getCompany(result.user.companyId);
         if (comp) setCompany(comp);
-        
+
         setIsLoggingIn(false);
-        
-        if (result.user.role === 'admin') setActiveTab('admin');
-        else setActiveTab('dashboard');
+
+        if (result.user.role === 'admin' || result.user.role === 'hr') {
+          setActiveTab('admin');
+        } else {
+          setActiveTab('dashboard');
+        }
       }
     } catch (error: any) {
       setLoginError(error.message || 'Erro ao fazer login');
@@ -407,12 +515,12 @@ const AppMain: React.FC = () => {
   // Timeout de segurança adicional para garantir que o loading sempre termine
   useEffect(() => {
     if (!isInitialLoading) return;
-    
+
     const safetyTimeout = setTimeout(() => {
       console.error('Safety timeout triggered - forcing app to load');
       setIsInitialLoading(false);
     }, 6000);
-    
+
     return () => clearTimeout(safetyTimeout);
   }, [isInitialLoading]);
 
@@ -452,7 +560,7 @@ const AppMain: React.FC = () => {
           <div className="bg-white dark:bg-slate-900/50 backdrop-blur-3xl p-2 rounded-[2.5rem] border border-slate-200 dark:border-slate-800/50 shadow-2xl overflow-hidden transition-colors">
             {loginStep === 'choice' ? (
               <div className="p-8 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <button 
+                <button
                   onClick={() => { setLoginRole('employee'); setLoginStep('form'); }}
                   className="w-full group p-6 bg-slate-50 dark:bg-white/5 hover:bg-indigo-600 dark:hover:bg-indigo-600 rounded-[2rem] border border-slate-200 dark:border-white/5 transition-all flex items-center justify-between text-left outline-none focus:ring-4 focus:ring-indigo-500/30"
                 >
@@ -468,7 +576,7 @@ const AppMain: React.FC = () => {
                   <ChevronRight size={20} className="text-slate-400 dark:text-slate-600 group-hover:text-white transition-colors" />
                 </button>
 
-                <button 
+                <button
                   onClick={() => { setLoginRole('admin'); setLoginStep('form'); }}
                   className="w-full group p-6 bg-slate-50 dark:bg-white/5 hover:bg-slate-800 dark:hover:bg-slate-800 rounded-[2rem] border border-slate-200 dark:border-white/5 transition-all flex items-center justify-between text-left outline-none focus:ring-4 focus:ring-slate-500/30"
                 >
@@ -486,7 +594,7 @@ const AppMain: React.FC = () => {
               </div>
             ) : (
               <div className="p-8 animate-in fade-in slide-in-from-right-4 duration-500">
-                <button 
+                <button
                   onClick={() => setLoginStep('choice')}
                   className="flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors text-[10px] font-bold uppercase tracking-widest mb-8"
                 >
@@ -502,22 +610,22 @@ const AppMain: React.FC = () => {
                   <div className="space-y-4">
                     <div className="relative">
                       <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                      <input 
-                        type="text" 
-                        placeholder="Nome de usuário ou Email" 
+                      <input
+                        type="text"
+                        placeholder="Nome de usuário ou Email"
                         value={loginData.identifier}
-                        onChange={e => setLoginData({...loginData, identifier: e.target.value})}
+                        onChange={e => setLoginData({ ...loginData, identifier: e.target.value })}
                         autoComplete="username"
                         className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 transition-all text-sm"
                       />
                     </div>
                     <div className="relative">
                       <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                      <input 
-                        type="password" 
-                        placeholder="Senha de acesso" 
+                      <input
+                        type="password"
+                        placeholder="Senha de acesso"
                         value={loginData.password}
-                        onChange={e => setLoginData({...loginData, password: e.target.value})}
+                        onChange={e => setLoginData({ ...loginData, password: e.target.value })}
                         autoComplete="current-password"
                         className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-2xl text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 transition-all text-sm"
                       />
@@ -530,23 +638,105 @@ const AppMain: React.FC = () => {
                     </div>
                   )}
 
-                  <Button 
-                    type="submit" 
-                    loading={isLoggingIn} 
+                  <Button
+                    type="submit"
+                    loading={isLoggingIn}
                     className="w-full h-14 rounded-2xl text-lg shadow-xl shadow-indigo-600/20"
                   >
                     Entrar no Sistema
                   </Button>
                 </form>
+
+                {/* Perfis de teste (Supabase) */}
+                <div className="mt-8 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-left space-y-3">
+                  <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                    Perfis de teste (Supabase)
+                  </p>
+                  <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1">
+                    <p className="font-semibold">Administrador</p>
+                    <p>
+                      Usuário: <code className="px-1 rounded bg-slate-200 dark:bg-slate-700">admin</code> ou{' '}
+                      <code className="px-1 rounded bg-slate-200 dark:bg-slate-700">admin@smartponto.com</code>
+                    </p>
+                    <p>
+                      Senha: <code className="px-1 rounded bg-slate-200 dark:bg-slate-700">admin123</code>
+                    </p>
+                  </div>
+                  <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1 pt-2 border-t border-slate-200 dark:border-slate-700">
+                    <p className="font-semibold">Desenvolvedor</p>
+                    <p>
+                      Usuário:{' '}
+                      <code className="px-1 rounded bg-slate-200 dark:bg-slate-700">desenvolvedor</code> ou{' '}
+                      <code className="px-1 rounded bg-slate-200 dark:bg-slate-700">
+                        desenvolvedor@smartponto.com
+                      </code>
+                    </p>
+                    <p>
+                      Senha: <code className="px-1 rounded bg-slate-200 dark:bg-slate-700">dev123</code>
+                    </p>
+                  </div>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                    Esses usuários precisam existir na tabela <code className="px-1 rounded bg-slate-200 dark:bg-slate-700">users</code> do Supabase com as mesmas credenciais.
+                  </p>
+                </div>
               </div>
             )}
           </div>
-          
+
           <p className="text-center text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-8 transition-colors">
             © 2024 SmartPonto Software • v1.4.0
           </p>
         </div>
       </div>
+    );
+  }
+
+  const path = location.pathname;
+  const isPortalRoute =
+    path === '/dashboard' ||
+    path === '/time-clock' ||
+    path === '/time-records' ||
+    path === '/admin' ||
+    path === '/settings' ||
+    path === '/employees' ||
+    path === '/schedules' ||
+    path === '/locations' ||
+    path === '/devices' ||
+    path === '/requests' ||
+    path === '/adjustments' ||
+    path === '/vacations' ||
+    path === '/absences' ||
+    path === '/time-balance';
+
+  if (isPortalRoute) {
+    return (
+      <Layout user={user} activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout}>
+        <Suspense fallback={<LoadingState message="Carregando módulo inteligente..." />}>
+          <Routes>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/time-clock" element={<TimeClockPage />} />
+            <Route path="/time-records" element={<TimeRecordsPage />} />
+            <Route
+              path="/admin"
+              element={
+                user.role === 'admin' || user.role === 'hr'
+                  ? <AdminView admin={user} />
+                  : <DashboardPage />
+              }
+            />
+            <Route path="/settings" element={<ProfileView user={user} />} />
+            <Route path="/employees" element={<EmployeesPage />} />
+            <Route path="/schedules" element={<SchedulesPage />} />
+            <Route path="/locations" element={<LocationsPage />} />
+            <Route path="/devices" element={<DevicesPage />} />
+            <Route path="/requests" element={<RequestsPage />} />
+            <Route path="/adjustments" element={<AdjustmentsPage />} />
+            <Route path="/vacations" element={<VacationsPage />} />
+            <Route path="/absences" element={<AbsencesPage />} />
+            <Route path="/time-balance" element={<TimeBalancePage />} />
+          </Routes>
+        </Suspense>
+      </Layout>
     );
   }
 
@@ -561,14 +751,14 @@ const AppMain: React.FC = () => {
             <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                   <Building2 size={16} className="text-indigo-600" />
-                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{company?.name}</span>
+                  <Building2 size={16} className="text-indigo-600" />
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{company?.name}</span>
                 </div>
                 <h2 className="text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">Olá, {user.nome.split(' ')[0]}</h2>
               </div>
               {insights && (
                 <div className="glass-card px-6 py-5 rounded-3xl flex items-start gap-4 max-w-sm border-indigo-100 dark:border-indigo-900/30">
-                  <div className="mt-1 p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl active-pulse"><Sparkles size={20}/></div>
+                  <div className="mt-1 p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl active-pulse"><Sparkles size={20} /></div>
                   <div>
                     <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">IA Insights</p>
                     <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-medium">{insights.insight}</p>
@@ -581,22 +771,39 @@ const AppMain: React.FC = () => {
               <div className="lg:col-span-2 space-y-10">
                 <div className="glass-card rounded-[3rem] p-10 md:p-14 relative overflow-hidden">
                   <div className="absolute top-10 right-10">
-                     <Badge color={isWorking ? 'green' : 'slate'}>{stats.status}</Badge>
+                    <Badge color={isWorking ? 'green' : 'slate'}>{stats.status}</Badge>
                   </div>
                   <Clock />
+                  {/* Timer visual de jornada */}
+                  <div className="mt-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Progresso da jornada
+                      </span>
+                      <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                        {todayLabel}
+                      </span>
+                    </div>
+                    <div className="w-full h-3 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-indigo-500 via-blue-500 to-emerald-500 rounded-full transition-all duration-500"
+                        style={{ width: `${Math.round(todayProgress * 100)}%` }}
+                      />
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-14">
-                     {!isWorking ? (
-                       <Button loading={isPunching} onClick={() => handlePunchStart(LogType.IN)} size="xl" className="flex items-center justify-center gap-3">
-                         <Camera size={24} /> Entrada
-                       </Button>
-                     ) : (
-                       <Button loading={isPunching} onClick={() => handlePunchStart(LogType.OUT)} variant="secondary" size="xl" className="flex items-center justify-center gap-3">
-                         <Camera size={24} /> Saída
-                       </Button>
-                     )}
-                     <Button disabled={isPunching || !isWorking} onClick={() => handlePunchStart(LogType.BREAK)} variant="outline" size="xl" className="flex items-center justify-center gap-3">
-                       <Camera size={24} /> Pausa
-                     </Button>
+                    {!isWorking ? (
+                      <Button loading={isPunching} onClick={() => handlePunchStart(LogType.IN)} size="xl" className="flex items-center justify-center gap-3">
+                        <Camera size={24} /> Entrada
+                      </Button>
+                    ) : (
+                      <Button loading={isPunching} onClick={() => handlePunchStart(LogType.OUT)} variant="secondary" size="xl" className="flex items-center justify-center gap-3">
+                        <Camera size={24} /> Saída
+                      </Button>
+                    )}
+                    <Button disabled={isPunching || !isWorking} onClick={() => handlePunchStart(LogType.BREAK)} variant="outline" size="xl" className="flex items-center justify-center gap-3">
+                      <Camera size={24} /> Pausa
+                    </Button>
                   </div>
                   {company?.settings.requirePhoto && (
                     <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-600 dark:text-slate-400">
@@ -612,17 +819,17 @@ const AppMain: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                   {[
-                     { label: 'Total Hoje', value: stats.today, icon: ClockIcon, color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-900/20' },
-                     { label: 'Banco Horas', value: stats.balance, icon: Crown, color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-900/20' },
-                     { label: 'Agenda', value: 'Completa', icon: CalendarDays, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20' },
-                   ].map((stat, idx) => (
-                     <div key={idx} className="glass-card p-8 rounded-[2.5rem] group hover:scale-[1.02] transition-transform">
-                        <div className={`w-14 h-14 rounded-2xl ${stat.bg} ${stat.color} flex items-center justify-center mb-6`}><stat.icon size={28}/></div>
-                        <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">{stat.label}</p>
-                        <p className="text-3xl font-extrabold text-slate-900 dark:text-white mt-2 tabular-nums">{stat.value}</p>
-                     </div>
-                   ))}
+                  {[
+                    { label: 'Total Hoje', value: stats.today, icon: ClockIcon, color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-900/20' },
+                    { label: 'Banco Horas', value: stats.balance, icon: Crown, color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-900/20' },
+                    { label: 'Agenda', value: 'Completa', icon: CalendarDays, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20' },
+                  ].map((stat, idx) => (
+                    <div key={idx} className="glass-card p-8 rounded-[2.5rem] group hover:scale-[1.02] transition-transform">
+                      <div className={`w-14 h-14 rounded-2xl ${stat.bg} ${stat.color} flex items-center justify-center mb-6`}><stat.icon size={28} /></div>
+                      <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">{stat.label}</p>
+                      <p className="text-3xl font-extrabold text-slate-900 dark:text-white mt-2 tabular-nums">{stat.value}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -649,33 +856,110 @@ const AppMain: React.FC = () => {
 
         {activeTab === 'history' && (
           <div className="animate-in slide-in-from-bottom-6 duration-700 space-y-8">
-             <h2 className="text-4xl font-extrabold text-slate-900 dark:text-white">Meu Histórico</h2>
-             <div className="glass-card rounded-[2.5rem] overflow-hidden">
-                <table className="w-full text-left">
-                  <thead><tr className="bg-slate-50 dark:bg-slate-800"><th className="px-10 py-6 text-[10px] font-bold text-slate-400 uppercase">Data</th><th className="px-10 py-6 text-[10px] font-bold text-slate-400 uppercase">Tipo</th><th className="px-10 py-6 text-[10px] font-bold text-slate-400 uppercase">Horário</th></tr></thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {records.slice(0, 50).map(rec => (
-                      <tr key={rec.id} className="hover:bg-indigo-50/20 transition-colors">
-                        <td className="px-10 py-7 font-bold">{rec.createdAt.toLocaleDateString('pt-BR')}</td>
-                        <td className="px-10 py-7"><Badge color={rec.type === LogType.IN ? 'indigo' : 'slate'}>{rec.type}</Badge></td>
-                        <td className="px-10 py-7 text-lg font-extrabold tabular-nums">{rec.createdAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {records.length === 0 && <div className="p-20 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">Nenhum registro encontrado</div>}
-             </div>
+            <h2 className="text-4xl font-extrabold text-slate-900 dark:text-white">Meu Histórico</h2>
+            <div className="glass-card rounded-[2.5rem] overflow-hidden">
+              {/* Filtros avançados */}
+              <div className="px-10 pt-8 pb-4 flex flex-col md:flex-row gap-4 md:items-end">
+                <div className="flex-1 space-y-2">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Data</p>
+                  <input
+                    type="date"
+                    value={historyDateFilter}
+                    onChange={(e) => setHistoryDateFilter(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tipo</p>
+                  <select
+                    value={historyTypeFilter}
+                    onChange={(e) => setHistoryTypeFilter(e.target.value as 'all' | LogType)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="all">Todos</option>
+                    <option value={LogType.IN}>Entrada</option>
+                    <option value={LogType.OUT}>Saída</option>
+                    <option value={LogType.BREAK}>Pausa</option>
+                  </select>
+                </div>
+                <div className="flex-1 space-y-2">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Método</p>
+                  <select
+                    value={historyMethodFilter}
+                    onChange={(e) => setHistoryMethodFilter(e.target.value as 'all' | PunchMethod)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="all">Todos</option>
+                    <option value={PunchMethod.PHOTO}>Foto</option>
+                    <option value={PunchMethod.GPS}>GPS</option>
+                    <option value={PunchMethod.BIOMETRIC}>Biometria</option>
+                    <option value={PunchMethod.MANUAL}>Manual</option>
+                  </select>
+                </div>
+              </div>
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800">
+                    <th className="px-10 py-6 text-[10px] font-bold text-slate-400 uppercase">Data</th>
+                    <th className="px-10 py-6 text-[10px] font-bold text-slate-400 uppercase">Tipo</th>
+                    <th className="px-10 py-6 text-[10px] font-bold text-slate-400 uppercase">Método</th>
+                    <th className="px-10 py-6 text-[10px] font-bold text-slate-400 uppercase">Horário</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredHistory.slice(0, 50).map(rec => (
+                    <tr key={rec.id} className="hover:bg-indigo-50/20 transition-colors">
+                      <td className="px-10 py-7 font-bold">{rec.createdAt.toLocaleDateString('pt-BR')}</td>
+                      <td className="px-10 py-7">
+                        <Badge color={rec.type === LogType.IN ? 'indigo' : 'slate'}>
+                          {rec.type}
+                        </Badge>
+                      </td>
+                      <td className="px-10 py-7">
+                        <Badge color={
+                          rec.method === PunchMethod.PHOTO
+                            ? 'indigo'
+                            : rec.method === PunchMethod.GPS
+                            ? 'blue'
+                            : rec.method === PunchMethod.BIOMETRIC
+                            ? 'violet'
+                            : 'slate'
+                        }>
+                          {rec.method === PunchMethod.PHOTO && 'Foto'}
+                          {rec.method === PunchMethod.GPS && 'GPS'}
+                          {rec.method === PunchMethod.BIOMETRIC && 'Biometria'}
+                          {rec.method === PunchMethod.MANUAL && 'Manual'}
+                        </Badge>
+                      </td>
+                      <td className="px-10 py-7 text-lg font-extrabold tabular-nums">
+                        {rec.createdAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {records.length === 0 && (
+                <div className="p-20 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">
+                  Nenhum registro encontrado
+                </div>
+              )}
+              {records.length > 0 && filteredHistory.length === 0 && (
+                <div className="p-6 text-center text-slate-400 text-[11px] font-bold uppercase tracking-widest border-t border-slate-100 dark:border-slate-800">
+                  Nenhum registro com os filtros aplicados
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {activeTab === 'admin' && user.role === 'admin' && <AdminView admin={user} />}
-        
+        {activeTab === 'admin' && (user.role === 'admin' || user.role === 'hr') && <AdminView admin={user} />}
+
         {activeTab === 'settings' && <ProfileView user={user} />}
       </Suspense>
-      
+
       {/* Diálogo de seleção de método de registro */}
       {showMethodSelection && !punchType && (
-        <div 
+        <div
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl animate-in fade-in duration-300"
           onClick={(e) => {
             // Fechar ao clicar no backdrop
@@ -687,60 +971,112 @@ const AppMain: React.FC = () => {
         >
           <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10">
             <div className="p-10 text-center">
-              <div className="w-20 h-20 bg-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                <Camera size={40} className="text-white" />
+              <div className="w-20 h-20 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-indigo-600/30">
+                <ShieldCheck size={40} className="text-white" />
               </div>
               <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-2">
                 Como deseja registrar?
               </h3>
-              <p className="text-slate-600 dark:text-slate-400 text-sm mb-8">
+              <p className="text-slate-600 dark:text-slate-400 text-sm mb-6">
                 Escolha o método de validação para seu registro de ponto
               </p>
-              
-              <div className="space-y-4">
+
+              <div className="space-y-3">
+                {/* Selfie por Foto */}
                 <button
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    
-                    const typeToUse = pendingPunchType;
-                    
-                    if (typeToUse) {
-                      // Atualizar todos os estados de uma vez
-                      // React vai fazer o batch update automaticamente
+                    if (pendingPunchType) {
                       setSelectedMethod(PunchMethod.PHOTO);
-                      setPunchType(typeToUse);
-                      // Fechar o modal de seleção - ele fecha automaticamente quando punchType é definido
-                      // mas vamos fechar explicitamente também para garantir
+                      setPunchType(pendingPunchType);
                       setShowMethodSelection(false);
                     }
                   }}
                   type="button"
-                  className="w-full p-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all shadow-xl shadow-indigo-600/20 active:scale-95"
+                  className="w-full p-5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-base flex items-center gap-4 transition-all shadow-xl shadow-indigo-600/20 active:scale-95"
                 >
-                  <Camera size={24} />
-                  Registro por Foto
+                  <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
+                    <Camera size={24} />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold">Selfie por Foto</p>
+                    <p className="text-indigo-200 text-xs">Capture uma foto do rosto</p>
+                  </div>
                 </button>
-                
+
+                {/* Localização GPS */}
                 <button
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    
                     if (pendingPunchType) {
-                      setSelectedMethod(PunchMethod.MANUAL);
+                      setSelectedMethod(PunchMethod.GPS);
                       setPunchType(pendingPunchType);
-                      // O modal de seleção fecha automaticamente quando punchType é definido
+                      setShowMethodSelection(false);
                     }
                   }}
                   type="button"
-                  className="w-full p-6 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all border-2 border-slate-200 dark:border-slate-700 active:scale-95"
+                  className="w-full p-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold text-base flex items-center gap-4 transition-all shadow-xl shadow-blue-600/20 active:scale-95"
                 >
-                  <Keyboard size={24} />
-                  Ponto Manual
+                  <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
+                    <MapPin size={24} />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold">Localização GPS</p>
+                    <p className="text-blue-200 text-xs">Validação por geolocalização</p>
+                  </div>
                 </button>
+
+                {/* Impressão Digital */}
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (pendingPunchType) {
+                      setSelectedMethod(PunchMethod.BIOMETRIC);
+                      setPunchType(pendingPunchType);
+                      setShowMethodSelection(false);
+                    }
+                  }}
+                  type="button"
+                  className="w-full p-5 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl font-bold text-base flex items-center gap-4 transition-all shadow-xl shadow-violet-600/20 active:scale-95"
+                >
+                  <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
+                    <Fingerprint size={24} />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold">Impressão Digital</p>
+                    <p className="text-violet-200 text-xs">Biometria via sensor do dispositivo</p>
+                  </div>
+                </button>
+
+                {/* Ponto Manual (se permitido) */}
+                {company?.settings.allowManualPunch && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (pendingPunchType) {
+                        setSelectedMethod(PunchMethod.MANUAL);
+                        setPunchType(pendingPunchType);
+                        setShowMethodSelection(false);
+                      }
+                    }}
+                    type="button"
+                    className="w-full p-5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white rounded-2xl font-bold text-base flex items-center gap-4 transition-all border-2 border-slate-200 dark:border-slate-700 active:scale-95"
+                  >
+                    <div className="w-12 h-12 bg-slate-200 dark:bg-slate-700 rounded-xl flex items-center justify-center shrink-0">
+                      <Keyboard size={24} />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-bold">Ponto Manual</p>
+                      <p className="text-slate-500 dark:text-slate-400 text-xs">Registro com justificativa</p>
+                    </div>
+                  </button>
+                )}
               </div>
-              
+
               <button
                 onClick={() => {
                   setShowMethodSelection(false);
@@ -755,23 +1091,23 @@ const AppMain: React.FC = () => {
           </div>
         </div>
       )}
-      
+
       {punchType && (
-        <PunchModal 
-          user={user} 
-          type={punchType} 
+        <PunchModal
+          user={user}
+          type={punchType}
           initialMethod={selectedMethod || undefined}
           onClose={() => {
             setPunchType(null);
             setPendingPunchType(null);
             setSelectedMethod(null);
-          }} 
+          }}
           onConfirm={async (method, data) => {
             await onConfirmPunch(method, data);
             setPunchType(null);
             setPendingPunchType(null);
             setSelectedMethod(null);
-          }} 
+          }}
         />
       )}
     </Layout>

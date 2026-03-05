@@ -1,59 +1,65 @@
-import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import path from 'path'
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, '.', '');
-  const isProduction = mode === 'production';
+  const isProduction = mode === 'production'
 
   return {
     base: '/',
+
+    plugins: [
+      react(),
+
+      {
+        name: 'remove-tailwind-cdn',
+        transformIndexHtml(html: string) {
+          if (isProduction) {
+            return html.replace(
+              /<script[^>]*src=["']https?:\/\/cdn\.tailwindcss\.com[^"']*["'][^>]*><\/script>/gi,
+              ''
+            )
+          }
+          return html
+        }
+      }
+    ],
+
+    server: {
+      port: 3010,
+      host: '0.0.0.0',
+      strictPort: false
+    },
+
+    esbuild: {
+      logOverride: { 'this-is-undefined-in-esm': 'silent' }
+    },
+
+    define: {
+      'process.env.API_KEY': JSON.stringify(process.env.VITE_GEMINI_API_KEY),
+      'process.env.GEMINI_API_KEY': JSON.stringify(process.env.VITE_GEMINI_API_KEY)
+    },
+
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, '.')
+      },
+      dedupe: ['react', 'react-dom', 'react-is']
+    },
+
+    optimizeDeps: {
+      include: ['react-is', 'recharts']
+    },
+
+    publicDir: 'public',
+
     test: {
       globals: true,
       environment: 'jsdom',
       setupFiles: './vitest.setup.ts',
-      include: ['**/*.test.{ts,tsx}'],
+      include: ['**/*.test.{ts,tsx}']
     },
-    server: {
-      port: 3008,
-      host: '0.0.0.0',
-      strictPort: false,
-    },
-    esbuild: {
-      // Configuração para evitar problemas de permissão
-      logOverride: { 'this-is-undefined-in-esm': 'silent' }
-    },
-    plugins: [
-      react(),
-      // Plugin para garantir que não há referências ao Tailwind CDN no HTML gerado
-      {
-        name: 'remove-tailwind-cdn',
-        transformIndexHtml(html) {
-          if (isProduction) {
-            // Remover qualquer referência ao Tailwind CDN
-            return html.replace(
-              /<script[^>]*src=["']https?:\/\/cdn\.tailwindcss\.com[^"']*["'][^>]*><\/script>/gi,
-              ''
-            );
-          }
-          return html;
-        }
-      }
-    ],
-    define: {
-      'process.env.API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY)
-    },
-    resolve: {
-      alias: {
-        '@': path.resolve(__dirname, '.'),
-      },
-      dedupe: ['react', 'react-dom', 'react-is']
-    },
-    optimizeDeps: {
-      include: ['react-is', 'recharts']
-    },
-    publicDir: 'public',
+
     build: {
       outDir: 'dist',
       sourcemap: false,
@@ -71,5 +77,5 @@ export default defineConfig(({ mode }) => {
         }
       }
     }
-  };
-});
+  }
+})          

@@ -8,6 +8,7 @@ export enum LogType {
 export enum PunchMethod {
   PHOTO = 'foto',
   GPS = 'gps',
+  BIOMETRIC = 'biometria',
   MANUAL = 'manual'
 }
 

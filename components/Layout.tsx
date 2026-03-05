@@ -13,8 +13,18 @@ import {
   Moon,
   Menu,
   X,
-  BrainCircuit
+  BrainCircuit,
+  Users,
+  CalendarRange,
+  MapPin,
+  Cpu,
+  ClipboardList,
+  Clock12,
+  PlaneTakeoff,
+  CircleOff,
+  Scale
 } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import NotificationCenter from './NotificationCenter';
 import { NotificationService } from '../services/notificationService';
 import { ThemeService } from '../services/themeService';
@@ -33,6 +43,8 @@ const Layout: React.FC<LayoutProps> = ({ user, children, activeTab, setActiveTab
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     ThemeService.init();
@@ -59,17 +71,54 @@ const Layout: React.FC<LayoutProps> = ({ user, children, activeTab, setActiveTab
     ThemeService.applyTheme(nextTheme);
   }, [theme]);
 
-  const menuItems = React.useMemo(() => [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'history', label: 'Meu Histórico', icon: History },
-    ...(user.role === 'admin' ? [
-      { id: 'admin', label: 'Gestão Geral', icon: ShieldCheck }
-    ] : []),
-    { id: 'settings', label: 'Meu Perfil', icon: UserIcon },
-  ], [user.role]);
+  const menuItems = React.useMemo(
+    () => {
+      const items: {
+        id: string;
+        label: string;
+        icon: React.ComponentType<{ size?: number }>;
+        path: string;
+      }[] = [
+        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
+        { id: 'time-clock', label: 'Marcar Ponto', icon: History, path: '/time-clock' },
+        { id: 'time-records', label: 'Registros de Ponto', icon: History, path: '/time-records' },
+        { id: 'requests', label: 'Solicitações', icon: ClipboardList, path: '/requests' },
+        { id: 'adjustments', label: 'Ajustes de Ponto', icon: Clock12, path: '/adjustments' },
+        { id: 'vacations', label: 'Férias', icon: PlaneTakeoff, path: '/vacations' },
+        { id: 'absences', label: 'Ausências', icon: CircleOff, path: '/absences' },
+        { id: 'time-balance', label: 'Banco de Horas', icon: Scale, path: '/time-balance' },
+      ];
 
-  const handleNav = (id: string) => {
+      if (user.role === 'admin' || user.role === 'hr') {
+        items.splice(1, 0, {
+          id: 'admin',
+          label: user.role === 'admin' ? 'Painel Admin' : 'Painel RH',
+          icon: ShieldCheck,
+          path: '/admin',
+        });
+        items.splice(4, 0,
+          { id: 'employees', label: 'Funcionários', icon: Users, path: '/employees' },
+          { id: 'schedules', label: 'Escalas', icon: CalendarRange, path: '/schedules' },
+          { id: 'locations', label: 'Locais de Trabalho', icon: MapPin, path: '/locations' },
+          { id: 'devices', label: 'Dispositivos', icon: Cpu, path: '/devices' },
+        );
+      }
+
+      items.push({
+        id: 'settings',
+        label: 'Meu Perfil',
+        icon: UserIcon,
+        path: '/settings',
+      });
+
+      return items;
+    },
+    [user.role],
+  );
+
+  const handleNav = (path: string, id: string) => {
     setActiveTab(id);
+    navigate(path);
     setIsMobileMenuOpen(false);
     // Move foco para o conteúdo principal após navegação no mobile
     const mainContent = document.getElementById('main-content');
@@ -99,15 +148,15 @@ const Layout: React.FC<LayoutProps> = ({ user, children, activeTab, setActiveTab
           {menuItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => handleNav(item.id)}
-              aria-current={activeTab === item.id ? 'page' : undefined}
+              onClick={() => handleNav(item.path, item.id)}
+              aria-current={location.pathname === item.path ? 'page' : undefined}
               className={`w-full flex items-center gap-3.5 px-6 py-4 rounded-2xl transition-all duration-300 outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/50 ${
-                activeTab === item.id 
+                location.pathname === item.path
                   ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/20 font-semibold' 
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <item.icon size={20} aria-hidden="true" strokeWidth={activeTab === item.id ? 2.5 : 2} />
+              <item.icon size={20} aria-hidden="true" strokeWidth={location.pathname === item.path ? 2.5 : 2} />
               <span className="text-sm">{item.label}</span>
             </button>
           ))}
@@ -236,10 +285,10 @@ const Layout: React.FC<LayoutProps> = ({ user, children, activeTab, setActiveTab
                  {menuItems.map((item) => (
                     <button
                        key={item.id}
-                       onClick={() => handleNav(item.id)}
-                       aria-current={activeTab === item.id ? 'page' : undefined}
+                       onClick={() => handleNav(item.path, item.id)}
+                       aria-current={location.pathname === item.path ? 'page' : undefined}
                        className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl font-bold transition-all outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/50 ${
-                          activeTab === item.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-slate-600 dark:text-slate-400'
+                          location.pathname === item.path ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-slate-600 dark:text-slate-400'
                        }`}
                     >
                        <item.icon size={20} aria-hidden="true" />
