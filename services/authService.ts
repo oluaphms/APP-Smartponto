@@ -137,10 +137,16 @@ class AuthService {
   }
 
   /**
-   * Login com email e senha
+   * Login com email e senha.
+   * Faz logout antes para evitar conflito de sessão (ex.: no celular, segundo login falhando com 400).
    */
   async signInWithEmail(email: string, password: string): Promise<AuthResult> {
     try {
+      try {
+        await auth.signOut();
+      } catch {
+        // Ignora erro ao limpar sessão anterior (pode não existir)
+      }
       const data = await auth.signIn(email, password);
       
       if (!data || !data.user) {

@@ -532,6 +532,21 @@ const AppMain: React.FC = () => {
     }
   };
 
+  /** Limpa sessão e estado para tentar login de novo (útil quando 400 ou "só logou uma vez no celular"). */
+  const handleClearSessionAndRetry = async () => {
+    setLoginError(null);
+    try {
+      await authService.signOut();
+    } catch {
+      // ignora
+    }
+    try {
+      localStorage.removeItem('current_user');
+    } catch {
+      // ignora
+    }
+  };
+
   const handleLogout = async () => {
     setUser(null);
     setCompany(null);
@@ -712,8 +727,17 @@ const AppMain: React.FC = () => {
                   </div>
 
                   {loginError && (
-                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-500 text-xs font-bold animate-in shake">
-                      <AlertTriangle size={16} /> {loginError}
+                    <div className="space-y-2">
+                      <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-500 text-xs font-bold animate-in shake">
+                        <AlertTriangle size={16} /> {loginError}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleClearSessionAndRetry}
+                        className="text-xs text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 underline"
+                      >
+                        Limpar sessão e tentar de novo
+                      </button>
                     </div>
                   )}
 

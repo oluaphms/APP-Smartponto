@@ -48,6 +48,13 @@ Se aparecer **400** na aba Rede (Network) ao tentar logar, o Supabase está recu
 - **Senha errada**: use a senha definida no Supabase para esse usuário.
 - **E-mail não confirmado**: ao criar o usuário, marque **Auto Confirm User**.
 
+### No celular: “só consegui logar uma vez, depois não entra mais”
+
+Pode ser sessão antiga em conflito. O app agora **limpa a sessão antes de cada login**. Se ainda falhar:
+
+1. Na tela de login, após ver o erro, clique em **“Limpar sessão e tentar de novo”** e tente entrar de novo com o mesmo usuário e senha.
+2. Ou no navegador do celular: configurações do site → limpar dados/cookies do **app-smartponto.vercel.app** (ou localhost) e abrir o app de novo.
+
 ## Resumo
 
 1. Criar usuário em **Authentication → Users** (e-mail + senha, Auto Confirm).
