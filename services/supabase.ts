@@ -36,6 +36,29 @@ if (configured) {
 
 export const supabase = client;
 
+/** Testa se o projeto Supabase está acessível (rede, URL e chave). Timeout 8s. */
+export async function testSupabaseConnection(): Promise<{ ok: boolean; message?: string }> {
+  if (!configured || !client) {
+    return { ok: false, message: notConfiguredMsg };
+  }
+  const timeoutMs = 8000;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const { error } = await client.from('users').select('id').limit(1).abortSignal(controller.signal);
+    clearTimeout(timeoutId);
+    if (error && error.code !== 'PGRST116') {
+      return { ok: false, message: error.message || 'Erro ao acessar o Supabase.' };
+    }
+    return { ok: true };
+  } catch (e: any) {
+    if (e?.name === 'AbortError') {
+      return { ok: false, message: 'Sem resposta do Supabase em 8s. Verifique a URL (VITE_SUPABASE_URL), a rede e se o projeto está ativo no Dashboard.' };
+    }
+    return { ok: false, message: e?.message || 'Não foi possível conectar ao Supabase.' };
+  }
+}
+
 // Stub auth when not configured: getCurrentUser → null, onAuthStateChange → no-op
 const stubAuth = {
   signIn: async () => notConfigured(),

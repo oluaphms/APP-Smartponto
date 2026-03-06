@@ -54,30 +54,40 @@ ALTER TABLE time_records ENABLE ROW LEVEL SECURITY;
 
 -- Políticas RLS (obrigatório para o app funcionar)
 -- USERS
+DROP POLICY IF EXISTS "Users can view own data" ON users;
 CREATE POLICY "Users can view own data" ON users
   FOR SELECT USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Users can update own data" ON users;
 CREATE POLICY "Users can update own data" ON users
   FOR UPDATE USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Users can insert own data" ON users;
 CREATE POLICY "Users can insert own data" ON users
   FOR INSERT WITH CHECK (auth.uid() = id);
 
 -- COMPANIES (sem políticas = tudo bloqueado; liberar para autenticados)
+DROP POLICY IF EXISTS "Companies select authenticated" ON companies;
 CREATE POLICY "Companies select authenticated" ON companies
   FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Companies insert authenticated" ON companies;
 CREATE POLICY "Companies insert authenticated" ON companies
   FOR INSERT TO authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "Companies update authenticated" ON companies;
 CREATE POLICY "Companies update authenticated" ON companies
   FOR UPDATE TO authenticated USING (true);
 
 -- TIME_RECORDS
+DROP POLICY IF EXISTS "Users can view own records" ON time_records;
 CREATE POLICY "Users can view own records" ON time_records
   FOR SELECT USING (auth.uid()::text = user_id);
+DROP POLICY IF EXISTS "Users can view company records" ON time_records;
 CREATE POLICY "Users can view company records" ON time_records
   FOR SELECT USING (
     company_id = (SELECT company_id FROM users WHERE id = auth.uid())
     AND (SELECT company_id FROM users WHERE id = auth.uid()) IS NOT NULL
   );
+DROP POLICY IF EXISTS "Users can create own records" ON time_records;
 CREATE POLICY "Users can create own records" ON time_records
   FOR INSERT WITH CHECK (auth.uid()::text = user_id);
+DROP POLICY IF EXISTS "Users can update own records" ON time_records;
 CREATE POLICY "Users can update own records" ON time_records
   FOR UPDATE USING (auth.uid()::text = user_id);
