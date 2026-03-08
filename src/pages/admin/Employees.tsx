@@ -27,6 +27,20 @@ interface ScheduleOption {
   name: string;
 }
 
+const CARGO_OPCOES = [
+  'Colaborador',
+  'Analista',
+  'Desenvolvedor',
+  'Designer',
+  'Gerente',
+  'Coordenador',
+  'Assistente',
+  'Estagiário',
+  'Supervisor',
+  'Diretor',
+  'Outro',
+];
+
 const AdminEmployees: React.FC = () => {
   const { user, loading } = useCurrentUser();
   const navigate = useNavigate();
@@ -92,7 +106,7 @@ const AdminEmployees: React.FC = () => {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ nome: '', cpf: '', email: '', password: '', phone: '', cargo: 'Colaborador', department_id: '', schedule_id: '' });
+    setForm({ nome: '', cpf: '', email: '', password: '', phone: '', cargo: 'Colaborador', cargoOutro: '', department_id: '', schedule_id: '' });
     setModalOpen(true);
     setError(null);
     setSuccess(null);
@@ -100,13 +114,15 @@ const AdminEmployees: React.FC = () => {
 
   const openEdit = (row: EmployeeRow) => {
     setEditingId(row.id);
+    const cargoBase = CARGO_OPCOES.includes(row.cargo) ? row.cargo : 'Outro';
     setForm({
       nome: row.nome,
       cpf: row.cpf || '',
       email: row.email,
       password: '',
       phone: row.phone || '',
-      cargo: row.cargo,
+      cargo: cargoBase,
+      cargoOutro: cargoBase === 'Outro' ? row.cargo : '',
       department_id: row.department_id || '',
       schedule_id: row.schedule_id || '',
     });
@@ -129,6 +145,7 @@ const AdminEmployees: React.FC = () => {
       setError('Informe a senha inicial para o funcionário.');
       return;
     }
+    const cargoFinal = form.cargo === 'Outro' ? (form.cargoOutro.trim() || 'Outro') : form.cargo;
     setSaving(true);
     setError(null);
     setSuccess(null);
@@ -138,7 +155,7 @@ const AdminEmployees: React.FC = () => {
           nome: form.nome.trim(),
           cpf: form.cpf || null,
           phone: form.phone || null,
-          cargo: form.cargo,
+          cargo: cargoFinal,
           department_id: form.department_id || null,
           schedule_id: form.schedule_id || null,
         });
@@ -147,7 +164,7 @@ const AdminEmployees: React.FC = () => {
         loadData();
       } else {
         const email = form.email.trim().toLowerCase();
-        const authData = await auth.signUp(email, form.password, { nome: form.nome, cargo: form.cargo });
+        const authData = await auth.signUp(email, form.password, { nome: form.nome, cargo: cargoFinal });
         if (!authData?.user?.id) throw new Error('Conta criada mas ID não retornado.');
         await db.insert('users', {
           id: authData.user.id,
@@ -155,7 +172,7 @@ const AdminEmployees: React.FC = () => {
           cpf: form.cpf || null,
           email,
           phone: form.phone || null,
-          cargo: form.cargo,
+          cargo: cargoFinal,
           role: 'employee',
           company_id: user.companyId,
           department_id: form.department_id || null,
@@ -339,7 +356,17 @@ const AdminEmployees: React.FC = () => {
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Telefone</label>
                 <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Telefone" />
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Cargo</label>
-                <input type="text" value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Cargo" />
+                <select value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                  {CARGO_OPCOES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                {form.cargo === 'Outro' && (
+                  <>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Especificar cargo</label>
+                    <input type="text" value={form.cargoOutro} onChange={(e) => setForm({ ...form, cargoOutro: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ex: Analista de Suporte" />
+                  </>
+                )}
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Departamento</label>
                 <select value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
                   <option value="">Nenhum</option>

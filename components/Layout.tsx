@@ -88,6 +88,7 @@ const Layout: React.FC<LayoutProps> = ({ user, children, activeTab, setActiveTab
       {[
         { label: 'Dashboard', path: '/admin/dashboard' },
         { label: 'Funcionários', path: '/admin/employees' },
+        { label: 'Departamentos', path: '/admin/departments' },
         { label: 'Espelho de Ponto', path: '/admin/timesheet' },
         { label: 'Monitoramento', path: '/admin/monitoring' },
         { label: 'Escalas', path: '/admin/schedules' },

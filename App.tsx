@@ -52,6 +52,7 @@ import DashboardPage from './src/pages/Dashboard';
 import TimeClockPage from './src/pages/TimeClock';
 import TimeRecordsPage from './src/pages/TimeRecords';
 import EmployeesPage from './src/pages/Employees';
+import DepartmentsPage from './src/pages/Departments';
 import SchedulesPage from './src/pages/Schedules';
 import RealTimeInsightsPage from './src/pages/RealTimeInsights';
 import CompanyPage from './src/pages/Company';
@@ -891,6 +892,7 @@ const AppMain: React.FC = () => {
             <Route path="/admin/monitoring" element={<AdminMonitoring />} />
             <Route path="/admin/schedules" element={<AdminSchedules />} />
             <Route path="/admin/shifts" element={<AdminShifts />} />
+            <Route path="/admin/departments" element={<DepartmentsPage />} />
             <Route path="/admin/company" element={<AdminCompany />} />
             <Route path="/admin/reports" element={<AdminReports />} />
             <Route path="/admin/settings" element={<AdminSettings />} />

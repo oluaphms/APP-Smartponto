@@ -11,6 +11,7 @@ export interface MenuItemConfig {
 export const adminMenuItems: MenuItemConfig[] = [
   { nameKey: 'menu.dashboard', icon: 'dashboard', route: '/admin/dashboard' },
   { nameKey: 'menu.employees', icon: 'group', route: '/admin/employees' },
+  { nameKey: 'menu.departments', icon: 'business_center', route: '/admin/departments' },
   { nameKey: 'menu.espelhoPonto', icon: 'event_note', route: '/admin/timesheet' },
   { nameKey: 'menu.monitoramento', icon: 'insights', route: '/admin/monitoring' },
   { nameKey: 'menu.escalas', icon: 'calendar_today', route: '/admin/schedules' },
