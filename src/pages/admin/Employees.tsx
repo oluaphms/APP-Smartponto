@@ -1,11 +1,27 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserPlus, Pencil, UserX, Trash2, Eye, EyeOff, UserCheck, Search, Upload, FileDown, X } from 'lucide-react';
+import { UserPlus, Pencil, UserX, Trash2, Eye, EyeOff, UserCheck, Search, Upload, FileDown, X, Camera, User } from 'lucide-react';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
 import { db, auth, isSupabaseConfigured } from '../../services/supabaseClient';
 import { LoadingState } from '../../../components/UI';
 import RoleGuard from '../../components/auth/RoleGuard';
+
+/** Configuração adicional do funcionário (employee_config JSONB) */
+interface EmployeeConfig {
+  photo_url?: string;
+  assinatura_digital?: string; // hash ou indicação
+  perifericos?: 'padrao' | 'habilitado' | 'desabilitado';
+  dados_web?: {
+    senha_web?: string;
+    periodo_encerrado?: string;
+    nao_alterar_dados_web?: boolean;
+    nao_inclusao_ponto_manual?: boolean;
+    bloquear_web?: boolean;
+    controlar_solicitacoes?: 'aceitar_local' | 'marcar_vistos' | '';
+  };
+  afastamentos?: { periodo_inicio: string; periodo_fim: string; justificativa: string; motivo: string }[];
+}
 
 interface EmployeeRow {
   id: string;
@@ -20,6 +36,18 @@ interface EmployeeRow {
   schedule_name?: string;
   status: string;
   created_at: string;
+  numero_folha?: string;
+  pis_pasep?: string;
+  numero_identificador?: string;
+  ctps?: string;
+  admissao?: string;
+  demissao?: string;
+  motivo_demissao_id?: string;
+  motivo_demissao_name?: string;
+  observacoes?: string;
+  invisivel?: boolean;
+  employee_config?: EmployeeConfig;
+  company_name?: string;
 }
 
 interface ScheduleOption {
@@ -52,45 +80,72 @@ const AdminEmployees: React.FC = () => {
   const { user, loading } = useCurrentUser();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<EmployeeRow[]>([]);
   const [schedules, setSchedules] = useState<ScheduleOption[]>([]);
   const [cargos, setCargos] = useState<{ id: string; name: string }[]>([]);
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [motivosDemissao, setMotivosDemissao] = useState<{ id: string; name: string }[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showInvisiveis, setShowInvisiveis] = useState(false);
   const [form, setForm] = useState({
+    numero_folha: '',
     nome: '',
     cpf: '',
     email: '',
     password: '',
     phone: '',
+    pis_pasep: '',
+    numero_identificador: '',
+    ctps: '',
     cargo: '',
     cargoOutro: '',
     department_id: '',
     schedule_id: '',
+    admissao: '',
+    demissao: '',
+    motivo_demissao_id: '',
+    observacoes: '',
+    assinatura_digital: '',
+    perifericos: 'padrao' as 'padrao' | 'habilitado' | 'desabilitado',
+    senha_web: '',
+    periodo_encerrado: '',
+    nao_alterar_dados_web: false,
+    nao_inclusao_ponto_manual: false,
+    bloquear_web: false,
+    controlar_solicitacoes: '' as '' | 'aceitar_local' | 'marcar_vistos',
+    afastamento_inicio: '',
+    afastamento_fim: '',
+    afastamento_justificativa: '',
+    afastamento_motivo: '',
+    photo_preview: '' as string,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [askInvisivel, setAskInvisivel] = useState<string | null>(null);
 
   const loadData = async () => {
     if (!user?.companyId || !isSupabaseConfigured) return;
     setLoadingData(true);
     try {
-      const [usersRows, schedRows, deptRows, jobTitlesRows] = await Promise.all([
+      const [usersRows, schedRows, deptRows, jobTitlesRows, motivosRows] = await Promise.all([
         db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }], { column: 'created_at', ascending: false }) as Promise<any[]>,
         db.select('schedules', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
         db.select('departments', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
         db.select('job_titles', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
+        db.select('motivo_demissao', [{ column: 'company_id', operator: 'eq', value: user.companyId }]).catch(() => []) as Promise<any[]>,
       ]);
       const deptMap = new Map((deptRows ?? []).map((d: any) => [d.id, d.name]));
       const schedMap = new Map((schedRows ?? []).map((s: any) => [s.id, s.name]));
+      const motivoMap = new Map((motivosRows ?? []).map((m: any) => [m.id, m.name]));
       const list = (usersRows ?? []).map((u: any) => ({
         id: u.id,
         nome: u.nome || '',
@@ -104,11 +159,23 @@ const AdminEmployees: React.FC = () => {
         schedule_name: u.schedule_id ? schedMap.get(u.schedule_id) : undefined,
         status: u.status || 'active',
         created_at: u.created_at,
+        numero_folha: u.numero_folha,
+        pis_pasep: u.pis_pasep,
+        numero_identificador: u.numero_identificador,
+        ctps: u.ctps,
+        admissao: u.admissao,
+        demissao: u.demissao,
+        motivo_demissao_id: u.motivo_demissao_id,
+        motivo_demissao_name: u.motivo_demissao_id ? motivoMap.get(u.motivo_demissao_id) : undefined,
+        observacoes: u.observacoes,
+        invisivel: !!u.invisivel,
+        employee_config: u.employee_config || {},
       }));
       setRows(list);
       setSchedules((schedRows ?? []).map((s: any) => ({ id: s.id, name: s.name })));
       setDepartments((deptRows ?? []).map((d: any) => ({ id: d.id, name: d.name })));
       setCargos((jobTitlesRows ?? []).map((j: any) => ({ id: j.id, name: j.name || '' })));
+      setMotivosDemissao((motivosRows ?? []).map((m: any) => ({ id: m.id, name: m.name || '' })));
     } catch (e) {
       console.error(e);
     } finally {
@@ -120,10 +187,45 @@ const AdminEmployees: React.FC = () => {
     loadData();
   }, [user?.companyId]);
 
+  const defaultForm = () => {
+    const firstCargo = cargos[0]?.name || '';
+    return {
+      numero_folha: '',
+      nome: '',
+      cpf: '',
+      email: '',
+      password: '',
+      phone: '',
+      pis_pasep: '',
+      numero_identificador: '',
+      ctps: '',
+      cargo: firstCargo || OUTRO_CARGO_VALUE,
+      cargoOutro: '',
+      department_id: '',
+      schedule_id: '',
+      admissao: '',
+      demissao: '',
+      motivo_demissao_id: '',
+      observacoes: '',
+      assinatura_digital: '',
+      perifericos: 'padrao' as const,
+      senha_web: '',
+      periodo_encerrado: '',
+      nao_alterar_dados_web: false,
+      nao_inclusao_ponto_manual: false,
+      bloquear_web: false,
+      controlar_solicitacoes: '' as const,
+      afastamento_inicio: '',
+      afastamento_fim: '',
+      afastamento_justificativa: '',
+      afastamento_motivo: '',
+      photo_preview: '',
+    };
+  };
+
   const openCreate = () => {
     setEditingId(null);
-    const firstCargo = cargos[0]?.name || '';
-    setForm({ nome: '', cpf: '', email: '', password: '', phone: '', cargo: firstCargo || OUTRO_CARGO_VALUE, cargoOutro: '', department_id: '', schedule_id: '' });
+    setForm(defaultForm());
     setModalOpen(true);
     setError(null);
     setSuccess(null);
@@ -132,34 +234,81 @@ const AdminEmployees: React.FC = () => {
   const openEdit = (row: EmployeeRow) => {
     setEditingId(row.id);
     const cargoCadastrado = cargos.some((c) => c.name === row.cargo);
+    const cfg = row.employee_config || {};
+    const web = cfg.dados_web || {};
     setForm({
+      numero_folha: row.numero_folha || '',
       nome: row.nome,
       cpf: row.cpf || '',
       email: row.email,
       password: '',
       phone: row.phone || '',
+      pis_pasep: row.pis_pasep || '',
+      numero_identificador: row.numero_identificador || '',
+      ctps: row.ctps || '',
       cargo: cargoCadastrado ? row.cargo : OUTRO_CARGO_VALUE,
       cargoOutro: cargoCadastrado ? '' : row.cargo,
       department_id: row.department_id || '',
       schedule_id: row.schedule_id || '',
+      admissao: row.admissao || '',
+      demissao: row.demissao || '',
+      motivo_demissao_id: row.motivo_demissao_id || '',
+      observacoes: row.observacoes || '',
+      assinatura_digital: '',
+      perifericos: (cfg.perifericos as any) || 'padrao',
+      senha_web: web.senha_web || '',
+      periodo_encerrado: web.periodo_encerrado || '',
+      nao_alterar_dados_web: !!web.nao_alterar_dados_web,
+      nao_inclusao_ponto_manual: !!web.nao_inclusao_ponto_manual,
+      bloquear_web: !!web.bloquear_web,
+      controlar_solicitacoes: (web.controlar_solicitacoes as any) || '',
+      afastamento_inicio: '',
+      afastamento_fim: '',
+      afastamento_justificativa: '',
+      afastamento_motivo: '',
+      photo_preview: cfg.photo_url || '',
     });
     setModalOpen(true);
     setError(null);
     setSuccess(null);
   };
 
+  const buildEmployeeConfig = (): EmployeeConfig => {
+    const cfg: EmployeeConfig = {
+      perifericos: form.perifericos,
+      dados_web: {
+        senha_web: form.senha_web || undefined,
+        periodo_encerrado: form.periodo_encerrado || undefined,
+        nao_alterar_dados_web: form.nao_alterar_dados_web,
+        nao_inclusao_ponto_manual: form.nao_inclusao_ponto_manual,
+        bloquear_web: form.bloquear_web,
+        controlar_solicitacoes: form.controlar_solicitacoes || undefined,
+      },
+    };
+    if (form.assinatura_digital.trim()) cfg.assinatura_digital = form.assinatura_digital;
+    if (form.photo_preview) cfg.photo_url = form.photo_preview;
+    if (form.afastamento_inicio && form.afastamento_fim) {
+      cfg.afastamentos = [{ periodo_inicio: form.afastamento_inicio, periodo_fim: form.afastamento_fim, justificativa: form.afastamento_justificativa, motivo: form.afastamento_motivo }];
+    }
+    return cfg;
+  };
+
   const handleSave = async () => {
     if (!user?.companyId || !isSupabaseConfigured) return;
     if (!form.nome.trim()) {
-      setError('Informe o nome.');
+      setError('Nome é obrigatório.');
       return;
     }
     if (!editingId && !form.email.trim()) {
-      setError('Informe o e-mail.');
+      setError('E-mail é obrigatório.');
       return;
     }
     if (!editingId && !form.password.trim()) {
       setError('Informe a senha inicial para o funcionário.');
+      return;
+    }
+    if (!form.pis_pasep?.trim()) {
+      setError('Nº PIS/PASEP é obrigatório (aparece nos relatórios e é enviado ao REP).');
       return;
     }
     const cargoFinal = form.cargo === OUTRO_CARGO_VALUE ? (form.cargoOutro.trim() || 'Colaborador') : form.cargo;
@@ -167,33 +316,42 @@ const AdminEmployees: React.FC = () => {
     setError(null);
     setSuccess(null);
     try {
+      const payload: Record<string, any> = {
+        nome: form.nome.trim(),
+        cpf: form.cpf?.trim() || null,
+        phone: form.phone?.trim() || null,
+        cargo: cargoFinal,
+        department_id: form.department_id || null,
+        schedule_id: form.schedule_id || null,
+        numero_folha: form.numero_folha?.trim() || null,
+        pis_pasep: form.pis_pasep?.trim() || null,
+        numero_identificador: form.numero_identificador?.trim() || null,
+        ctps: form.ctps?.trim() || null,
+        admissao: form.admissao || null,
+        demissao: form.demissao || null,
+        motivo_demissao_id: form.motivo_demissao_id || null,
+        observacoes: form.observacoes?.trim() || null,
+        employee_config: buildEmployeeConfig(),
+      };
       if (editingId) {
-        await db.update('users', editingId, {
-          nome: form.nome.trim(),
-          cpf: form.cpf || null,
-          phone: form.phone || null,
-          cargo: cargoFinal,
-          department_id: form.department_id || null,
-          schedule_id: form.schedule_id || null,
-        });
+        await db.update('users', editingId, payload);
         setSuccess('Funcionário atualizado com sucesso.');
         setModalOpen(false);
-        loadData();
+        if (form.demissao?.trim()) {
+          setAskInvisivel(editingId);
+        } else {
+          loadData();
+        }
       } else {
         const email = form.email.trim().toLowerCase();
         const authData = await auth.signUp(email, form.password, { nome: form.nome, cargo: cargoFinal });
         if (!authData?.user?.id) throw new Error('Conta criada mas ID não retornado.');
         await db.insert('users', {
           id: authData.user.id,
-          nome: form.nome.trim(),
-          cpf: form.cpf || null,
+          ...payload,
           email,
-          phone: form.phone || null,
-          cargo: cargoFinal,
           role: 'employee',
           company_id: user.companyId,
-          department_id: form.department_id || null,
-          schedule_id: form.schedule_id || null,
           status: 'active',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -211,13 +369,27 @@ const AdminEmployees: React.FC = () => {
         msg.includes('users_email_key') ||
         (msg.includes('duplicate key') && msg.includes('email')) ||
         /already registered|already exists|user already/i.test(msg);
+      const isDuplicateIdentificador = msg.includes('numero_identificador') || (msg.includes('duplicate key') && msg.includes('identificador'));
       if (isDuplicateEmail) {
         setError('Este e-mail já está cadastrado. Use outro e-mail ou edite o funcionário existente.');
+      } else if (isDuplicateIdentificador) {
+        setError('Nº Identificador já existe no sistema. Informe outro número.');
       } else {
         setError(msg || 'Erro ao salvar');
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const confirmInvisivel = async (id: string) => {
+    try {
+      await db.update('users', id, { invisivel: true, updated_at: new Date().toISOString() });
+      setSuccess('Funcionário marcado como invisível (não aparecerá nos relatórios).');
+      setAskInvisivel(null);
+      loadData();
+    } catch (e: any) {
+      setError(e?.message || 'Erro ao atualizar');
     }
   };
 
@@ -243,14 +415,18 @@ const AdminEmployees: React.FC = () => {
   };
 
   const searchLower = search.trim().toLowerCase();
+  const visibleRows = showInvisiveis ? rows : rows.filter((r) => !r.invisivel);
   const filteredRows = searchLower
-    ? rows.filter(
+    ? visibleRows.filter(
         (r) =>
           r.nome.toLowerCase().includes(searchLower) ||
           (r.email && r.email.toLowerCase().includes(searchLower)) ||
-          (r.cpf && r.cpf.replace(/\D/g, '').includes(searchLower))
+          (r.cpf && r.cpf.replace(/\D/g, '').includes(searchLower)) ||
+          (r.pis_pasep && r.pis_pasep.replace(/\D/g, '').includes(searchLower)) ||
+          (r.numero_folha && r.numero_folha.includes(searchLower)) ||
+          (r.numero_identificador && r.numero_identificador.includes(searchLower))
       )
-    : rows;
+    : visibleRows;
 
   const handleDelete = async (id: string) => {
     if (!confirm('Excluir este funcionário? Esta ação não pode ser desfeita.')) return;
@@ -493,6 +669,15 @@ const AdminEmployees: React.FC = () => {
     setSuccess(null);
   };
 
+  const handlePhotoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => setForm((f) => ({ ...f, photo_preview: reader.result as string }));
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
   if (loading || !user) return <LoadingState message="Carregando..." />;
 
   return (
@@ -528,20 +713,24 @@ const AdminEmployees: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1 max-w-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+          <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por nome, e-mail ou CPF..."
+              placeholder="Pesquisar por nome, e-mail, CPF, PIS ou Nº Folha..."
               className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm"
             />
           </div>
+          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 cursor-pointer">
+            <input type="checkbox" checked={showInvisiveis} onChange={(e) => setShowInvisiveis(e.target.checked)} className="rounded border-slate-300 text-indigo-600" />
+            Mostrar funcionários invisíveis
+          </label>
           {search && (
-            <span className="text-sm text-slate-500 dark:text-slate-400 self-center">
-              {filteredRows.length} de {rows.length} resultado(s)
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              {filteredRows.length} de {visibleRows.length} resultado(s)
             </span>
           )}
         </div>
@@ -554,8 +743,9 @@ const AdminEmployees: React.FC = () => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+                    <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Nº Folha</th>
                     <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Nome</th>
-                    <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">CPF</th>
+                    <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">PIS/PASEP</th>
                     <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Cargo</th>
                     <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Departamento</th>
                     <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Escala</th>
@@ -565,9 +755,10 @@ const AdminEmployees: React.FC = () => {
                 </thead>
                 <tbody>
                   {filteredRows.map((row) => (
-                    <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                    <tr key={row.id} className={`border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 ${row.invisivel ? 'opacity-60' : ''}`}>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.numero_folha || '—'}</td>
                       <td className="px-4 py-3 text-slate-900 dark:text-white font-medium">{row.nome}</td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.cpf || '—'}</td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.pis_pasep || '—'}</td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.cargo}</td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.department_name || '—'}</td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.schedule_name || '—'}</td>
@@ -605,76 +796,227 @@ const AdminEmployees: React.FC = () => {
         {modalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => !saving && setModalOpen(false)}>
             <div
-              className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-md max-h-[90vh] overflow-y-auto p-6 space-y-4"
+              className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-6"
               onClick={(e) => e.stopPropagation()}
             >
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white">{editingId ? 'Editar Funcionário' : 'Cadastrar Funcionário'}</h3>
-              {error && <p className="text-sm text-red-600">{error}</p>}
-              <div className="grid grid-cols-1 gap-3">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Nome</label>
-                <input type="text" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Nome completo" />
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">CPF</label>
-                <input type="text" value={form.cpf} onChange={(e) => setForm({ ...form, cpf: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="CPF" />
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Email</label>
-                <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="email@empresa.com" disabled={!!editingId} />
-                {!editingId && (
-                  <>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Senha inicial</label>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={form.password}
-                        onChange={(e) => setForm({ ...form, password: e.target.value })}
-                        className="w-full pl-3 pr-10 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                        placeholder="Senha para primeiro acesso"
-                        autoComplete="new-password"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((prev) => !prev)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center px-1.5 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                        aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                      >
-                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">{editingId ? 'Editar Funcionário' : 'Incluir Funcionário'}</h3>
+              {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+
+              <div className="space-y-6">
+                {/* Dados de Identificação */}
+                <section>
+                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Dados de Identificação</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Nº Folha</label>
+                      <input type="text" value={form.numero_folha} onChange={(e) => setForm({ ...form, numero_folha: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ligação com folha de pagamento" />
                     </div>
-                  </>
-                )}
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Telefone</label>
-                <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Telefone" />
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Cargo</label>
-                <select value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                  {cargos.length === 0 && <option disabled>Nenhum cargo cadastrado. Cadastre em Cargos no menu.</option>}
-                  {cargos.map((c) => (
-                    <option key={c.id} value={c.name}>{c.name}</option>
-                  ))}
-                  <option value={OUTRO_CARGO_VALUE}>Outro (especificar)</option>
-                </select>
-                {form.cargo === OUTRO_CARGO_VALUE && (
-                  <>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Especificar cargo</label>
-                    <input type="text" value={form.cargoOutro} onChange={(e) => setForm({ ...form, cargoOutro: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ex: Analista de Suporte" />
-                  </>
-                )}
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Departamento</label>
-                <select value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                  <option value="">Nenhum</option>
-                  {departments.length === 0 && <option disabled>Nenhum departamento. Cadastre em Departamentos no menu.</option>}
-                  {departments.map((d) => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Escala</label>
-                <select value={form.schedule_id} onChange={(e) => setForm({ ...form, schedule_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                  <option value="">Nenhuma</option>
-                  {schedules.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Nome <span className="text-red-500">*</span></label>
+                      <input type="text" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Nome completo (obrigatório, enviado ao REP)" />
+                    </div>
+                  </div>
+                </section>
+
+                {/* Dados Genéricos */}
+                <section>
+                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Dados Genéricos</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Nº PIS/PASEP <span className="text-red-500">*</span></label>
+                      <input type="text" value={form.pis_pasep} onChange={(e) => setForm({ ...form, pis_pasep: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Obrigatório, enviado ao REP" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Nº Identificador</label>
+                      <input type="text" value={form.numero_identificador} onChange={(e) => setForm({ ...form, numero_identificador: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Crachá/digital (único no sistema)" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">CTPS</label>
+                      <input type="text" value={form.ctps} onChange={(e) => setForm({ ...form, ctps: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Carteira de Trabalho" />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Empresa</label>
+                      <input type="text" value={user?.companyId ? 'Empresa atual' : ''} readOnly className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Horário</label>
+                      <select value={form.schedule_id} onChange={(e) => setForm({ ...form, schedule_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                        <option value="">Nenhum</option>
+                        {schedules.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Função <span className="text-red-500">*</span></label>
+                      <select value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                        {cargos.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                        <option value={OUTRO_CARGO_VALUE}>Outro (especificar)</option>
+                      </select>
+                      {form.cargo === OUTRO_CARGO_VALUE && (
+                        <input type="text" value={form.cargoOutro} onChange={(e) => setForm({ ...form, cargoOutro: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ex: Analista" />
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Departamento <span className="text-red-500">*</span></label>
+                      <select value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                        <option value="">Selecione</option>
+                        {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Admissão</label>
+                      <input type="date" value={form.admissao} onChange={(e) => setForm({ ...form, admissao: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Demissão</label>
+                      <input type="date" value={form.demissao} onChange={(e) => setForm({ ...form, demissao: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Motivo de Demissão</label>
+                      <select value={form.motivo_demissao_id} onChange={(e) => setForm({ ...form, motivo_demissao_id: e.target.value })} disabled={!form.demissao} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-50">
+                        <option value="">Selecione (habilitado quando Demissão preenchida)</option>
+                        {motivosDemissao.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Observações</label>
+                      <textarea value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Observações sobre o funcionário" />
+                    </div>
+                  </div>
+                </section>
+
+                {/* Acesso (e-mail e senha - apenas na criação) */}
+                <section>
+                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Acesso ao sistema</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">E-mail</label>
+                      <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="email@empresa.com" disabled={!!editingId} />
+                    </div>
+                    {!editingId && (
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Senha inicial</label>
+                        <div className="relative">
+                          <input type={showPassword ? 'text' : 'password'} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full pl-3 pr-10 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Senha para primeiro acesso" autoComplete="new-password" />
+                          <button type="button" onClick={() => setShowPassword((p) => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}>{showPassword ? <Eye size={18} /> : <EyeOff size={18} />}</button>
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">CPF</label>
+                      <input type="text" value={form.cpf} onChange={(e) => setForm({ ...form, cpf: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="CPF" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Telefone</label>
+                      <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Telefone" />
+                    </div>
+                  </div>
+                </section>
+
+                {/* Fotografia */}
+                <section>
+                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Fotografia</h4>
+                  <div className="flex flex-wrap items-start gap-4">
+                    <div className="w-24 h-24 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center">
+                      {form.photo_preview ? <img src={form.photo_preview} alt="Foto" className="w-full h-full object-cover" /> : <User className="w-10 h-10 text-slate-400" />}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoFile} className="hidden" />
+                      <button type="button" onClick={() => photoInputRef.current?.click()} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">
+                        Abrir arquivo de imagem
+                      </button>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Ou use Capturar de câmera (webcam) em dispositivos compatíveis.</p>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Dados Adicionais */}
+                <section>
+                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Dados Adicionais</h4>
+                  <div className="grid grid-cols-1 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Assinatura Digital (senha para Lançamento de Eventos)</label>
+                      <input type="password" value={form.assinatura_digital} onChange={(e) => setForm({ ...form, assinatura_digital: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Senha para eventos (vales, transporte, etc.)" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Periféricos</label>
+                      <select value={form.perifericos} onChange={(e) => setForm({ ...form, perifericos: e.target.value as any })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                        <option value="padrao">Padrão (configuração do equipamento)</option>
+                        <option value="habilitado">Habilitado</option>
+                        <option value="desabilitado">Desabilitado</option>
+                      </select>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Dados Módulo Web */}
+                <section>
+                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Dados Módulo Web</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Senha Web</label>
+                      <input type="password" value={form.senha_web} onChange={(e) => setForm({ ...form, senha_web: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Senha de acesso no Módulo Web" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Período encerrado</label>
+                      <input type="date" value={form.periodo_encerrado} onChange={(e) => setForm({ ...form, periodo_encerrado: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Data limite solicitações web" />
+                    </div>
+                    <div className="sm:col-span-2 space-y-2">
+                      <label className="flex items-center gap-2"><input type="checkbox" checked={form.nao_alterar_dados_web} onChange={(e) => setForm({ ...form, nao_alterar_dados_web: e.target.checked })} /> Não permitir alterar dados na Web</label>
+                      <label className="flex items-center gap-2"><input type="checkbox" checked={form.nao_inclusao_ponto_manual} onChange={(e) => setForm({ ...form, nao_inclusao_ponto_manual: e.target.checked })} /> Não permitir inclusão de ponto manual</label>
+                      <label className="flex items-center gap-2"><input type="checkbox" checked={form.bloquear_web} onChange={(e) => setForm({ ...form, bloquear_web: e.target.checked })} /> Bloquear funcionário na Web</label>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Permitir controlar solicitações via Web</label>
+                        <select value={form.controlar_solicitacoes} onChange={(e) => setForm({ ...form, controlar_solicitacoes: e.target.value as any })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                          <option value="">Nenhum</option>
+                          <option value="aceitar_local">Aceitar Solicitações (Somente Módulo Web Local)</option>
+                          <option value="marcar_vistos">Somente marcar vistos</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Afastamento */}
+                <section>
+                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Afastamento</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">Registrar afastamento para um dia ou período (ex.: férias).</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Período (início)</label>
+                      <input type="date" value={form.afastamento_inicio} onChange={(e) => setForm({ ...form, afastamento_inicio: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Período (fim)</label>
+                      <input type="date" value={form.afastamento_fim} onChange={(e) => setForm({ ...form, afastamento_fim: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Justificativa</label>
+                      <input type="text" value={form.afastamento_justificativa} onChange={(e) => setForm({ ...form, afastamento_justificativa: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ex: Férias, Falta, Médico" />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Motivo</label>
+                      <input type="text" value={form.afastamento_motivo} onChange={(e) => setForm({ ...form, afastamento_motivo: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ex: Atestado devido a diagnóstico médico" />
+                    </div>
+                  </div>
+                </section>
               </div>
-              <div className="flex gap-3 pt-2">
+
+              <div className="flex gap-3 pt-2 border-t border-slate-200 dark:border-slate-700">
                 <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium">Cancelar</button>
-                <button type="button" onClick={handleSave} disabled={saving} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50">Salvar</button>
+                <button type="button" onClick={handleSave} disabled={saving} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50">{editingId ? 'Concluir' : 'Cadastrar'}</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Diálogo: Tornar invisível após demissão */}
+        {askInvisivel && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-6 max-w-sm">
+              <p className="text-slate-700 dark:text-slate-200 mb-4">Deseja tornar este funcionário <strong>invisível</strong>? Ele não aparecerá nos relatórios nem na listagem, mas os dados permanecem salvos.</p>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => { confirmInvisivel(askInvisivel); }} className="flex-1 py-2.5 rounded-xl bg-amber-600 text-white font-medium">Sim, tornar invisível</button>
+                <button type="button" onClick={() => { setAskInvisivel(null); loadData(); }} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium">Não</button>
               </div>
             </div>
           </div>

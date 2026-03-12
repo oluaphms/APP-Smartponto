@@ -212,7 +212,10 @@ class SupabaseService {
       localStorage.setItem(`company_${company.id}`, JSON.stringify(company));
       return;
     }
-
+    const createdAtIso =
+      (company as any).createdAt instanceof Date
+        ? (company as any).createdAt.toISOString()
+        : new Date().toISOString();
     try {
       await db.insert('companies', {
         id: company.id,
@@ -221,7 +224,7 @@ class SupabaseService {
         endereco: company.endereco,
         geofence: company.geofence,
         settings: company.settings,
-        created_at: company.createdAt.toISOString(),
+        created_at: createdAtIso,
         updated_at: new Date().toISOString()
       });
     } catch (error) {
@@ -249,7 +252,14 @@ class SupabaseService {
     if (!companyId || !companyId.trim()) return null;
     if (!isSupabaseConfigured()) {
       const stored = localStorage.getItem(`company_${companyId}`);
-      return stored ? JSON.parse(stored) : null;
+      if (!stored) return null;
+      const c = JSON.parse(stored);
+      const nome = c.nome ?? c.name ?? '';
+      return {
+        ...c,
+        name: c.name ?? nome,
+        slug: c.slug ?? (nome || 'empresa').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+      };
     }
 
     try {
@@ -259,15 +269,34 @@ class SupabaseService {
       );
       
       if (companies && companies.length > 0) {
-        const company = companies[0];
+        const c = companies[0];
+        const nome = c.nome ?? c.name ?? '';
         return {
-          id: company.id,
-          nome: company.nome,
-          cnpj: company.cnpj,
-          endereco: company.endereco,
-          geofence: company.geofence,
-          settings: company.settings,
-          createdAt: company.created_at ? new Date(company.created_at) : new Date()
+          id: c.id,
+          name: nome,
+          slug: c.slug ?? (nome || 'empresa').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+          nome,
+          cnpj: c.cnpj,
+          inscricaoEstadual: c.inscricao_estadual,
+          responsavelNome: c.responsavel_nome,
+          responsavelCargo: c.responsavel_cargo,
+          responsavelEmail: c.responsavel_email,
+          endereco: c.endereco ?? c.address,
+          bairro: c.bairro,
+          cidade: c.cidade,
+          cep: c.cep,
+          estado: c.estado,
+          pais: c.pais,
+          telefone: c.telefone ?? c.phone,
+          fax: c.fax,
+          cei: c.cei,
+          numeroFolha: c.numero_folha,
+          receiptFields: c.receipt_fields,
+          useDefaultTimezone: c.use_default_timezone,
+          timezone: c.timezone,
+          geofence: c.geofence,
+          settings: c.settings,
+          createdAt: c.created_at ? new Date(c.created_at) : new Date()
         };
       }
       return null;

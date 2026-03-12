@@ -83,6 +83,21 @@ import AdminJobTitles from './src/pages/admin/JobTitles';
 import AdminCompany from './src/pages/admin/Company';
 import AdminReports from './src/pages/admin/Reports';
 import AdminSettings from './src/pages/admin/Settings';
+import AdminEstruturas from './src/pages/admin/Estruturas';
+import AdminCidades from './src/pages/admin/Cidades';
+import AdminEstadosCivis from './src/pages/admin/EstadosCivis';
+import AdminEventos from './src/pages/admin/Eventos';
+import AdminMotivoDemissao from './src/pages/admin/MotivoDemissao';
+import AdminFeriados from './src/pages/admin/Feriados';
+import AdminCartaoPonto from './src/pages/admin/CartaoPonto';
+import AdminLancamentoEventos from './src/pages/admin/LancamentoEventos';
+import AdminJustificativas from './src/pages/admin/Justificativas';
+import AdminArquivarCalculos from './src/pages/admin/ArquivarCalculos';
+import AdminColunasMix from './src/pages/admin/ColunasMix';
+import AdminPontoDiario from './src/pages/admin/PontoDiario';
+import AdminArquivosFiscais from './src/pages/admin/ArquivosFiscais';
+import AdminAusencias from './src/pages/Ausencias';
+import AdminAjuda from './src/pages/admin/Ajuda';
 import EmployeeDashboard from './src/pages/employee/Dashboard';
 import EmployeeClockIn from './src/pages/employee/ClockIn';
 import EmployeeTimesheet from './src/pages/employee/Timesheet';
@@ -925,17 +940,34 @@ const AppMain: React.FC = () => {
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/employees" element={<AdminEmployees />} />
             <Route path="/admin/timesheet" element={<AdminTimesheet />} />
+            <Route path="/admin/cartao-ponto" element={<AdminCartaoPonto />} />
+            <Route path="/admin/cartao-ponto-leitura" element={<AdminCartaoPonto />} />
+            <Route path="/admin/lancamento-eventos" element={<AdminLancamentoEventos />} />
             <Route path="/admin/time-attendance" element={<TimeAttendancePage />} />
             <Route path="/admin/adjustments" element={<AdjustmentsPage />} />
             <Route path="/admin/absences" element={<AbsencesPage />} />
+            <Route path="/admin/ausencias" element={<AdminAusencias />} />
             <Route path="/admin/requests" element={<RequestsPage />} />
             <Route path="/admin/monitoring" element={<AdminMonitoring />} />
             <Route path="/admin/schedules" element={<AdminSchedules />} />
             <Route path="/admin/shifts" element={<AdminShifts />} />
             <Route path="/admin/departments" element={<DepartmentsPage />} />
             <Route path="/admin/job-titles" element={<AdminJobTitles />} />
+            <Route path="/admin/estruturas" element={<AdminEstruturas />} />
+            <Route path="/admin/cidades" element={<AdminCidades />} />
+            <Route path="/admin/estados-civis" element={<AdminEstadosCivis />} />
+            <Route path="/admin/eventos" element={<AdminEventos />} />
+            <Route path="/admin/motivo-demissao" element={<AdminMotivoDemissao />} />
+            <Route path="/admin/feriados" element={<AdminFeriados />} />
+            <Route path="/admin/justificativas" element={<AdminJustificativas />} />
+            <Route path="/admin/arquivar-calculos" element={<AdminArquivarCalculos />} />
+            <Route path="/admin/colunas-mix" element={<AdminColunasMix />} />
+            <Route path="/admin/ponto-diario" element={<AdminPontoDiario />} />
+            <Route path="/admin/ponto-diario-leitura" element={<AdminPontoDiario />} />
+            <Route path="/admin/arquivos-fiscais" element={<AdminArquivosFiscais />} />
             <Route path="/admin/company" element={<AdminCompany />} />
             <Route path="/admin/reports" element={<AdminReports />} />
+            <Route path="/admin/ajuda" element={<AdminAjuda />} />
             <Route path="/admin/settings" element={<AdminSettings />} />
             {/* Rotas Funcionário */}
             <Route path="/employee/dashboard" element={<EmployeeDashboard />} />

@@ -31,6 +31,48 @@ export interface Company {
   id: string;
   name: string;
   slug: string;
+  /** Nome da empresa (persistido como nome no backend) */
+  nome?: string;
+  /** CNPJ da empresa ou CPF do responsável */
+  cnpj?: string;
+  /** Inscrição Estadual */
+  inscricaoEstadual?: string;
+  /** Responsável: nome (aparece no relatório de Cartão Ponto) */
+  responsavelNome?: string;
+  /** Responsável: cargo (aparece no relatório de Cartão Ponto) */
+  responsavelCargo?: string;
+  /** Responsável: e-mail */
+  responsavelEmail?: string;
+  /** Endereço */
+  endereco?: string;
+  /** Bairro */
+  bairro?: string;
+  /** Cidade */
+  cidade?: string;
+  /** CEP */
+  cep?: string;
+  /** Estado (UF) */
+  estado?: string;
+  /** País */
+  pais?: string;
+  /** Telefone */
+  telefone?: string;
+  /** Fax */
+  fax?: string;
+  /** CEI - Cadastro Específico INSS */
+  cei?: string;
+  /** Nº Folha - código da empresa no sistema de folha de pagamento */
+  numeroFolha?: string;
+  /** Campos impressos no comprovante de registro de ponto */
+  receiptFields?: string[];
+  /** Usar hora padrão da configuração geral (true) ou específica da empresa (false) */
+  useDefaultTimezone?: boolean;
+  /** Fuso horário quando useDefaultTimezone é false */
+  timezone?: string;
+  /** Geofence (compatibilidade) */
+  geofence?: { lat: number; lng: number; radius: number };
+  /** Data de criação */
+  createdAt?: Date;
   settings: {
     fence: {
       lat: number;
@@ -168,6 +210,71 @@ export interface Department {
   id: string;
   name: string;
   managerId: string;
+}
+
+/** Tipo do dia na grade semanal do horário: normal, extra ou folga */
+export type DayScheduleType = 'normal' | 'extra' | 'folga';
+
+/** Uma linha da grade semanal (um dia da semana) */
+export interface WeeklyScheduleDay {
+  dayIndex: number; // 0=Segunda .. 6=Domingo
+  dayType: DayScheduleType;
+  entrada1: string;
+  saida1: string;
+  entrada2: string;
+  saida2: string;
+  entrada3: string;
+  saida3: string;
+  toleranciaExtras: number;
+  toleranciaFaltas: number;
+  cargaHoraria: string; // HH:mm
+}
+
+/** Configuração do Descanso Semanal Remunerado (DSR) */
+export interface DSRConfig {
+  tipo: 'automatico' | 'variavel';
+  limiteHorasFaltas?: number;
+  valorDSRHoras?: string;
+  incluirHorasExtrasNoCalculo?: boolean;
+  descontarSemanaSeguinte?: boolean;
+  incluirFeriados?: boolean;
+  feriadoComo?: 'dsr_domingo' | 'dsr_dia' | 'hora_normal_dia' | 'hora_normal_descanso';
+  feriadoDomingoDescontarUmDSR?: boolean;
+  separarDSRPorCentroCusto?: boolean;
+  indicarDiasDSREmCalculos?: boolean;
+  descontarFeriadosEmCasoFalta?: boolean;
+  usarCalculoDiario?: boolean;
+  naoDescontarDSRAntesAdmissao?: boolean;
+  naoDescontarDSRDuranteAfastamento?: boolean;
+  usarAtrasosFaltasParaDescontarDSR?: boolean;
+  /** Variável: faixas { ate: number, desconto: string } */
+  faixasVariavel?: { ate: number; desconto: string }[];
+}
+
+/** Configuração de horas extras */
+export interface ExtrasConfig {
+  acumular: 'independentes' | 'uteis_sabados' | 'uteis_sabados_domingos' | 'uteis_sabados_domingos_feriados' | 'sabados_domingos' | 'sabados_domingos_feriados' | 'domingos_feriados' | 'uteis_sabados_e_domingos_feriados' | 'uteis_domingos_e_sabados_feriados';
+  multiplicarExtrasPercentual?: boolean;
+  arredondarHorasExtras?: number; // minutos
+  naoArredondarHorasNoturnas?: boolean;
+  descontarFaltasDasExtras?: boolean;
+  prioridadeDescontoFaltas?: 'maior' | 'menor';
+  interjornadasMenorQueHoras?: number;
+  separarExtrasNoturnasNormais?: boolean;
+  separarExtrasIntervalosNormais?: boolean;
+  agruparExtrasMesmaPorcentagem?: boolean;
+  controleHoras?: 'diario' | 'semanal' | 'mensal';
+  numeroFaixas?: number;
+  faixas?: { de: number; ate: number; percentual: number }[];
+  bancoHorasHabilitado?: boolean;
+  bancoHorasTipo?: 'extras' | 'faltas' | 'atrasos';
+}
+
+/** Tipo de marcação do horário (CLT ou outra orientação) */
+export interface TipoMarcacaoConfig {
+  tipo: 'pre_assinalado' | 'normal' | 'tolerancia' | 'livre' | 'extra_anterior' | 'extra_posterior' | 'tolerancia_especifica';
+  usarToleranciaEspecial?: boolean;
+  toleranciaEspecial?: { entrada: number; saida: number }[];
 }
 
 // Novos tipos de Log e Monitoramento

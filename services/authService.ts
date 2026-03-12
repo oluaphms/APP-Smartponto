@@ -626,23 +626,19 @@ class AuthService {
       });
       
       const supabaseUser = await Promise.race([getUserPromise, timeoutPromise]);
-      
+
       if (!supabaseUser) {
-        // Fallback: se não há sessão Supabase mas existe usuário em localStorage,
-        // mantemos o usuário logado em ambiente de desenvolvimento.
+        // Sem sessão válida → força fluxo de login (não reaproveita usuário antigo do localStorage)
         try {
           if (typeof window !== 'undefined') {
-            const stored = window.localStorage.getItem('current_user');
-            if (stored) {
-              return JSON.parse(stored) as User;
-            }
+            window.localStorage.removeItem('current_user');
           }
         } catch {
-          // ignora erro de leitura
+          // ignora erro de limpeza
         }
         return null;
       }
-      
+
       return await this.supabaseUserToAppUser(supabaseUser);
     } catch (error: any) {
       // Tratar erros de refresh token inválido silenciosamente (comportamento esperado quando não há sessão)
@@ -669,19 +665,13 @@ class AuthService {
         const appUser = await this.supabaseUserToAppUser(session.user);
         callback(appUser);
       } else {
-        // Fallback: se Supabase reporta sessão vazia mas há usuário salvo localmente,
-        // reutilizamos esse usuário (útil em desenvolvimento quando a sessão do Supabase expira
-        // mas o usuário ainda está ativo na UI).
+        // Sem sessão: limpa usuário atual e força retorno ao fluxo de login
         try {
           if (typeof window !== 'undefined') {
-            const stored = window.localStorage.getItem('current_user');
-            if (stored) {
-              callback(JSON.parse(stored) as User);
-              return;
-            }
+            window.localStorage.removeItem('current_user');
           }
         } catch {
-          // ignora erro de leitura
+          // ignora erro de limpeza
         }
         callback(null);
       }

@@ -1,54 +1,46 @@
 import React, { useEffect, useState } from 'react';
-import { Building2, Plus, Pencil, Trash2 } from 'lucide-react';
-import { useCurrentUser } from '../hooks/useCurrentUser';
-import PageHeader from '../components/PageHeader';
-import { db, isSupabaseConfigured } from '../services/supabaseClient';
-import { LoadingState } from '../../components/UI';
-import RoleGuard from '../components/auth/RoleGuard';
+import { MapPin, Plus, Pencil, Trash2 } from 'lucide-react';
+import { useCurrentUser } from '../../hooks/useCurrentUser';
+import PageHeader from '../../components/PageHeader';
+import { db, isSupabaseConfigured } from '../../services/supabaseClient';
+import { LoadingState } from '../../../components/UI';
+import RoleGuard from '../../components/auth/RoleGuard';
 
-interface DepartmentRow {
+interface CidadeRow {
   id: string;
   name: string;
-  numero_folha?: string;
   company_id: string;
-  manager_id?: string;
   created_at: string;
 }
 
-const DepartmentsPage: React.FC = () => {
+const AdminCidades: React.FC = () => {
   const { user, loading } = useCurrentUser();
-  const [rows, setRows] = useState<DepartmentRow[]>([]);
+  const [rows, setRows] = useState<CidadeRow[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
-  const [numeroFolha, setNumeroFolha] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
 
   const load = async () => {
-    if (!user || !isSupabaseConfigured) {
+    if (!user?.companyId || !isSupabaseConfigured) {
       setLoadingData(false);
       return;
     }
-    const companyId = user.companyId || user.id;
     setLoadingData(true);
     try {
-      const data = (await db.select('departments', [
-        { column: 'company_id', operator: 'eq', value: companyId },
-      ])) as any[];
+      const data = (await db.select('cidades', [{ column: 'company_id', operator: 'eq', value: user.companyId }])) as any[];
       setRows((data ?? []).map((r: any) => ({
         id: r.id,
         name: r.name || '',
-        numero_folha: r.numero_folha || '',
         company_id: r.company_id,
-        manager_id: r.manager_id,
         created_at: r.created_at,
       })));
     } catch (e) {
       console.error(e);
-      setMessage({ type: 'error', text: 'Erro ao carregar departamentos.' });
+      setMessage({ type: 'error', text: 'Erro ao carregar cidades.' });
     } finally {
       setLoadingData(false);
     }
@@ -61,16 +53,14 @@ const DepartmentsPage: React.FC = () => {
   const openCreate = () => {
     setEditingId(null);
     setName('');
-    setNumeroFolha('');
     setModalOpen(true);
     setMessage(null);
     setModalError(null);
   };
 
-  const openEdit = (row: DepartmentRow) => {
+  const openEdit = (row: CidadeRow) => {
     setEditingId(row.id);
     setName(row.name);
-    setNumeroFolha(row.numero_folha ?? '');
     setModalOpen(true);
     setMessage(null);
     setModalError(null);
@@ -79,18 +69,13 @@ const DepartmentsPage: React.FC = () => {
   const handleSave = async (e?: React.MouseEvent) => {
     e?.preventDefault();
     e?.stopPropagation();
-    if (!isSupabaseConfigured) {
-      setModalError('Supabase não configurado. Configure as variáveis de ambiente e reinicie.');
+    if (!isSupabaseConfigured || !user?.companyId) {
+      setModalError('Configuração ou empresa não identificada.');
       return;
     }
-    if (!user) {
-      setModalError('Usuário não identificado. Faça login novamente.');
-      return;
-    }
-    const companyId = user.companyId || user.id;
     const trimmed = name.trim();
     if (!trimmed) {
-      setModalError('Informe o nome do departamento.');
+      setModalError('Informe a descrição (nome da cidade).');
       return;
     }
     setSaving(true);
@@ -98,21 +83,17 @@ const DepartmentsPage: React.FC = () => {
     setMessage(null);
     try {
       if (editingId) {
-        await db.update('departments', editingId, {
-          name: trimmed,
-          numero_folha: numeroFolha.trim() || null,
-        });
-        setMessage({ type: 'success', text: 'Departamento atualizado com sucesso.' });
+        await db.update('cidades', editingId, { name: trimmed });
+        setMessage({ type: 'success', text: 'Cidade atualizada com sucesso.' });
       } else {
-        await db.insert('departments', {
+        await db.insert('cidades', {
           id: crypto.randomUUID(),
-          company_id: companyId,
+          company_id: user.companyId,
           name: trimmed,
-          numero_folha: numeroFolha.trim() || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
-        setMessage({ type: 'success', text: 'Departamento cadastrado com sucesso.' });
+        setMessage({ type: 'success', text: 'Cidade cadastrada com sucesso.' });
       }
       setModalOpen(false);
       load();
@@ -126,10 +107,10 @@ const DepartmentsPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Excluir este departamento? Funcionários vinculados podem ficar sem departamento.')) return;
+    if (!confirm('Excluir esta cidade? Funcionários vinculados podem ficar sem cidade.')) return;
     try {
-      await db.delete('departments', id);
-      setMessage({ type: 'success', text: 'Departamento excluído.' });
+      await db.delete('cidades', id);
+      setMessage({ type: 'success', text: 'Cidade excluída.' });
       load();
     } catch (e: any) {
       setMessage({ type: 'error', text: e?.message || 'Erro ao excluir.' });
@@ -154,9 +135,9 @@ const DepartmentsPage: React.FC = () => {
         )}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <PageHeader
-            title="Departamentos"
-            subtitle="Cadastro de departamentos para fins de cadastro de pessoas. Nº Folha pode ser exportado no arquivo de cálculos."
-            icon={<Building2 size={24} />}
+            title="Cidades"
+            subtitle="Cadastro de cidades para vincular a feriados e a funcionários (Dados Adicionais)"
+            icon={<MapPin size={24} />}
           />
           <button
             type="button"
@@ -175,7 +156,6 @@ const DepartmentsPage: React.FC = () => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
-                    <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Nº Folha</th>
                     <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Descrição</th>
                     <th className="text-right px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Ações</th>
                   </tr>
@@ -183,7 +163,6 @@ const DepartmentsPage: React.FC = () => {
                 <tbody>
                   {rows.map((row) => (
                     <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{row.numero_folha || '—'}</td>
                       <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{row.name}</td>
                       <td className="px-4 py-3 text-right">
                         <button type="button" onClick={() => openEdit(row)} className="p-2 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg" title="Editar">
@@ -198,7 +177,7 @@ const DepartmentsPage: React.FC = () => {
                 </tbody>
               </table>
               {!loadingData && rows.length === 0 && (
-                <p className="p-8 text-center text-slate-500 dark:text-slate-400">Nenhum departamento cadastrado. Clique em &quot;Novo departamento&quot; para começar.</p>
+                <p className="p-8 text-center text-slate-500 dark:text-slate-400">Nenhuma cidade cadastrada. Clique em &quot;Incluir&quot; para começar.</p>
               )}
             </>
           )}
@@ -207,22 +186,12 @@ const DepartmentsPage: React.FC = () => {
         {modalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => !saving && setModalOpen(false)}>
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white">{editingId ? 'Editar departamento' : 'Novo departamento'}</h3>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">{editingId ? 'Editar cidade' : 'Nova cidade'}</h3>
               {modalError && (
                 <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">
                   {modalError}
                 </div>
               )}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nº Folha</label>
-                <input
-                  type="text"
-                  value={numeroFolha}
-                  onChange={(e) => { setNumeroFolha(e.target.value); setModalError(null); }}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  placeholder="Número no sistema de folha (opcional)"
-                />
-              </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Descrição</label>
                 <input
@@ -230,7 +199,7 @@ const DepartmentsPage: React.FC = () => {
                   value={name}
                   onChange={(e) => { setName(e.target.value); setModalError(null); }}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  placeholder="Ex: TI, Comercial, RH"
+                  placeholder="Nome da cidade"
                 />
               </div>
               <div className="flex gap-3 pt-2">
@@ -249,4 +218,4 @@ const DepartmentsPage: React.FC = () => {
   );
 };
 
-export default DepartmentsPage;
+export default AdminCidades;
