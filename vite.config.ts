@@ -30,7 +30,8 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3010,
       strictPort: false,
-      host: true
+      host: true,
+      open: true
     },
 
     esbuild: {
@@ -74,10 +75,12 @@ export default defineConfig(({ mode }) => {
       cssMinify: true,
       rollupOptions: {
         output: {
-          manualChunks: {
-            'react-vendor': ['react', 'react-dom', 'react-is'],
-            'supabase-vendor': ['@supabase/supabase-js'],
-            'ui-vendor': ['lucide-react', 'recharts']
+          manualChunks: (id) => {
+            // Evita chunk separado de React para prevenir "useState of null" (múltiplas instâncias)
+            if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) return undefined
+            if (id.includes('node_modules/@supabase/supabase-js')) return 'supabase-vendor'
+            if (id.includes('node_modules/lucide-react') || id.includes('node_modules/recharts')) return 'ui-vendor'
+            return undefined
           }
         }
       }

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import * as React from 'react';
 import { i18n } from '../../lib/i18n';
 
 export type Language = 'pt-BR' | 'en-US';
@@ -8,49 +8,22 @@ export interface LanguageContextValue {
   setLanguage: (lang: Language) => void;
 }
 
-const defaultLanguage = (): Language => {
+export function getDefaultLanguage(): Language {
   if (typeof window === 'undefined') return 'pt-BR';
   const saved = localStorage.getItem('smartponto_language') as Language;
   return saved === 'pt-BR' || saved === 'en-US' ? saved : 'pt-BR';
-};
+}
 
-const LanguageContext = createContext<LanguageContextValue>({
-  language: defaultLanguage(),
+export const LanguageContext = React.createContext<LanguageContextValue>({
+  language: getDefaultLanguage(),
   setLanguage: () => {},
 });
 
-/**
- * Provider que mantém o idioma em estado React para que a troca de idioma
- * re-renderize toda a árvore e o sistema alterne entre pt-BR e en-US.
- */
-export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguageState] = useState<Language>(defaultLanguage);
-
-  useEffect(() => {
-    i18n.setLanguage(language);
-  }, [language]);
-
-  const setLanguage = useCallback((lang: Language) => {
-    const next = lang === 'pt-BR' || lang === 'en-US' ? lang : 'pt-BR';
-    setLanguageState(next);
-    i18n.setLanguage(next);
-    localStorage.setItem('smartponto_language', next);
-  }, []);
-
-  const value: LanguageContextValue = { language, setLanguage };
-
-  return (
-    <LanguageContext.Provider value={value}>
-      {children}
-    </LanguageContext.Provider>
-  );
-}
-
 export function useLanguage(): LanguageContextValue {
-  const ctx = useContext(LanguageContext);
+  const ctx = React.useContext(LanguageContext);
   if (!ctx) {
     return {
-      language: defaultLanguage(),
+      language: getDefaultLanguage(),
       setLanguage: (lang: Language) => {
         i18n.setLanguage(lang);
         localStorage.setItem('smartponto_language', lang);
@@ -58,4 +31,27 @@ export function useLanguage(): LanguageContextValue {
     };
   }
   return ctx;
+}
+
+export function LanguageProvider({ children }: { children: React.ReactNode }) {
+  const [language, setLanguageState] = React.useState<Language>(getDefaultLanguage);
+
+  React.useEffect(() => {
+    i18n.setLanguage(language);
+  }, [language]);
+
+  const setLanguage = React.useCallback((lang: Language) => {
+    const next = lang === 'pt-BR' || lang === 'en-US' ? lang : 'pt-BR';
+    setLanguageState(next);
+    i18n.setLanguage(next);
+    localStorage.setItem('smartponto_language', next);
+  }, []);
+
+  const value = React.useMemo(() => ({ language, setLanguage }), [language, setLanguage]);
+
+  return (
+    <LanguageContext.Provider value={value}>
+      {children}
+    </LanguageContext.Provider>
+  );
 }

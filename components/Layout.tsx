@@ -1,16 +1,17 @@
 import React, { memo, useCallback, useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { User } from '../types';
 import { Bell, Search, Sun, Moon } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
 import { NotificationService } from '../services/notificationService';
 import { ThemeService } from '../services/themeService';
 import { i18n } from '../lib/i18n';
-import SidebarDock from '../src/components/navigation/SidebarDock';
-import BottomNav from '../src/components/navigation/BottomNav';
-import CommandMenu from '../src/components/navigation/CommandMenu';
-
-const DOCK_WIDTH = 72;
+import {
+  SmartNavigationProvider,
+  SmartDock,
+  RadialMenu,
+  CommandPalette,
+} from '../src/navigation';
 
 export type LayoutVariant = 'admin' | 'employee';
 
@@ -24,7 +25,6 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ user, children, activeTab, setActiveTab, onLogout, layoutVariant }) => {
-  const location = useLocation();
   const navigate = useNavigate();
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = user?.preferences?.theme;
@@ -33,15 +33,6 @@ const Layout: React.FC<LayoutProps> = ({ user, children, activeTab, setActiveTab
   });
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [commandMenuOpen, setCommandMenuOpen] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(typeof window !== 'undefined' && window.innerWidth >= 1024);
-
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)');
-    const handler = () => setIsDesktop(mq.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
 
   useEffect(() => {
     ThemeService.init();
@@ -68,14 +59,10 @@ const Layout: React.FC<LayoutProps> = ({ user, children, activeTab, setActiveTab
   }, [theme]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-transparent">
-      <SidebarDock user={user} onLogout={onLogout} />
-
-      <div
-        className="flex-1 flex flex-col min-w-0 bg-transparent relative transition-[margin] duration-300 ease-in-out"
-        style={{ marginLeft: isDesktop ? DOCK_WIDTH : 0 }}
-      >
-        <header className="h-16 lg:h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 lg:px-8 sticky top-0 z-20 transition-colors duration-300">
+    <SmartNavigationProvider user={user} onLogout={onLogout}>
+      <div className="flex h-screen overflow-hidden bg-transparent">
+        <div className="flex-1 flex flex-col min-w-0 bg-transparent relative">
+          <header className="h-16 lg:h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 lg:px-8 sticky top-0 z-20 transition-colors duration-300">
           <div className="flex items-center gap-2 flex-1 max-w-md">
             <span className="text-base lg:text-lg font-bold text-indigo-600 dark:text-indigo-400 shrink-0">SmartPonto</span>
             <div className="relative flex-1 hidden sm:block max-w-xs">
@@ -132,7 +119,7 @@ const Layout: React.FC<LayoutProps> = ({ user, children, activeTab, setActiveTab
         <main
           id="main-content"
           tabIndex={-1}
-          className="flex-1 overflow-y-auto custom-scrollbar focus:outline-none pb-20 lg:pb-0"
+          className="flex-1 overflow-y-auto custom-scrollbar focus:outline-none pb-24 lg:pb-24"
           role="main"
           aria-label={i18n.t('layout.mainContent')}
         >
@@ -141,11 +128,12 @@ const Layout: React.FC<LayoutProps> = ({ user, children, activeTab, setActiveTab
           </div>
         </main>
 
-        <BottomNav user={user} onLogout={onLogout} />
+        <SmartDock />
+        <RadialMenu />
+        <CommandPalette />
+        </div>
       </div>
-
-      <CommandMenu user={user} open={commandMenuOpen} onOpenChange={setCommandMenuOpen} />
-    </div>
+    </SmartNavigationProvider>
   );
 };
 
