@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
-import { db, isSupabaseConfigured } from '../../services/supabaseClient';
+import { db, supabase, isSupabaseConfigured } from '../../services/supabaseClient';
 import { LoadingState } from '../../../components/UI';
 import { Building2, User, MapPin, FileCheck, Cloud } from 'lucide-react';
 import { PontoService } from '../../../services/pontoService';
@@ -251,13 +251,70 @@ const AdminCompany: React.FC = () => {
           updated_at: new Date().toISOString(),
         };
         try {
-          await db.update('companies', idToUse, payload);
-        } catch {
-          await db.insert('companies', {
-            id: idToUse,
-            ...payload,
-            created_at: new Date().toISOString(),
+          if (supabase) {
+            const { error: updateError } = await supabase
+              .from('companies')
+              .update({
+                name: payload.name,
+                nome: payload.nome,
+                cnpj: payload.cnpj,
+                inscricao_estadual: payload.inscricao_estadual,
+                responsavel_nome: payload.responsavel_nome,
+                responsavel_cargo: payload.responsavel_cargo,
+                responsavel_email: payload.responsavel_email,
+                address: payload.address,
+                endereco: payload.endereco,
+                bairro: payload.bairro,
+                cidade: payload.cidade,
+                cep: payload.cep,
+                estado: payload.estado,
+                pais: payload.pais,
+                phone: payload.phone,
+                telefone: payload.telefone,
+                fax: payload.fax,
+                cei: payload.cei,
+                numero_folha: payload.numero_folha,
+                receipt_fields: payload.receipt_fields,
+                use_default_timezone: payload.use_default_timezone,
+                timezone: payload.timezone,
+                cartao_ponto_footer: payload.cartao_ponto_footer,
+                updated_at: payload.updated_at,
+              })
+              .eq('id', idToUse);
+            if (updateError) {
+              console.error('Erro ao salvar empresa:', updateError);
+              setMessage({
+                type: 'error',
+                text: updateError.message?.includes('cartao_ponto_footer')
+                  ? 'Não foi possível salvar. Execute a migration que adiciona a coluna cartao_ponto_footer na tabela companies (supabase/migrations) e tente novamente.'
+                  : 'Não foi possível salvar as alterações da empresa.',
+              });
+              return;
+            }
+          } else {
+            await db.update('companies', idToUse, payload);
+          }
+        } catch (err: any) {
+          console.error('Erro ao salvar empresa:', err);
+          setMessage({
+            type: 'error',
+            text: err?.message?.includes('cartao_ponto_footer')
+              ? 'Não foi possível salvar. Execute a migration que adiciona a coluna cartao_ponto_footer na tabela companies (supabase/migrations) e tente novamente.'
+              : (err?.message || 'Não foi possível salvar as alterações da empresa.'),
           });
+          return;
+        }
+        try {
+          const existing = await db.select('companies', [{ column: 'id', operator: 'eq', value: idToUse }]);
+          if (!existing?.length && supabase) {
+            await supabase.from('companies').insert({
+              id: idToUse,
+              ...payload,
+              created_at: new Date().toISOString(),
+            });
+          }
+        } catch (insertErr) {
+          console.error('Erro ao criar empresa:', insertErr);
         }
 
         if (!user.companyId) {

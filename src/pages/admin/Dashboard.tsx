@@ -13,6 +13,8 @@ import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
 import { db, isSupabaseConfigured } from '../../services/supabaseClient';
 import { LoadingState } from '../../../components/UI';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { i18n } from '../../../lib/i18n';
 
 interface CardData {
   totalEmployees: number;
@@ -37,6 +39,7 @@ interface WeeklyData {
 const AdminDashboard: React.FC = () => {
   const { user, loading } = useCurrentUser();
   const navigate = useNavigate();
+  useLanguage();
   const [cards, setCards] = useState<CardData>({
     totalEmployees: 0,
     activeEmployees: 0,
@@ -89,9 +92,8 @@ const AdminDashboard: React.FC = () => {
           const d = new Date();
           d.setDate(d.getDate() - i);
           const dayStr = d.toISOString().slice(0, 10);
-          const dayLabel = d.toLocaleDateString('pt-BR', { weekday: 'short' });
           const count = (records as any[]).filter((r: any) => r.created_at?.slice(0, 10) === dayStr).length;
-          last7Days.push({ day: dayLabel, count });
+          last7Days.push({ day: dayStr, count });
         }
         setWeeklyData(last7Days);
 
@@ -105,7 +107,7 @@ const AdminDashboard: React.FC = () => {
         );
         const last = (records as any[]).slice(0, 15).map((r: any) => ({
           employeeName: userMap.get(r.user_id)?.nome ?? r.user_id?.slice(0, 8) ?? '—',
-          type: r.type === 'entrada' ? 'Entrada' : r.type === 'saída' ? 'Saída' : r.type === 'pausa' ? 'Pausa' : r.type,
+          type: r.type,
           time: r.created_at ? new Date(r.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—',
           location: r.location?.lat != null ? `${Number(r.location.lat).toFixed(4)}, ${Number(r.location.lng).toFixed(4)}` : '—',
           userId: r.user_id,
@@ -121,20 +123,20 @@ const AdminDashboard: React.FC = () => {
     load();
   }, [user?.companyId]);
 
-  if (loading || !user) return <LoadingState message="Carregando..." />;
+  if (loading || !user) return <LoadingState message={i18n.t('common.loading')} />;
 
   const cardItems = [
-    { label: 'Total Funcionários', value: cards.totalEmployees, icon: Users, color: 'bg-indigo-500' },
-    { label: 'Funcionários Ativos', value: cards.activeEmployees, icon: UserCheck, color: 'bg-emerald-500' },
-    { label: 'Registros Hoje', value: cards.recordsToday, icon: ClipboardList, color: 'bg-blue-500' },
-    { label: 'Funcionários Ausentes', value: cards.absentToday, icon: UserX, color: 'bg-amber-500' },
+    { label: i18n.t('dashboard.totalEmployees'), value: cards.totalEmployees, icon: Users, color: 'bg-indigo-500' },
+    { label: i18n.t('dashboard.activeEmployees'), value: cards.activeEmployees, icon: UserCheck, color: 'bg-emerald-500' },
+    { label: i18n.t('dashboard.recordsToday'), value: cards.recordsToday, icon: ClipboardList, color: 'bg-blue-500' },
+    { label: i18n.t('dashboard.absentToday'), value: cards.absentToday, icon: UserX, color: 'bg-amber-500' },
   ];
 
   const maxCount = Math.max(1, ...weeklyData.map((d) => d.count));
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Dashboard Admin" />
+      <PageHeader title={i18n.t('dashboard.adminTitle')} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {cardItems.map((item) => {
@@ -162,10 +164,10 @@ const AdminDashboard: React.FC = () => {
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6">
           <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-indigo-500" />
-            Registros por dia (semana)
+            {i18n.t('dashboard.recordsByDay')}
           </h3>
           {loadingData ? (
-            <div className="h-48 flex items-center justify-center text-slate-400">Carregando...</div>
+            <div className="h-48 flex items-center justify-center text-slate-400">{i18n.t('common.loading')}</div>
           ) : (
             <div className="flex items-end gap-2 h-48">
               {weeklyData.map((d) => (
@@ -174,7 +176,9 @@ const AdminDashboard: React.FC = () => {
                     className="w-full bg-indigo-500 rounded-t min-h-[4px] transition-all"
                     style={{ height: `${Math.max(8, (d.count / maxCount) * 100)}%` }}
                   />
-                  <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">{d.day}</span>
+                  <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                    {new Date(d.day + 'T12:00:00').toLocaleDateString(i18n.getLanguage(), { weekday: 'short' })}
+                  </span>
                 </div>
               ))}
             </div>
@@ -185,31 +189,31 @@ const AdminDashboard: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <CalendarDays className="w-5 h-5 text-indigo-500" />
-              Últimos registros
+              {i18n.t('dashboard.lastRecords')}
             </h3>
             <button
               type="button"
               onClick={() => navigate('/admin/timesheet')}
               className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
             >
-              Ver Espelho de Ponto <ArrowRight className="w-4 h-4" />
+              {i18n.t('dashboard.viewTimesheet')} <ArrowRight className="w-4 h-4" />
             </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-700">
-                  <th className="text-left py-2 font-bold text-slate-500 dark:text-slate-400">Funcionário</th>
-                  <th className="text-left py-2 font-bold text-slate-500 dark:text-slate-400">Tipo</th>
-                  <th className="text-left py-2 font-bold text-slate-500 dark:text-slate-400">Horário</th>
-                  <th className="text-left py-2 font-bold text-slate-500 dark:text-slate-400">Localização</th>
+                  <th className="text-left py-2 font-bold text-slate-500 dark:text-slate-400">{i18n.t('dashboard.employee')}</th>
+                  <th className="text-left py-2 font-bold text-slate-500 dark:text-slate-400">{i18n.t('dashboard.type')}</th>
+                  <th className="text-left py-2 font-bold text-slate-500 dark:text-slate-400">{i18n.t('dashboard.time')}</th>
+                  <th className="text-left py-2 font-bold text-slate-500 dark:text-slate-400">{i18n.t('dashboard.location')}</th>
                 </tr>
               </thead>
               <tbody>
                 {lastRecords.map((r, i) => (
                   <tr key={i} className="border-b border-slate-100 dark:border-slate-800">
                     <td className="py-2 text-slate-900 dark:text-white">{r.employeeName}</td>
-                    <td className="py-2">{r.type}</td>
+                    <td className="py-2">{r.type === 'entrada' ? i18n.t('punch.typeIn') : r.type === 'saída' ? i18n.t('punch.typeOut') : r.type === 'pausa' ? i18n.t('punch.typeBreak') : r.type}</td>
                     <td className="py-2 tabular-nums">{r.time}</td>
                     <td className="py-2 text-slate-500 dark:text-slate-400 text-xs">{r.location}</td>
                   </tr>
@@ -217,7 +221,7 @@ const AdminDashboard: React.FC = () => {
               </tbody>
             </table>
             {lastRecords.length === 0 && !loadingData && (
-              <p className="py-8 text-center text-slate-500 dark:text-slate-400 text-sm">Nenhum registro recente.</p>
+              <p className="py-8 text-center text-slate-500 dark:text-slate-400 text-sm">{i18n.t('dashboard.noRecentRecords')}</p>
             )}
           </div>
         </div>

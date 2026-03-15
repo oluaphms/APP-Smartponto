@@ -83,7 +83,7 @@ const Layout: React.FC<LayoutProps> = ({ user, children, activeTab, setActiveTab
               <input
                 type="text"
                 placeholder={i18n.t('layout.searchPlaceholder')}
-                aria-label="Campo de pesquisa"
+                aria-label={i18n.t('layout.searchField')}
                 className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all text-slate-900 dark:text-white"
               />
             </div>
@@ -121,8 +121,8 @@ const Layout: React.FC<LayoutProps> = ({ user, children, activeTab, setActiveTab
               type="button"
               onClick={() => navigate(user?.role === 'admin' || user?.role === 'hr' ? '/profile' : '/employee/profile')}
               className="hidden sm:flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-bold text-sm border-2 border-white dark:border-slate-700 hover:ring-2 hover:ring-indigo-500/50 transition-all shrink-0"
-              aria-label="Abrir perfil"
-              title="Perfil"
+              aria-label={i18n.t('layout.openProfile')}
+              title={i18n.t('layout.profile')}
             >
               {(user?.nome ?? 'U').charAt(0).toUpperCase()}
             </button>
@@ -134,7 +134,7 @@ const Layout: React.FC<LayoutProps> = ({ user, children, activeTab, setActiveTab
           tabIndex={-1}
           className="flex-1 overflow-y-auto custom-scrollbar focus:outline-none pb-20 lg:pb-0"
           role="main"
-          aria-label="Conteúdo principal"
+          aria-label={i18n.t('layout.mainContent')}
         >
           <div className="p-4 md:p-6 lg:p-10 max-w-7xl mx-auto w-full">
             {children}

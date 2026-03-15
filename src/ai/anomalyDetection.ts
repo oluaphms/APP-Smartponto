@@ -206,7 +206,7 @@ export function detectBehaviorAnomaly(input: AnomalyDetectionInput): AnomalyDete
     .sort(
       (a, b) =>
         new Date(b.timestamp || (b.created_at as string) || 0).getTime() -
-        new Date(a.timestamp || (a.created_at as string) || 0).getTime();
+        new Date(a.timestamp || (a.created_at as string) || 0).getTime()
     );
   if (lastSameDay.length > 0) {
     const last = new Date(lastSameDay[0].timestamp || (lastSameDay[0].created_at as string) || '');

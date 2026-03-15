@@ -5,7 +5,7 @@ if (typeof React === 'undefined' || typeof useState !== 'function') {
     '[SmartPonto] React não carregou corretamente (múltiplas cópias?). Limpe o cache: delete a pasta node_modules/.vite e rode npm run dev de novo.'
   );
 }
-import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { User, LogType, DailySummary, PunchMethod, Company } from './types';
 import Layout from './components/Layout';
 import Clock from './components/Clock';
@@ -71,6 +71,11 @@ import ForgotPasswordModal from './src/components/auth/ForgotPasswordModal';
 import ResetPasswordPage from './src/pages/ResetPassword';
 import AcceptInvitePage from './src/pages/AcceptInvite';
 import RoleGuard from './src/components/auth/RoleGuard';
+import ProtectedRoute from './src/components/auth/ProtectedRoute';
+import { useSettings, SettingsProvider } from './src/contexts/SettingsContext';
+import { useLanguage } from './src/contexts/LanguageContext';
+import { i18n } from './lib/i18n';
+import { useSessionTimeout } from './src/hooks/useSessionTimeout';
 import AdminLayout from './src/layouts/AdminLayout';
 import EmployeeLayout from './src/layouts/EmployeeLayout';
 import AdminDashboard from './src/pages/admin/Dashboard';
@@ -104,6 +109,7 @@ import AdminArquivosFiscais from './src/pages/admin/ArquivosFiscais';
 import AdminFiscalizacao from './src/pages/admin/Fiscalizacao';
 import AdminSecurity from './src/pages/admin/Security';
 import ReportSecurity from './src/pages/admin/reports/ReportSecurity';
+import ImportEmployees from './src/pages/admin/ImportEmployees';
 import AdminAusencias from './src/pages/Ausencias';
 import AdminAjuda from './src/pages/admin/Ajuda';
 import EmployeeDashboard from './src/pages/employee/Dashboard';
@@ -126,10 +132,10 @@ function ConfigSupabaseScreen() {
           <Settings className="w-7 h-7 text-amber-600 dark:text-amber-400" />
         </div>
         <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
-          Supabase não configurado
+          {i18n.t('app.configTitle')}
         </h1>
         <p className="text-slate-600 dark:text-slate-400 text-sm">
-          Configure as variáveis de ambiente para o app funcionar.
+          {i18n.t('app.configDescription')}
         </p>
         {isVercel ? (
           <div className="text-left bg-slate-100 dark:bg-slate-800/50 rounded-xl p-4 text-sm space-y-2">
@@ -221,8 +227,18 @@ const AppMain: React.FC = () => {
   });
 
   const { records, isLoading: isPunching, error, setError, addRecord } = useRecords(user?.id, user?.companyId);
+  const { settings: globalSettings } = useSettings();
+  const { setLanguage } = useLanguage();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Aplicar idioma padrão das configurações quando não houver preferência no navegador
+  useEffect(() => {
+    if (globalSettings?.language && typeof window !== 'undefined' && !localStorage.getItem('smartponto_language')) {
+      const lang = globalSettings.language === 'en-US' || globalSettings.language === 'pt-BR' ? globalSettings.language : 'pt-BR';
+      setLanguage(lang);
+    }
+  }, [globalSettings?.language, setLanguage]);
 
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout>;
@@ -481,7 +497,11 @@ const AppMain: React.FC = () => {
 
     const workedHours = totalMs / (1000 * 60 * 60);
 
-    const standardHoursConfig = company.settings?.standardHours;
+    const standardHoursConfig =
+      company.settings?.standardHours ||
+      (globalSettings
+        ? { start: globalSettings.default_entry_time, end: globalSettings.default_exit_time }
+        : null);
     if (!standardHoursConfig?.start || !standardHoursConfig?.end) {
       setTodayProgress(0);
       setTodayLabel(`${stats.today}`);
@@ -509,7 +529,7 @@ const AppMain: React.FC = () => {
         .toString()
         .padStart(2, '0')}m`
     );
-  }, [records, company, stats.today]);
+  }, [records, company, globalSettings, stats.today]);
 
   // Registros filtrados para a aba de histórico
   const filteredHistory = useMemo(() => {
@@ -614,7 +634,7 @@ const AppMain: React.FC = () => {
     setLoginError(null);
   };
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     setUser(null);
     setCompany(null);
     setInsights(null);
@@ -626,7 +646,13 @@ const AppMain: React.FC = () => {
     } catch (error) {
       console.error('Erro ao fazer logout:', error);
     }
-  };
+  }, []);
+
+  useSessionTimeout(
+    globalSettings?.session_timeout_minutes ?? 60,
+    handleLogout,
+    !!user
+  );
 
   // Theme functions (ANTES de qualquer return condicional)
   const toggleTheme = useCallback(() => {
@@ -643,7 +669,7 @@ const AppMain: React.FC = () => {
   }, [theme]);
 
   const getThemeLabel = useCallback(() => {
-    return theme === 'light' ? 'Modo claro' : 'Modo escuro';
+    return theme === 'light' ? i18n.t('layout.themeLight') : i18n.t('layout.themeDark');
   }, [theme]);
 
   // Reconexão automática quando servidor está indisponível (ex.: free tier pausado)
@@ -676,7 +702,7 @@ const AppMain: React.FC = () => {
   }, [isInitialLoading]);
 
   if (isInitialLoading) {
-    return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><LoadingState message="Protegendo sua conexão..." /></div>;
+    return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><LoadingState message={i18n.t('app.securingConnection')} /></div>;
   }
 
   // Fallback: servidor temporariamente indisponível (free tier pausado / rede lenta)
@@ -692,10 +718,10 @@ const AppMain: React.FC = () => {
             <AlertTriangle className="w-8 h-8 text-amber-600 dark:text-amber-400" />
           </div>
           <h1 className="text-xl font-semibold text-slate-900 dark:text-white">
-            Servidor temporariamente indisponível.
+            {i18n.t('app.serverUnavailable')}
           </h1>
           <p className="text-slate-600 dark:text-slate-400 text-sm">
-            {isReconnecting ? 'Tentando reconectar...' : isResettingSession ? 'Limpando sessão...' : 'Aguarde, volte ao login ou limpe a sessão para tentar novamente.'}
+            {isReconnecting ? i18n.t('app.reconnecting') : isResettingSession ? i18n.t('app.clearingSession') : i18n.t('app.waitOrClear')}
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button
@@ -704,7 +730,7 @@ const AppMain: React.FC = () => {
               className="w-full sm:w-auto"
               disabled={isResettingSession}
             >
-              Voltar ao login
+              {i18n.t('app.backToLogin')}
             </Button>
             <Button
               onClick={onClearSession}
@@ -712,7 +738,7 @@ const AppMain: React.FC = () => {
               disabled={isResettingSession}
               loading={isResettingSession}
             >
-              {isResettingSession ? 'Limpando...' : 'Limpar sessão e tentar de novo'}
+              {isResettingSession ? i18n.t('app.clearing') : i18n.t('app.clearSessionRetry')}
             </Button>
           </div>
         </div>
@@ -747,7 +773,7 @@ const AppMain: React.FC = () => {
               <Fingerprint size={40} />
             </div>
             <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight transition-colors">Smart<span className="text-indigo-600 dark:text-indigo-500">Ponto</span></h1>
-            <p className="text-slate-600 dark:text-slate-500 text-sm mt-2 font-medium transition-colors">Gestão de Ponto de Nova Geração</p>
+            <p className="text-slate-600 dark:text-slate-500 text-sm mt-2 font-medium transition-colors">{i18n.t('login.slogan')}</p>
           </div>
 
           <div className="bg-white dark:bg-slate-900/50 backdrop-blur-3xl p-2 rounded-[2.5rem] border border-slate-200 dark:border-slate-800/50 shadow-2xl overflow-hidden transition-colors">
@@ -762,8 +788,8 @@ const AppMain: React.FC = () => {
                       <UserIcon size={24} />
                     </div>
                     <div>
-                      <p className="text-slate-900 dark:text-white font-bold text-lg transition-colors group-hover:text-white">Acesso Funcionário</p>
-                      <p className="text-slate-600 dark:text-slate-400 text-xs group-hover:text-indigo-100 dark:group-hover:text-indigo-100 transition-colors">Bater ponto e ver histórico</p>
+                      <p className="text-slate-900 dark:text-white font-bold text-lg transition-colors group-hover:text-white">{i18n.t('login.employeeAccess')}</p>
+                      <p className="text-slate-600 dark:text-slate-400 text-xs group-hover:text-indigo-100 dark:group-hover:text-indigo-100 transition-colors">{i18n.t('login.punchAndHistory')}</p>
                     </div>
                   </div>
                   <ChevronRight size={20} className="text-slate-400 dark:text-slate-600 group-hover:text-white transition-colors" />
@@ -778,8 +804,8 @@ const AppMain: React.FC = () => {
                       <ShieldCheck size={24} />
                     </div>
                     <div>
-                      <p className="text-slate-900 dark:text-white font-bold text-lg transition-colors group-hover:text-white">Painel Gestor</p>
-                      <p className="text-slate-600 dark:text-slate-400 text-xs group-hover:text-slate-200 dark:group-hover:text-slate-200 transition-colors">Gestão de equipe e relatórios</p>
+                      <p className="text-slate-900 dark:text-white font-bold text-lg transition-colors group-hover:text-white">{i18n.t('login.managerPanel')}</p>
+                      <p className="text-slate-600 dark:text-slate-400 text-xs group-hover:text-slate-200 dark:group-hover:text-slate-200 transition-colors">{i18n.t('login.teamAndReports')}</p>
                     </div>
                   </div>
                   <ChevronRight size={20} className="text-slate-400 dark:text-slate-600 group-hover:text-white transition-colors" />
@@ -791,12 +817,12 @@ const AppMain: React.FC = () => {
                   onClick={() => setLoginStep('choice')}
                   className="flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors text-[10px] font-bold uppercase tracking-widest mb-8"
                 >
-                  <ArrowLeft size={14} /> Voltar para seleção
+                  <ArrowLeft size={14} /> {i18n.t('login.backToSelection')}
                 </button>
 
                 <div className="mb-8">
-                  <h2 className="text-2xl font-bold text-slate-900 dark:text-white transition-colors">Login</h2>
-                  <p className="text-slate-600 dark:text-slate-400 text-sm transition-colors">Entre como {loginRole === 'admin' ? 'Administrador' : 'Colaborador'}</p>
+                  <h2 className="text-2xl font-bold text-slate-900 dark:text-white transition-colors">{i18n.t('login.title')}</h2>
+                  <p className="text-slate-600 dark:text-slate-400 text-sm transition-colors">{i18n.t('login.asAdminOrCollaborator')}</p>
                 </div>
 
                 <form onSubmit={handleLoginSubmit} className="space-y-6">
@@ -815,7 +841,7 @@ const AppMain: React.FC = () => {
                       <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
                       <input
                         type={showIdentifier ? 'text' : 'password'}
-                        placeholder="Nome de usuário ou Email"
+                        placeholder={i18n.t('login.usernameOrEmail')}
                         value={loginData.identifier}
                         onChange={e => setLoginData({ ...loginData, identifier: e.target.value })}
                         autoComplete="username"
@@ -825,7 +851,7 @@ const AppMain: React.FC = () => {
                         type="button"
                         onClick={() => setShowIdentifier((prev) => !prev)}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-                        aria-label={showIdentifier ? 'Ocultar' : 'Mostrar'}
+                        aria-label={showIdentifier ? i18n.t('app.hidePassword') : i18n.t('app.showPassword')}
                       >
                         {showIdentifier ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
@@ -834,7 +860,7 @@ const AppMain: React.FC = () => {
                       <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
                       <input
                         type={showPassword ? 'text' : 'password'}
-                        placeholder="Senha de acesso"
+                        placeholder={i18n.t('login.accessPassword')}
                         value={loginData.password}
                         onChange={e => setLoginData({ ...loginData, password: e.target.value })}
                         autoComplete="current-password"
@@ -844,7 +870,7 @@ const AppMain: React.FC = () => {
                         type="button"
                         onClick={() => setShowPassword((prev) => !prev)}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-                        aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                        aria-label={showPassword ? i18n.t('app.hidePassword') : i18n.t('app.showPassword')}
                       >
                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
@@ -861,7 +887,7 @@ const AppMain: React.FC = () => {
                         onClick={handleClearSessionAndRetry}
                         className="text-xs text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 underline"
                       >
-                        Limpar sessão e tentar de novo
+                        {i18n.t('app.clearSessionRetry')}
                       </button>
                     </div>
                   )}
@@ -871,7 +897,7 @@ const AppMain: React.FC = () => {
                     loading={isLoggingIn}
                     className="w-full h-14 rounded-2xl text-lg shadow-xl shadow-indigo-600/20"
                   >
-                    Entrar no Sistema
+                    {i18n.t('login.enterSystem')}
                   </Button>
 
                   <p className="text-center">
@@ -880,7 +906,7 @@ const AppMain: React.FC = () => {
                       onClick={() => setShowForgotPassword(true)}
                       className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
                     >
-                      Esqueci minha senha
+                      {i18n.t('login.forgotPassword')}
                     </button>
                   </p>
                 </form>
@@ -891,7 +917,7 @@ const AppMain: React.FC = () => {
           </div>
 
           <p className="text-center text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-8 transition-colors">
-            © 2024 SmartPonto Software • v1.4.0
+            {i18n.t('login.footer')} • v1.4.0
           </p>
         </div>
       </div>
@@ -944,52 +970,58 @@ const AppMain: React.FC = () => {
             {/* Redirecionamentos para dashboard */}
             <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="/employee" element={<Navigate to="/employee/dashboard" replace />} />
-            {/* Rotas Admin */}
-            <Route path="/admin/dashboard" element={<AdminDashboard />} />
-            <Route path="/admin/employees" element={<AdminEmployees />} />
-            <Route path="/admin/timesheet" element={<AdminTimesheet />} />
-            <Route path="/admin/cartao-ponto" element={<AdminCartaoPonto />} />
-            <Route path="/admin/cartao-ponto-leitura" element={<AdminCartaoPonto />} />
-            <Route path="/admin/lancamento-eventos" element={<AdminLancamentoEventos />} />
-            <Route path="/admin/time-attendance" element={<TimeAttendancePage />} />
-            <Route path="/admin/adjustments" element={<AdjustmentsPage />} />
-            <Route path="/admin/absences" element={<AbsencesPage />} />
-            <Route path="/admin/ausencias" element={<AdminAusencias />} />
-            <Route path="/admin/requests" element={<RequestsPage />} />
-            <Route path="/admin/monitoring" element={<AdminMonitoring />} />
-            <Route path="/admin/schedules" element={<AdminSchedules />} />
-            <Route path="/admin/shifts" element={<AdminShifts />} />
-            <Route path="/admin/departments" element={<DepartmentsPage />} />
-            <Route path="/admin/job-titles" element={<AdminJobTitles />} />
-            <Route path="/admin/estruturas" element={<AdminEstruturas />} />
-            <Route path="/admin/cidades" element={<AdminCidades />} />
-            <Route path="/admin/estados-civis" element={<AdminEstadosCivis />} />
-            <Route path="/admin/eventos" element={<AdminEventos />} />
-            <Route path="/admin/motivo-demissao" element={<AdminMotivoDemissao />} />
-            <Route path="/admin/feriados" element={<AdminFeriados />} />
-            <Route path="/admin/justificativas" element={<AdminJustificativas />} />
-            <Route path="/admin/arquivar-calculos" element={<AdminArquivarCalculos />} />
-            <Route path="/admin/colunas-mix" element={<AdminColunasMix />} />
-            <Route path="/admin/ponto-diario" element={<AdminPontoDiario />} />
-            <Route path="/admin/ponto-diario-leitura" element={<AdminPontoDiario />} />
-            <Route path="/admin/arquivos-fiscais" element={<AdminArquivosFiscais />} />
-            <Route path="/admin/fiscalizacao" element={<AdminFiscalizacao />} />
-            <Route path="/admin/security" element={<AdminSecurity />} />
-            <Route path="/admin/company" element={<AdminCompany />} />
-            <Route path="/admin/reports" element={<AdminReports />} />
-            <Route path="/admin/reports/work-hours" element={<ReportWorkHours />} />
-            <Route path="/admin/reports/overtime" element={<ReportOvertime />} />
-            <Route path="/admin/reports/inconsistencies" element={<ReportInconsistencies />} />
-            <Route path="/admin/reports/bank-hours" element={<ReportBankHours />} />
-            <Route path="/admin/reports/security" element={<ReportSecurity />} />
-            <Route path="/admin/bank-hours" element={<AdminBankHours />} />
-            <Route path="/admin/ajuda" element={<AdminAjuda />} />
-            <Route path="/admin/settings" element={<AdminSettings />} />
+            {/* Rotas Admin: protegidas por RBAC (apenas admin/hr) */}
+            <Route path="/admin" element={<ProtectedRoute user={user} allowedRoles={['admin', 'hr']}><Outlet /></ProtectedRoute>}>
+              <Route index element={<Navigate to="/admin/dashboard" replace />} />
+              <Route path="dashboard" element={<AdminDashboard />} />
+              <Route path="employees" element={<AdminEmployees />} />
+              <Route path="import-employees" element={<ImportEmployees />} />
+              <Route path="timesheet" element={<AdminTimesheet />} />
+              <Route path="cartao-ponto" element={<AdminCartaoPonto />} />
+              <Route path="cartao-ponto-leitura" element={<AdminCartaoPonto />} />
+              <Route path="lancamento-eventos" element={<AdminLancamentoEventos />} />
+              <Route path="time-attendance" element={<TimeAttendancePage />} />
+              <Route path="adjustments" element={<AdjustmentsPage />} />
+              <Route path="absences" element={<AbsencesPage />} />
+              <Route path="ausencias" element={<AdminAusencias />} />
+              <Route path="requests" element={<RequestsPage />} />
+              <Route path="monitoring" element={<AdminMonitoring />} />
+              <Route path="schedules" element={<AdminSchedules />} />
+              <Route path="shifts" element={<AdminShifts />} />
+              <Route path="departments" element={<DepartmentsPage />} />
+              <Route path="job-titles" element={<AdminJobTitles />} />
+              <Route path="estruturas" element={<AdminEstruturas />} />
+              <Route path="cidades" element={<AdminCidades />} />
+              <Route path="estados-civis" element={<AdminEstadosCivis />} />
+              <Route path="eventos" element={<AdminEventos />} />
+              <Route path="motivo-demissao" element={<AdminMotivoDemissao />} />
+              <Route path="feriados" element={<AdminFeriados />} />
+              <Route path="justificativas" element={<AdminJustificativas />} />
+              <Route path="arquivar-calculos" element={<AdminArquivarCalculos />} />
+              <Route path="colunas-mix" element={<AdminColunasMix />} />
+              <Route path="ponto-diario" element={<AdminPontoDiario />} />
+              <Route path="ponto-diario-leitura" element={<AdminPontoDiario />} />
+              <Route path="arquivos-fiscais" element={<AdminArquivosFiscais />} />
+              <Route path="fiscalizacao" element={<AdminFiscalizacao />} />
+              <Route path="security" element={<AdminSecurity />} />
+              <Route path="company" element={<AdminCompany />} />
+              <Route path="reports" element={<AdminReports />} />
+              <Route path="reports/work-hours" element={<ReportWorkHours />} />
+              <Route path="reports/overtime" element={<ReportOvertime />} />
+              <Route path="reports/inconsistencies" element={<ReportInconsistencies />} />
+              <Route path="reports/bank-hours" element={<ReportBankHours />} />
+              <Route path="reports/security" element={<ReportSecurity />} />
+              <Route path="bank-hours" element={<AdminBankHours />} />
+              <Route path="ajuda" element={<AdminAjuda />} />
+              <Route path="settings" element={<AdminSettings />} />
+            </Route>
             {/* Rotas Funcionário */}
             <Route path="/employee/dashboard" element={<EmployeeDashboard />} />
             <Route path="/employee/clock" element={<EmployeeClockIn />} />
             <Route path="/employee/timesheet" element={<EmployeeTimesheet />} />
             <Route path="/employee/monitoring" element={<EmployeeMonitoring />} />
+            <Route path="/employee/requests" element={<RequestsPage />} />
+            <Route path="/employee/absences" element={<AbsencesPage />} />
             <Route path="/employee/profile" element={<EmployeeProfile />} />
             <Route path="/employee/settings" element={<EmployeeSettings />} />
             <Route path="/employee/time-balance" element={<TimeBalancePage />} />
@@ -1358,8 +1390,8 @@ const AppMain: React.FC = () => {
                   </div>
                 </button>
 
-                {/* Ponto Manual (se permitido) */}
-                {company?.settings?.allowManualPunch && (
+                {/* Ponto Manual (se permitido nas configurações globais e da empresa) */}
+                {(company?.settings?.allowManualPunch ?? true) && (globalSettings?.allow_manual_punch ?? true) && (
                   <button
                     onClick={(e) => {
                       e.preventDefault();
@@ -1422,6 +1454,12 @@ const AppMain: React.FC = () => {
 };
 
 const App: React.FC = () =>
-  !isSupabaseConfigured ? <ConfigSupabaseScreen /> : <AppMain />;
+  !isSupabaseConfigured ? (
+    <ConfigSupabaseScreen />
+  ) : (
+    <SettingsProvider>
+      <AppMain />
+    </SettingsProvider>
+  );
 
 export default App;

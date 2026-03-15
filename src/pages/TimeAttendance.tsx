@@ -233,54 +233,57 @@ const TimeAttendancePage: React.FC = () => {
       />
 
       <section className="glass-card rounded-[2.25rem] p-6 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Colaborador</label>
-            <select
-              className="mt-1 w-full px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm"
-              value={filterEmployeeId}
-              onChange={(e) => setFilterEmployeeId(e.target.value)}
-            >
-              <option value="">Todos</option>
-              {employees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.nome}
-                </option>
-              ))}
-            </select>
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between md:flex-wrap">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 min-w-0 flex-1">
+            <div className="min-w-0">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Colaborador</label>
+              <select
+                className="mt-1 w-full px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm"
+                value={filterEmployeeId}
+                onChange={(e) => setFilterEmployeeId(e.target.value)}
+              >
+                <option value="">Todos</option>
+                {employees.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-0">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Data</label>
+              <input
+                type="date"
+                className="mt-1 w-full px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+              />
+            </div>
+            <div className="flex items-end sm:col-span-2 md:col-span-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full sm:w-auto"
+                onClick={() => {
+                  setFilterEmployeeId('');
+                  setFilterDate('');
+                }}
+              >
+                Limpar filtros
+              </Button>
+            </div>
           </div>
-          <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Data</label>
-            <input
-              type="date"
-              className="mt-1 w-full px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-            />
-          </div>
-          <div className="flex items-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setFilterEmployeeId('');
-                setFilterDate('');
-              }}
-            >
-              Limpar filtros
-            </Button>
-          </div>
-          <div className="flex items-end justify-end gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={handleExport}>
+          <div className="flex flex-wrap gap-2 flex-shrink-0">
+            <Button type="button" size="sm" variant="outline" onClick={handleExport} className="w-full sm:w-auto">
               <Download className="w-4 h-4" />
               Exportar
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={handleApproveHours}>
+            <Button type="button" size="sm" variant="outline" onClick={handleApproveHours} className="w-full sm:w-auto">
               <CheckCircle2 className="w-4 h-4" />
               Aprovar horas
             </Button>
-            <Button type="button" size="sm" onClick={openNewEntry}>
+            <Button type="button" size="sm" onClick={openNewEntry} className="w-full sm:w-auto">
               <Plus className="w-4 h-4" />
               Lançamento manual
             </Button>
@@ -288,7 +291,7 @@ const TimeAttendancePage: React.FC = () => {
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-4 min-w-0 overflow-hidden">
         <h2 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
           Registros de jornada
         </h2>
@@ -301,7 +304,8 @@ const TimeAttendancePage: React.FC = () => {
             message="Nenhum registro de jornada encontrado para os filtros selecionados."
           />
         ) : (
-          <DataTable<TimeLogRow>
+          <div className="overflow-x-auto max-w-full">
+            <DataTable<TimeLogRow>
             columns={[
               {
                 key: 'employee_name',
@@ -369,6 +373,7 @@ const TimeAttendancePage: React.FC = () => {
             ]}
             data={filteredLogs}
           />
+          </div>
         )}
       </section>
 

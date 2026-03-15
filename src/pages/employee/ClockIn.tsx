@@ -14,11 +14,14 @@ import {
 import { detectBehaviorAnomaly } from '../../ai/anomalyDetection';
 import { registerPunchSecure } from '../../rep/repEngine';
 import { savePunchEvidence, createFraudAlertsForFlags } from '../../services/punchEvidenceService';
+import { getCompanyLocations, isWithinAllowedLocation } from '../../services/settingsService';
+import { useSettings } from '../../contexts/SettingsContext';
 import { LogType, PunchMethod } from '../../../types';
 import { LoadingState } from '../../../components/UI';
 
 const EmployeeClockIn: React.FC = () => {
   const { user, loading } = useCurrentUser();
+  const { settings: globalSettings } = useSettings();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastType, setLastType] = useState<string | null>(null);
@@ -123,23 +126,39 @@ const EmployeeClockIn: React.FC = () => {
       }
 
       const geo = await getCurrentLocation();
-      const fingerprint = generateDeviceFingerprint();
+
+      if (globalSettings?.gps_required) {
+        if (!geo?.latitude || !geo?.longitude) {
+          setError('O registro de ponto exige localização. Ative o GPS e tente novamente.');
+          return;
+        }
+        const locations = await getCompanyLocations(user.companyId);
+        if (locations.length > 0 && !isWithinAllowedLocation(geo.latitude, geo.longitude, locations)) {
+          setError('Você não está dentro da área permitida para registrar ponto.');
+          return;
+        }
+      }
+
       let photoUrl: string | null = null;
       let method = PunchMethod.PHOTO;
 
-      if (useDigital) {
+      if (globalSettings?.photo_required) {
+        const dataUrl = await capturePhoto();
+        if (!dataUrl) {
+          setError('É obrigatória a captura de foto para registrar ponto. Permita o acesso à câmera.');
+          return;
+        }
+        photoUrl = await uploadPhoto(dataUrl);
+      } else if (useDigital) {
         const ok = await tryWebAuthn();
-        if (ok) {
-          method = PunchMethod.BIOMETRIC;
-        } else {
+        if (ok) method = PunchMethod.BIOMETRIC;
+        else {
           const dataUrl = await capturePhoto();
           if (dataUrl) photoUrl = await uploadPhoto(dataUrl);
-          method = PunchMethod.PHOTO;
         }
       } else {
         const dataUrl = await capturePhoto();
         if (dataUrl) photoUrl = await uploadPhoto(dataUrl);
-        method = PunchMethod.PHOTO;
       }
 
       let allowedLocations: AllowedLocation[] = [];

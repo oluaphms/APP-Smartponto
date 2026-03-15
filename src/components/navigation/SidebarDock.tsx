@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut } from 'lucide-react';
 import { getNavigationForRole } from '../../config/navigation';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { i18n } from '../../../lib/i18n';
 import type { User } from '../../../types';
 
 const DOCK_WIDTH_COLLAPSED = 72;
@@ -16,10 +18,11 @@ export interface SidebarDockProps {
 const SidebarDock: React.FC<SidebarDockProps> = ({ user, onLogout }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  useLanguage(); // re-render quando idioma mudar
   const [isHovered, setIsHovered] = useState(false);
   const expanded = isHovered;
   const width = expanded ? DOCK_WIDTH_EXPANDED : DOCK_WIDTH_COLLAPSED;
-  const items = getNavigationForRole(user?.role ?? 'employee');
+  const items = getNavigationForRole(user?.role ?? 'employee', location.pathname);
 
   return (
     <motion.aside
@@ -30,7 +33,7 @@ const SidebarDock: React.FC<SidebarDockProps> = ({ user, onLogout }) => {
       style={{ boxShadow: '4px 0 24px rgba(0,0,0,0.06)' }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      aria-label="Menu de navegação"
+      aria-label={i18n.t('layout.navLabel')}
     >
       <div className="flex flex-col flex-1 min-h-0 p-3 flex-nowrap">
         {/* Logo */}
@@ -55,7 +58,7 @@ const SidebarDock: React.FC<SidebarDockProps> = ({ user, onLogout }) => {
                   SmartPonto
                 </span>
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
-                  {user?.role === 'admin' || user?.role === 'hr' ? 'Admin' : 'Funcionário'}
+                  {user?.role === 'admin' || user?.role === 'hr' ? i18n.t('layout.roleAdmin') : i18n.t('layout.roleEmployee')}
                 </span>
               </motion.div>
             )}
@@ -72,7 +75,7 @@ const SidebarDock: React.FC<SidebarDockProps> = ({ user, onLogout }) => {
                 key={item.path}
                 type="button"
                 onClick={() => navigate(item.path)}
-                title={!expanded ? item.name : undefined}
+                title={!expanded ? i18n.t(item.nameKey) : undefined}
                 className={`
                   group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5
                   text-left text-sm font-medium transition-all duration-200
@@ -106,7 +109,7 @@ const SidebarDock: React.FC<SidebarDockProps> = ({ user, onLogout }) => {
                       transition={{ duration: 0.15 }}
                       className="flex-1 truncate whitespace-nowrap"
                     >
-                      {item.name}
+                      {i18n.t(item.nameKey)}
                     </motion.span>
                   )}
                 </AnimatePresence>
@@ -149,7 +152,7 @@ const SidebarDock: React.FC<SidebarDockProps> = ({ user, onLogout }) => {
               }`}
             >
               <LogOut size={16} aria-hidden />
-              {expanded && <span>Sair</span>}
+              {expanded && <span>{i18n.t('layout.logout')}</span>}
             </button>
           </div>
         </div>

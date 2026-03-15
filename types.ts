@@ -69,6 +69,8 @@ export interface Company {
   useDefaultTimezone?: boolean;
   /** Fuso horário quando useDefaultTimezone é false */
   timezone?: string;
+  /** Rodapé do Cartão Ponto (mensagem impressa no relatório) - DB: cartao_ponto_footer */
+  cartao_ponto_footer?: string;
   /** Geofence (compatibilidade) */
   geofence?: { lat: number; lng: number; radius: number };
   /** Data de criação */

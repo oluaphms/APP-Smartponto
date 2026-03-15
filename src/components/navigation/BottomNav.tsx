@@ -7,6 +7,8 @@ import {
   getMoreMenuItems,
   getNavigationForRole,
 } from '../../config/navigation';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { i18n } from '../../../lib/i18n';
 import type { User } from '../../../types';
 
 const SvgMenu = ({ size = 24 }: { size?: number }) => (
@@ -61,19 +63,20 @@ function NavIcon({
 const BottomNav: React.FC<BottomNavProps> = ({ user, onLogout }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  useLanguage(); // re-render quando idioma mudar
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const primaryItems = getBottomNavPrimaryItems(user?.role ?? 'employee');
-  const moreItems = getMoreMenuItems(user?.role ?? 'employee');
+  const primaryItems = getBottomNavPrimaryItems(user?.role ?? 'employee', location.pathname);
+  const moreItems = getMoreMenuItems(user?.role ?? 'employee', location.pathname);
 
   return (
     <>
       <nav
         className="fixed bottom-0 left-0 right-0 z-40 lg:hidden flex items-center justify-around bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 safe-area-pb"
-        aria-label="Navegação principal"
+        aria-label={i18n.t('nav.navLabel')}
       >
-        {(primaryItems.length > 0 ? primaryItems : getNavigationForRole(user?.role ?? 'employee').slice(0, 4)).map((item) => {
+        {(primaryItems.length > 0 ? primaryItems : getNavigationForRole(user?.role ?? 'employee', location.pathname).slice(0, 4)).map((item) => {
           const isActive = location.pathname === item.path;
-          const label = typeof item.name === 'string' ? item.name : String(item.name ?? '');
+          const label = i18n.t(item.nameKey);
           return (
             <button
               key={item.path}
@@ -100,11 +103,11 @@ const BottomNav: React.FC<BottomNavProps> = ({ user, onLogout }) => {
               ? 'text-indigo-600 dark:text-indigo-400'
               : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
           }`}
-          aria-label="Mais opções"
+          aria-label={i18n.t('nav.moreOptions')}
           aria-expanded={drawerOpen}
         >
           <SvgMenu size={24} />
-          <span className="text-[10px] font-medium">Mais</span>
+          <span className="text-[10px] font-medium">{i18n.t('nav.more')}</span>
         </button>
       </nav>
 
@@ -127,15 +130,15 @@ const BottomNav: React.FC<BottomNavProps> = ({ user, onLogout }) => {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'tween', duration: 0.25, ease: 'easeOut' }}
-              aria-label="Menu Mais"
+              aria-label={i18n.t('nav.menuMore')}
             >
               <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">Mais</h2>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">{i18n.t('nav.more')}</h2>
                 <button
                   type="button"
                   onClick={() => setDrawerOpen(false)}
                   className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
-                  aria-label="Fechar"
+                  aria-label={i18n.t('nav.close')}
                 >
                   <SvgX size={20} />
                 </button>
@@ -143,7 +146,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ user, onLogout }) => {
               <div className="overflow-y-auto flex-1 p-4 flex flex-col gap-1">
                 {moreItems.map((item) => {
                   const isActive = location.pathname === item.path;
-                  const label = typeof item.name === 'string' ? item.name : String(item.name ?? '');
+                  const label = i18n.t(item.nameKey);
                   return (
                     <button
                       key={item.path}
@@ -175,10 +178,10 @@ const BottomNav: React.FC<BottomNavProps> = ({ user, onLogout }) => {
                     onLogout();
                   }}
                   className="flex items-center gap-3 w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
-                  aria-label="Sair do sistema"
+                  aria-label={i18n.t('nav.logoutSystem')}
                 >
                   <SvgLogOut size={20} />
-                  Sair do sistema
+                  {i18n.t('nav.logoutSystem')}
                 </button>
               </div>
             </motion.aside>
