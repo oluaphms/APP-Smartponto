@@ -83,6 +83,16 @@ Se o usuário aparece em **Authentication → Users** e o login retorna "Email o
 
 Depois, na tela de login use **Limpar sessão e tentar de novo** e tente com o e-mail e a senha definida no Supabase.
 
+### 9. Funcionário cadastrado pelo painel não consegue fazer login ("E-mail ou senha incorretos")
+
+- **Novos funcionários** (cadastrados ou importados depois da atualização): o sistema **confirma o e-mail automaticamente** no Auth, então eles podem logar assim que o admin cadastra.
+- **Funcionários já existentes** (criados antes): é preciso **confirmar o e-mail** no Supabase uma vez:
+  1. **Supabase Dashboard** → **Authentication** → **Users**.
+  2. Localize o usuário pelo **e-mail** do funcionário.
+  3. Clique no usuário → use **"Confirm email"** (ou marque **Email Confirmed**).
+  4. Se não souber a senha, redefina (menu do usuário → redefinir senha) e informe ao funcionário.
+- Depois disso o funcionário consegue logar com o **e-mail** e a **senha** (a que foi definida no cadastro ou na importação, ou a nova definida no Supabase).
+
 ## Resumo
 
 1. Criar usuário em **Authentication → Users** (e-mail + senha, Auto Confirm).

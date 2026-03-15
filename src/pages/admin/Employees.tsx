@@ -4,6 +4,25 @@ import { UserPlus, Pencil, UserX, Trash2, Eye, EyeOff, UserCheck, Search, Upload
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
 import { db, auth, isSupabaseConfigured } from '../../services/supabaseClient';
+
+/** Chama a API para confirmar o e-mail do funcionário no Auth (permite login sem clicar em link). */
+async function confirmEmployeeEmailInAuth(email: string): Promise<void> {
+  try {
+    const session = await auth.getSession();
+    const token = (session as { access_token?: string } | null)?.access_token;
+    if (!token) return;
+    const base = (import.meta.env.VITE_APP_URL as string) || (typeof window !== 'undefined' ? window.location.origin : '');
+    if (!base) return;
+    const res = await fetch(`${base.replace(/\/$/, '')}/api/confirm-employee-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ email: email.trim().toLowerCase() }),
+    });
+    if (!res.ok) return;
+  } catch {
+    // Ignora; funcionário foi criado, admin pode confirmar manualmente no Supabase se precisar
+  }
+}
 import { LoadingState } from '../../../components/UI';
 import RoleGuard from '../../components/auth/RoleGuard';
 import { parseFile, extractHeaders } from '../../services/fileParser';
@@ -158,6 +177,7 @@ const AdminEmployees: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showSenhaWeb, setShowSenhaWeb] = useState(false);
   const [askInvisivel, setAskInvisivel] = useState<string | null>(null);
 
   const loadData = async () => {
@@ -382,6 +402,7 @@ const AdminEmployees: React.FC = () => {
         const email = form.email.trim().toLowerCase();
         const authData = await auth.signUp(email, form.password, { nome: form.nome, cargo: cargoFinal });
         if (!authData?.user?.id) throw new Error('Conta criada mas ID não retornado.');
+        await confirmEmployeeEmailInAuth(email);
         await db.insert('users', {
           id: authData.user.id,
           ...payload,
@@ -555,6 +576,7 @@ const AdminEmployees: React.FC = () => {
       const doSignUpAndInsert = async (): Promise<boolean> => {
         const authData = await auth.signUp(emailFinal.toLowerCase(), senha, { nome: nomeFinal, cargo: cargoFinal });
         if (!authData?.user?.id) return false;
+        await confirmEmployeeEmailInAuth(emailFinal.toLowerCase());
         await db.insert('users', {
           id: authData.user.id,
           nome: nomeFinal,
@@ -991,7 +1013,24 @@ const AdminEmployees: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Senha Web</label>
-                      <input type="password" value={form.senha_web} onChange={(e) => setForm({ ...form, senha_web: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Senha de acesso no Módulo Web" />
+                      <div className="relative">
+                        <input
+                          type={showSenhaWeb ? 'text' : 'password'}
+                          value={form.senha_web}
+                          onChange={(e) => setForm({ ...form, senha_web: e.target.value })}
+                          className="w-full pl-3 pr-10 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                          placeholder="Senha de acesso no Módulo Web"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSenhaWeb((p) => !p)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                          aria-label={showSenhaWeb ? 'Ocultar senha' : 'Mostrar senha'}
+                        >
+                          {showSenhaWeb ? <Eye size={18} /> : <EyeOff size={18} />}
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Salva em Supabase (employee_config). O login no app usa a senha do cadastro/importação (Supabase Auth), não esta Senha Web.</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Período encerrado</label>
