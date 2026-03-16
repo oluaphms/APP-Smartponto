@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useSyncExternalStore, type ReactNode } from 'react';
 import { getSettings } from '../services/settingsService';
 import type { GlobalSettings } from '../types/settings';
 
@@ -8,57 +8,80 @@ export interface SettingsContextValue {
   refreshSettings: () => Promise<void>;
 }
 
-const SettingsContext = createContext<SettingsContextValue>({
+interface SettingsState {
+  settings: GlobalSettings | null;
+  loading: boolean;
+}
+
+let currentState: SettingsState = {
   settings: null,
   loading: true,
-  refreshSettings: async () => {},
-});
+};
+
+const listeners = new Set<() => void>();
+let initialized = false;
+
+async function loadSettings() {
+  currentState = { ...currentState, loading: true };
+  listeners.forEach((l) => l());
+  try {
+    const data = await getSettings();
+    currentState = { settings: data, loading: false };
+  } catch {
+    currentState = { ...currentState, loading: false };
+  }
+  listeners.forEach((l) => l());
+}
+
+function subscribe(callback: () => void) {
+  listeners.add(callback);
+  if (!initialized) {
+    initialized = true;
+    // dispara carregamento assíncrono na primeira inscrição
+    void loadSettings();
+  }
+  return () => {
+    listeners.delete(callback);
+  };
+}
+
+function getSnapshot(): SettingsState {
+  return currentState;
+}
+
+function getServerSnapshot(): SettingsState {
+  return { settings: null, loading: true };
+}
+
+async function refreshSettingsInternal() {
+  await loadSettings();
+}
+
+const defaultValue: SettingsContextValue = {
+  settings: currentState.settings,
+  loading: currentState.loading,
+  refreshSettings: refreshSettingsInternal,
+};
+
+const SettingsContext = createContext<SettingsContextValue>(defaultValue);
 
 export function useSettings(): SettingsContextValue {
-  const ctx = useContext(SettingsContext);
-  if (!ctx) {
-    throw new Error('useSettings must be used within SettingsProvider');
-  }
-  return ctx;
+  const state = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  return {
+    settings: state.settings,
+    loading: state.loading,
+    refreshSettings: refreshSettingsInternal,
+  };
 }
 
 interface SettingsProviderProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
+// Provider sem hooks; somente encapsula a árvore. O estado é gerenciado pelo store + useSettings.
 export function SettingsProvider({ children }: SettingsProviderProps) {
-  const [settings, setSettings] = useState<GlobalSettings | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const refreshSettings = useCallback(async () => {
-    const data = await getSettings();
-    setSettings(data);
-    return;
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      const data = await getSettings();
-      if (mounted) {
-        setSettings(data);
-      }
-      setLoading(false);
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const value: SettingsContextValue = {
-    settings,
-    loading,
-    refreshSettings,
-  };
-
   return (
-    <SettingsContext.Provider value={value}>
+    <SettingsContext.Provider value={defaultValue}>
       {children}
     </SettingsContext.Provider>
   );

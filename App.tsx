@@ -1,10 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
-
-if (typeof React === 'undefined' || typeof useState !== 'function') {
-  throw new Error(
-    '[SmartPonto] React não carregou corretamente (múltiplas cópias?). Limpe o cache: delete a pasta node_modules/.vite e rode npm run dev de novo.'
-  );
-}
+import * as React from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { User, LogType, DailySummary, PunchMethod, Company } from './types';
 import Layout from './components/Layout';
@@ -121,7 +115,7 @@ import EmployeeSettings from './src/pages/employee/Settings';
 import TimeBalancePage from './src/pages/TimeBalance';
 
 // Lazy loading of complex views
-const AdminView = lazy(() => import('./components/AdminView'));
+const AdminView = React.lazy(() => import('./components/AdminView'));
 
 function ConfigSupabaseScreen() {
   const isVercel = typeof window !== 'undefined' && /vercel\.app/i.test(window.location.hostname);
@@ -176,44 +170,44 @@ VITE_SUPABASE_ANON_KEY=sua-chave-anon`}
 }
 
 const AppMain: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [insights, setInsights] = useState<{ insight: string, score: number } | null>(null);
-  const [punchType, setPunchType] = useState<LogType | null>(null);
-  const [showMethodSelection, setShowMethodSelection] = useState(false);
-  const [pendingPunchType, setPendingPunchType] = useState<LogType | null>(null);
-  const [selectedMethod, setSelectedMethod] = useState<PunchMethod | null>(null);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [showCelebration, setShowCelebration] = useState(false);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [company, setCompany] = useState<Company | null>(null);
+  const [user, setUser] = React.useState<User | null>(null);
+  const [activeTab, setActiveTab] = React.useState('dashboard');
+  const [insights, setInsights] = React.useState<{ insight: string, score: number } | null>(null);
+  const [punchType, setPunchType] = React.useState<LogType | null>(null);
+  const [showMethodSelection, setShowMethodSelection] = React.useState(false);
+  const [pendingPunchType, setPendingPunchType] = React.useState<LogType | null>(null);
+  const [selectedMethod, setSelectedMethod] = React.useState<PunchMethod | null>(null);
+  const [showOnboarding, setShowOnboarding] = React.useState(false);
+  const [showCelebration, setShowCelebration] = React.useState(false);
+  const [isInitialLoading, setIsInitialLoading] = React.useState(true);
+  const [company, setCompany] = React.useState<Company | null>(null);
 
   // Filtros do histórico
-  const [historyMethodFilter, setHistoryMethodFilter] = useState<'all' | PunchMethod>('all');
-  const [historyTypeFilter, setHistoryTypeFilter] = useState<'all' | LogType>('all');
-  const [historyDateFilter, setHistoryDateFilter] = useState<string>('');
+  const [historyMethodFilter, setHistoryMethodFilter] = React.useState<'all' | PunchMethod>('all');
+  const [historyTypeFilter, setHistoryTypeFilter] = React.useState<'all' | LogType>('all');
+  const [historyDateFilter, setHistoryDateFilter] = React.useState<string>('');
 
   // Timer visual de jornada
-  const [todayProgress, setTodayProgress] = useState<number>(0);
-  const [todayLabel, setTodayLabel] = useState<string>('00h 00m de 00h 00m');
+  const [todayProgress, setTodayProgress] = React.useState<number>(0);
+  const [todayLabel, setTodayLabel] = React.useState<string>('00h 00m de 00h 00m');
 
   // Login State
-  const [loginStep, setLoginStep] = useState<'choice' | 'form'>('choice');
-  const [loginRole, setLoginRole] = useState<'admin' | 'employee' | null>(null);
-  const [loginData, setLoginData] = useState({ identifier: '', password: '' });
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [showIdentifier, setShowIdentifier] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [loginStep, setLoginStep] = React.useState<'choice' | 'form'>('choice');
+  const [loginRole, setLoginRole] = React.useState<'admin' | 'employee' | null>(null);
+  const [loginData, setLoginData] = React.useState({ identifier: '', password: '' });
+  const [isLoggingIn, setIsLoggingIn] = React.useState(false);
+  const [loginError, setLoginError] = React.useState<string | null>(null);
+  const [showForgotPassword, setShowForgotPassword] = React.useState(false);
+  const [showIdentifier, setShowIdentifier] = React.useState(false);
+  const [showPassword, setShowPassword] = React.useState(false);
 
   // Conexão Supabase (fallback quando servidor pausado/rede lenta)
-  const [connectionUnavailable, setConnectionUnavailable] = useState(false);
-  const [isReconnecting, setIsReconnecting] = useState(false);
-  const [isResettingSession, setIsResettingSession] = useState(false);
+  const [connectionUnavailable, setConnectionUnavailable] = React.useState(false);
+  const [isReconnecting, setIsReconnecting] = React.useState(false);
+  const [isResettingSession, setIsResettingSession] = React.useState(false);
 
   // Theme State (para tela de login)
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+  const [theme, setTheme] = React.useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('smartponto_theme');
       // Se for 'auto' ou não existir, converte para o tema do sistema
@@ -233,14 +227,14 @@ const AppMain: React.FC = () => {
   const navigate = useNavigate();
 
   // Aplicar idioma padrão das configurações quando não houver preferência no navegador
-  useEffect(() => {
+  React.useEffect(() => {
     if (globalSettings?.language && typeof window !== 'undefined' && !localStorage.getItem('smartponto_language')) {
       const lang = globalSettings.language === 'en-US' || globalSettings.language === 'pt-BR' ? globalSettings.language : 'pt-BR';
       setLanguage(lang);
     }
   }, [globalSettings?.language, setLanguage]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout>;
     let isMounted = true;
 
@@ -356,7 +350,7 @@ const AppMain: React.FC = () => {
     };
   }, []);
 
-  const fetchInsights = useCallback(async () => {
+  const fetchInsights = React.useCallback(async () => {
     if (records.length >= 2 && !insights) {
       const summary: DailySummary = {
         date: new Date().toISOString(),
@@ -368,13 +362,13 @@ const AppMain: React.FC = () => {
     }
   }, [records, insights]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (activeTab === 'dashboard' && records.length > 0) {
       fetchInsights();
     }
   }, [activeTab, fetchInsights]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (!user || !user.preferences?.notifications) {
       stopReminderCheck();
       return;
@@ -394,7 +388,7 @@ const AppMain: React.FC = () => {
   }, [user?.id, user?.preferences?.notifications]);
 
   // Theme effect (aplicar tema quando mudar)
-  useEffect(() => {
+  React.useEffect(() => {
     try {
       // Aplicar tema diretamente (sem modo auto)
       if (typeof window !== 'undefined') {
@@ -463,16 +457,16 @@ const AppMain: React.FC = () => {
     } catch (err) { }
   };
 
-  const isWorking = useMemo(() => records[0]?.type === LogType.IN, [records]);
+  const isWorking = React.useMemo(() => records[0]?.type === LogType.IN, [records]);
 
-  const stats = useMemo(() => ({
+  const stats = React.useMemo(() => ({
     today: PontoService.calculateDailyHours(records),
     balance: "+12h 45m",
     status: isWorking ? 'Em Jornada' : 'Pausa / Descanso'
   }), [records, isWorking]);
 
   // Calcular progresso diário visual (comparando com jornada padrão da empresa)
-  useEffect(() => {
+  React.useEffect(() => {
     if (!company) {
       setTodayProgress(0);
       setTodayLabel('00h 00m de 00h 00m');
@@ -532,7 +526,7 @@ const AppMain: React.FC = () => {
   }, [records, company, globalSettings, stats.today]);
 
   // Registros filtrados para a aba de histórico
-  const filteredHistory = useMemo(() => {
+  const filteredHistory = React.useMemo(() => {
     return records.filter(rec => {
       if (historyTypeFilter !== 'all' && rec.type !== historyTypeFilter) return false;
       if (historyMethodFilter !== 'all' && rec.method !== historyMethodFilter) return false;
@@ -634,7 +628,7 @@ const AppMain: React.FC = () => {
     setLoginError(null);
   };
 
-  const handleLogout = useCallback(async () => {
+  const handleLogout = React.useCallback(async () => {
     setUser(null);
     setCompany(null);
     setInsights(null);
@@ -655,7 +649,7 @@ const AppMain: React.FC = () => {
   );
 
   // Theme functions (ANTES de qualquer return condicional)
-  const toggleTheme = useCallback(() => {
+  const toggleTheme = React.useCallback(() => {
     try {
       const nextTheme = theme === 'light' ? 'dark' : 'light';
       setTheme(nextTheme);
@@ -664,16 +658,16 @@ const AppMain: React.FC = () => {
     }
   }, [theme]);
 
-  const getThemeIcon = useCallback(() => {
+  const getThemeIcon = React.useCallback(() => {
     return theme === 'light' ? <Sun size={20} /> : <Moon size={20} />;
   }, [theme]);
 
-  const getThemeLabel = useCallback(() => {
+  const getThemeLabel = React.useCallback(() => {
     return theme === 'light' ? i18n.t('layout.themeLight') : i18n.t('layout.themeDark');
   }, [theme]);
 
   // Reconexão automática quando servidor está indisponível (ex.: free tier pausado)
-  useEffect(() => {
+  React.useEffect(() => {
     if (!connectionUnavailable || !isSupabaseConfigured) return;
 
     const interval = setInterval(async () => {
@@ -690,7 +684,7 @@ const AppMain: React.FC = () => {
   }, [connectionUnavailable]);
 
   // Timeout de segurança adicional para garantir que o loading sempre termine
-  useEffect(() => {
+  React.useEffect(() => {
     if (!isInitialLoading) return;
 
     const safetyTimeout = setTimeout(() => {
@@ -788,8 +782,8 @@ const AppMain: React.FC = () => {
                       <UserIcon size={24} />
                     </div>
                     <div>
-                      <p className="text-slate-900 dark:text-white font-bold text-lg transition-colors group-hover:text-white">{i18n.t('login.employeeAccess')}</p>
-                      <p className="text-slate-600 dark:text-slate-400 text-xs group-hover:text-indigo-100 dark:group-hover:text-indigo-100 transition-colors">{i18n.t('login.punchAndHistory')}</p>
+                      <p className="text-slate-900 dark:text-white font-bold text-lg transition-colors group-hover:text-white">Entrar</p>
+                      <p className="text-slate-600 dark:text-slate-400 text-xs group-hover:text-indigo-100 dark:group-hover:text-indigo-100 transition-colors">Entre como Colaborador.</p>
                     </div>
                   </div>
                   <ChevronRight size={20} className="text-slate-400 dark:text-slate-600 group-hover:text-white transition-colors" />
@@ -804,9 +798,9 @@ const AppMain: React.FC = () => {
                       <ShieldCheck size={24} />
                     </div>
                     <div>
-                      <p className="text-slate-900 dark:text-white font-bold text-lg transition-colors group-hover:text-white">{i18n.t('login.managerPanel')}</p>
-                      <p className="text-slate-600 dark:text-slate-400 text-xs group-hover:text-slate-200 dark:group-hover:text-slate-200 transition-colors">{i18n.t('login.teamAndReports')}</p>
-                    </div>
+                      <p className="text-slate-900 dark:text-white font-bold text-lg transition-colors group-hover:text-white">Entrar</p>
+                      <p className="text-slate-600 dark:text-slate-400 text-xs group-hover:text-slate-200 dark:group-hover:text-slate-200 transition-colors">Entre como Administrador.</p>
+                      </div>
                   </div>
                   <ChevronRight size={20} className="text-slate-400 dark:text-slate-600 group-hover:text-white transition-colors" />
                 </button>
@@ -821,8 +815,12 @@ const AppMain: React.FC = () => {
                 </button>
 
                 <div className="mb-8">
-                  <h2 className="text-2xl font-bold text-slate-900 dark:text-white transition-colors">{i18n.t('login.title')}</h2>
-                  <p className="text-slate-600 dark:text-slate-400 text-sm transition-colors">{i18n.t('login.asAdminOrCollaborator')}</p>
+                  <h2 className="text-2xl font-bold text-slate-900 dark:text-white transition-colors">Entrar</h2>
+                  <p className="text-slate-600 dark:text-slate-400 text-sm transition-colors">
+                    {loginRole === 'admin'
+                      ? 'Entre como Administrador'
+                      : 'Entre como Colaborador'}
+                  </p>
                 </div>
 
                 <form onSubmit={handleLoginSubmit} className="space-y-6">
@@ -897,7 +895,11 @@ const AppMain: React.FC = () => {
                     loading={isLoggingIn}
                     className="w-full h-14 rounded-2xl text-lg shadow-xl shadow-indigo-600/20"
                   >
-                    {i18n.t('login.enterSystem')}
+                    {loginRole === 'admin'
+                      ? 'Entrar como Administrador'
+                      : loginRole === 'employee'
+                        ? 'Entrar como Colaborador'
+                        : i18n.t('login.enterSystem')}
                   </Button>
 
                   <p className="text-center space-x-4">
@@ -973,7 +975,7 @@ const AppMain: React.FC = () => {
   if (isPortalRoute) {
     return (
       <LayoutComponent user={user} activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout}>
-        <Suspense fallback={<LoadingState message="Carregando módulo inteligente..." />}>
+        <React.Suspense fallback={<LoadingState message="Carregando módulo inteligente..." />}>
           <Routes>
             {/* Redirecionamentos para dashboard */}
             <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
@@ -1082,7 +1084,7 @@ const AppMain: React.FC = () => {
               }
             />
           </Routes>
-        </Suspense>
+        </React.Suspense>
       </LayoutComponent>
     );
   }
@@ -1092,7 +1094,7 @@ const AppMain: React.FC = () => {
       {showOnboarding && <Onboarding onComplete={() => { localStorage.setItem(`onboarding_${user.id}`, 'true'); setShowOnboarding(false); }} />}
       <SuccessOverlay visible={showCelebration} title="Ponto Registrado" message="Sua marcação foi validada e salva com sucesso." />
 
-      <Suspense fallback={<LoadingState message="Carregando módulo inteligente..." />}>
+      <React.Suspense fallback={<LoadingState message="Carregando módulo inteligente..." />}>
         {activeTab === 'dashboard' && (
           <div className="space-y-10 animate-in slide-in-from-bottom-6 duration-700">
             <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -1302,7 +1304,7 @@ const AppMain: React.FC = () => {
         {activeTab === 'admin' && (user.role === 'admin' || user.role === 'hr') && <AdminView admin={user} />}
 
         {activeTab === 'settings' && <ProfileView user={user} />}
-      </Suspense>
+      </React.Suspense>
 
       {/* Diálogo de seleção de método de registro */}
       {showMethodSelection && !punchType && (

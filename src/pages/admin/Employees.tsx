@@ -34,6 +34,7 @@ import {
   type NormalizedEmployeeRow,
 } from '../../services/universalImport';
 import { isValidCpf, isValidEmail, stripCpf } from '../../services/importEmployeesService';
+import { calcularScoreConfiabilidade, type ReliabilityInputs } from '../../ai/reliabilityScore';
 
 /** Configuração adicional do funcionário (employee_config JSONB) */
 interface EmployeeConfig {
@@ -78,6 +79,8 @@ interface EmployeeRow {
   invisivel?: boolean;
   employee_config?: EmployeeConfig;
   company_name?: string;
+  // Score de confiabilidade simples (0–100) calculado a partir de atrasos/faltas/ajustes/inconsistências
+  reliability_score?: number;
 }
 
 interface ScheduleOption {
@@ -196,7 +199,16 @@ const AdminEmployees: React.FC = () => {
       const schedMap = new Map((schedRows ?? []).map((s: any) => [s.id, s.name]));
       const motivoMap = new Map((motivosRows ?? []).map((m: any) => [m.id, m.name]));
       const estruturaMap = new Map((estruturasRows ?? []).map((e: any) => [e.id, e.descricao || e.codigo]));
-      const list = (usersRows ?? []).map((u: any) => ({
+      const list = (usersRows ?? []).map((u: any) => {
+        // TODO: substituir contagens estáticas por dados reais de atrasos, faltas, ajustes e inconsistências.
+        const inputs: ReliabilityInputs = {
+          atrasos: u.atrasos_count ?? 0,
+          faltas: u.faltas_count ?? 0,
+          ajustes: u.ajustes_count ?? 0,
+          inconsistencias: u.inconsistencias_count ?? 0,
+        };
+        const score = calcularScoreConfiabilidade(inputs);
+        return {
         id: u.id,
         nome: u.nome || '',
         cpf: u.cpf,
@@ -222,7 +234,8 @@ const AdminEmployees: React.FC = () => {
         observacoes: u.observacoes,
         invisivel: !!u.invisivel,
         employee_config: u.employee_config || {},
-      }));
+        reliability_score: score,
+      }});
       setRows(list);
       setSchedules((schedRows ?? []).map((s: any) => ({ id: s.id, name: s.name })));
       setDepartments((deptRows ?? []).map((d: any) => ({ id: d.id, name: d.name })));
@@ -795,6 +808,7 @@ const AdminEmployees: React.FC = () => {
                     <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Cargo</th>
                     <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Departamento</th>
                     <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Escala</th>
+                    <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Confiabilidade</th>
                     <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Status</th>
                     <th className="text-right px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Ações</th>
                   </tr>
@@ -808,6 +822,23 @@ const AdminEmployees: React.FC = () => {
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.cargo}</td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.department_name || '—'}</td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.schedule_name || '—'}</td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                        {typeof row.reliability_score === 'number' ? (
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                              row.reliability_score >= 90
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                : row.reliability_score >= 70
+                                ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                                : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                            }`}
+                            title="Score de confiabilidade baseado em atrasos, faltas, ajustes e inconsistências."
+                          >
+                            {row.reliability_score}%</span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded-lg text-xs font-medium ${row.status === 'active' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
                           {row.status === 'active' ? 'Ativo' : 'Inativo'}

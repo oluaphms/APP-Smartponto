@@ -42,6 +42,7 @@ export const navigationGroups: Record<string, NavigationGroupSchema> = {
       { name: 'Importar Funcionários', nameKey: 'menu.importEmployees', path: '/admin/import-employees', roles: ['admin', 'hr'] },
       { name: 'Departamentos', nameKey: 'menu.departments', path: '/admin/departments', roles: ['admin', 'hr'] },
       { name: 'Cargos', nameKey: 'menu.cargos', path: '/admin/job-titles', roles: ['admin', 'hr'] },
+      { name: 'Estruturas', nameKey: 'menu.estruturas', path: '/admin/estruturas', roles: ['admin', 'hr'] },
     ],
   },
 
@@ -86,6 +87,7 @@ export const navigationGroups: Record<string, NavigationGroupSchema> = {
       { name: 'Segurança e Antifraude', nameKey: 'menu.securityAntifraud', path: '/admin/security', roles: ['admin', 'hr'] },
       { name: 'Empresa', nameKey: 'menu.empresa', path: '/admin/company', roles: ['admin', 'hr'] },
       { name: 'Configurações', nameKey: 'menu.settings', path: '/admin/settings', roles: ['admin', 'hr'] },
+      { name: 'Ajuda', nameKey: 'menu.ajuda', path: '/admin/ajuda', roles: ['admin', 'hr'] },
       { name: 'Configurações', nameKey: 'menu.settings', path: '/employee/settings', roles: ['employee'] },
       { name: 'Meu Perfil', nameKey: 'menu.perfil', path: '/employee/profile', roles: ['employee'] },
     ],

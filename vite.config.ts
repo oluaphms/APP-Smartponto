@@ -29,7 +29,7 @@ export default defineConfig(({ mode }) => {
 
     server: {
       port: 3010,
-      strictPort: false,
+      strictPort: true,
       host: true,
       open: true
     },
@@ -46,19 +46,15 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@': projectRoot,
-        // Garante que todas as importações usem a MESMA instância de React (evita "useState of null")
-        react: path.resolve(projectRoot, 'node_modules/react'),
-        'react-dom': path.resolve(projectRoot, 'node_modules/react-dom'),
-        'react-dom/client': path.resolve(projectRoot, 'node_modules/react-dom/client'),
-        'react-is': path.resolve(projectRoot, 'node_modules/react-is'),
       },
-      dedupe: ['react', 'react-dom', 'react-dom/client', 'react-is']
+      // Deixe o Vite gerenciar React/ReactDOM normalmente (evita conflitos de múltiplas instâncias).
+      dedupe: [],
     },
 
     optimizeDeps: {
-      include: ['react', 'react-dom', 'react-dom/client', 'react-is', 'recharts', 'lucide-react', 'framer-motion', 'react-router-dom'],
+      // Não é mais necessário forçar o pré-bundle de React aqui; usamos apenas bibliotecas de UI.
+      include: ['recharts', 'lucide-react', 'framer-motion', 'react-router-dom'],
       esbuildOptions: {
-        // Garante um único bundle de React na pré-bundlagem
         mainFields: ['module', 'main'],
       },
     },
