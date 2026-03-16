@@ -386,7 +386,7 @@ class AuthService {
       const msg = error?.message ?? '';
 
       if (msg.includes('Invalid login credentials') || error?.status === 400) {
-        errorMessage = 'E-mail ou senha incorretos. Se o funcionário foi cadastrado pelo admin: no Supabase (Authentication → Users) localize o usuário pelo e-mail, clique nele, marque "Email Confirmed" (ou "Confirm email") e, se precisar, redefina a senha. Novos funcionários criados pelo painel já são confirmados automaticamente.';
+        errorMessage = 'Usuário ou senha incorreto.';
       } else if (msg.includes('Email not confirmed')) {
         errorMessage = 'E-mail ainda não confirmado. No Supabase: Authentication → Users → clique no usuário → "Confirm email". Ou peça ao administrador confirmar; novos cadastros pelo painel já são confirmados automaticamente.';
       } else if (msg.includes('Informe e-mail e senha')) {
