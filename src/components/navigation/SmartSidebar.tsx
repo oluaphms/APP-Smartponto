@@ -95,7 +95,7 @@ export const NavMenuContent: React.FC<NavMenuContentProps> = memo(function NavMe
       {isAdmin && (
         <SidebarGroup title="Gestão" collapsed={collapsed} defaultOpen>
           <Item path="/admin" label={user.role === 'admin' ? 'Painel Admin' : 'Painel RH'} icon={ShieldCheck} />
-          <Item path="/employees" label="Funcionários" icon={Users} />
+          <Item path="/employees" label="Colaboradores" icon={Users} />
           <Item path="/departments" label="Departamentos" icon={Building2} />
           <Item path="/schedules" label="Escalas" icon={CalendarRange} />
           <Item path="/locations" label="Localizações" icon={MapPin} />

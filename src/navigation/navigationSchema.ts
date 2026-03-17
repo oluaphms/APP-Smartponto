@@ -38,8 +38,7 @@ export const navigationGroups: Record<string, NavigationGroupSchema> = {
     labelKey: 'nav.groupPeople',
     icon: 'users',
     items: [
-      { name: 'Funcionários', nameKey: 'menu.employees', path: '/admin/employees', roles: ['admin', 'hr'] },
-      { name: 'Importar Funcionários', nameKey: 'menu.importEmployees', path: '/admin/import-employees', roles: ['admin', 'hr'] },
+      { name: 'Colaboradores', nameKey: 'menu.employees', path: '/admin/employees', roles: ['admin', 'hr'] },
       { name: 'Departamentos', nameKey: 'menu.departments', path: '/admin/departments', roles: ['admin', 'hr'] },
       { name: 'Cargos', nameKey: 'menu.cargos', path: '/admin/job-titles', roles: ['admin', 'hr'] },
       { name: 'Estruturas', nameKey: 'menu.estruturas', path: '/admin/estruturas', roles: ['admin', 'hr'] },

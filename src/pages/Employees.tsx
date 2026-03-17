@@ -39,7 +39,7 @@ interface DepartmentRow {
 }
 
 const ROLES = [
-  { value: 'employee', label: 'Funcionário' },
+  { value: 'employee', label: 'Colaborador' },
   { value: 'admin', label: 'Administrador' },
   { value: 'hr', label: 'RH' },
   { value: 'supervisor', label: 'Supervisor' },
@@ -351,22 +351,22 @@ const EmployeesPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Funcionários"
+        title="Colaboradores"
         subtitle="Lista de colaboradores, departamentos e escalas"
         icon={<Users className="w-5 h-5" />}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => setCreateModalOpen(true)}>
               <UserPlus className="w-4 h-4" />
-              Novo Funcionário
+              Novo Colaborador
             </Button>
             <Button size="sm" variant="outline" onClick={() => setImportModalOpen(true)}>
               <Upload className="w-4 h-4" />
-              Importar Funcionários
+              Importar colaboradores
             </Button>
             <Button size="sm" variant="outline" onClick={() => { setInviteModalOpen(true); setInviteMessage(null); setInviteEmail(''); setInviteNome(''); }}>
               <Mail className="w-4 h-4" />
-              Convidar Funcionário
+              Convidar colaborador
             </Button>
             <Button size="sm" variant="outline" onClick={() => { setInviteByLinkOpen(true); setInviteByLinkResult(null); setInviteByLinkEmail(''); setInviteByLinkRole('employee'); }}>
               <Send className="w-4 h-4" />
@@ -448,7 +448,7 @@ const EmployeesPage: React.FC = () => {
       </ModalForm>
 
       <ModalForm
-        title="Novo Funcionário"
+        title="Novo Colaborador"
         description="Preencha os dados. Um convite por email será enviado (configure VITE_INVITE_API_URL para o envio)."
         isOpen={createModalOpen}
         onClose={() => { setCreateModalOpen(false); setCreateError(null); }}
@@ -518,7 +518,7 @@ const EmployeesPage: React.FC = () => {
       </ModalForm>
 
       <ModalForm
-        title="Convidar Funcionário"
+        title="Convidar colaborador"
         description="Envie um convite por email para acessar o sistema."
         isOpen={inviteModalOpen}
         onClose={() => { setInviteModalOpen(false); setInviteMessage(null); }}
@@ -625,7 +625,7 @@ const EmployeesPage: React.FC = () => {
       </ModalForm>
 
       <ModalForm
-        title="Importar Funcionários"
+        title="Importar colaboradores"
         description="CSV com colunas: name, email, department, role"
         isOpen={importModalOpen}
         onClose={() => { setImportModalOpen(false); setCsvRows([]); setCsvFile(null); }}

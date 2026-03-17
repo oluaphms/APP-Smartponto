@@ -33,8 +33,7 @@ export interface NavItem {
 /** Navegação admin: rotas /admin/* */
 export const adminNavigation: NavItem[] = [
   { name: 'Dashboard', nameKey: 'menu.dashboard', path: '/admin/dashboard', icon: Home },
-  { name: 'Funcionários', nameKey: 'menu.employees', path: '/admin/employees', icon: Users },
-  { name: 'Importar Funcionários', nameKey: 'menu.importEmployees', path: '/admin/import-employees', icon: Upload },
+  { name: 'Colaboradores', nameKey: 'menu.employees', path: '/admin/employees', icon: Users },
   { name: 'Departamentos', nameKey: 'menu.departments', path: '/admin/departments', icon: Building2 },
   { name: 'Cargos', nameKey: 'menu.cargos', path: '/admin/job-titles', icon: Briefcase },
   { name: 'Espelho de Ponto', nameKey: 'menu.espelhoPonto', path: '/admin/timesheet', icon: Clock },
