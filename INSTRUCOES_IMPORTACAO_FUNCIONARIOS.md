@@ -166,14 +166,24 @@ Se ao importar funcionários ou ao abrir a tela de funcionários aparecer erro *
 
 1. **Aplicar a migration que corrige a recursão** no seu projeto Supabase:
    - No Dashboard do Supabase: **SQL Editor** → New query.
-   - Copie e execute o conteúdo do arquivo:
-     `supabase/migrations/20250326000000_fix_rls_infinite_recursion_users_time_records.sql`
+   - Copie e execute o conteúdo de **uma** das migrations (recomendado a definitiva):
+     - `supabase/migrations/20250329000000_fix_rls_users_recursion_definitive.sql` **(recomendado:** funciona em Supabase Cloud e local)
+     - ou `supabase/migrations/20250326000000_fix_rls_infinite_recursion_users_time_records.sql`
    - Ou, se usar CLI: `supabase db push` (aplica todas as migrations pendentes).
 
-2. **Garantir que a função `get_my_company_id()` tenha owner com permissão de bypass RLS** (se o erro continuar após a migration):
-   - No SQL Editor do Supabase execute:
+2. **Se o erro continuar** (ex.: projeto Supabase Cloud onde o owner da tabela não é `postgres`):
+   - Execute a migration **20250329000000_fix_rls_users_recursion_definitive.sql**: ela define o owner da função `get_my_company_id()` como o mesmo da tabela `users`, garantindo bypass de RLS em qualquer ambiente.
+
+3. **Verificação no Supabase (SQL Editor):**
+   - Para ver quem é o owner da tabela e da função (devem ser iguais):
      ```sql
-     ALTER FUNCTION public.get_my_company_id() OWNER TO postgres;
+     SELECT 'users' AS objeto, tableowner AS owner FROM pg_tables WHERE schemaname = 'public' AND tablename = 'users'
+     UNION ALL
+     SELECT 'get_my_company_id()', r.rolname FROM pg_proc p JOIN pg_roles r ON p.proowner = r.oid JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname = 'public' AND p.proname = 'get_my_company_id';
+     ```
+   - Se a função não estiver com o mesmo owner da tabela `users`, force no Supabase Cloud:
+     ```sql
+     ALTER FUNCTION public.get_my_company_id() OWNER TO supabase_admin;
      ```
 
-Depois disso, recarregue a página e tente a importação novamente.
+Depois disso, recarregue a página e tente a importação (ou o login) novamente.

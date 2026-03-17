@@ -240,7 +240,7 @@ class AuthService {
       const msg = error?.message ?? error?.code ?? String(error);
       console.error('Erro ao converter usuário Supabase:', msg);
       if (typeof msg === 'string' && (msg.includes('infinite recursion') || msg.includes('policy for relation'))) {
-        console.warn('[Supabase RLS] Recursão nas políticas detectada. Aplique a migration 20250326000000_fix_rls_infinite_recursion_users_time_records.sql no Supabase. Veja INSTRUCOES_IMPORTACAO_FUNCIONARIOS.md §9.');
+        console.warn('[Supabase RLS] Recursão nas políticas detectada. No Supabase (SQL Editor), execute a migration 20250329000000_fix_rls_users_recursion_definitive.sql. Veja INSTRUCOES_IMPORTACAO_FUNCIONARIOS.md §9.');
       }
       // Fallback: retorna usuário mínimo a partir só do Auth (tabela users inexistente/RLS/schema)
       const email = (supabaseUser?.email || '').trim().toLowerCase();

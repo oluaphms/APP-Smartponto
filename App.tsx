@@ -107,6 +107,7 @@ import ImportEmployees from './src/pages/admin/ImportEmployees';
 import AdminRepDevices from './src/pages/admin/RepDevices';
 import AdminRepMonitor from './src/pages/admin/RepMonitor';
 import AdminImportRep from './src/pages/admin/ImportRep';
+import AdminLiveAttendance from './src/pages/admin/LiveAttendance';
 import AdminAusencias from './src/pages/Ausencias';
 import AdminAjuda from './src/pages/admin/Ajuda';
 import EmployeeDashboard from './src/pages/employee/Dashboard';
@@ -1018,6 +1019,7 @@ const AppMain: React.FC = () => {
               <Route path="rep-devices" element={<AdminRepDevices />} />
               <Route path="rep-monitor" element={<AdminRepMonitor />} />
               <Route path="import-rep" element={<AdminImportRep />} />
+              <Route path="live-attendance" element={<AdminLiveAttendance />} />
               <Route path="fiscalizacao" element={<AdminFiscalizacao />} />
               <Route path="security" element={<AdminSecurity />} />
               <Route path="company" element={<AdminCompany />} />
