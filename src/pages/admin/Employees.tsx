@@ -440,25 +440,64 @@ const AdminEmployees: React.FC = () => {
         }
       } else {
         const email = form.email.trim().toLowerCase();
-        // Importante: NÃO usar auth.signUp no client (isso pode trocar a sessão do admin para o funcionário recém-criado).
-        const { userId } = await createEmployeeAuthUser({
-          email,
-          password: form.password,
-          metadata: { nome: form.nome, cargo: cargoFinal },
-        });
-        await db.insert('users', {
-          id: userId,
+        const basePayload = {
           ...payload,
           email,
-          role: 'employee',
+          role: 'employee' as const,
           company_id: user.companyId,
-          status: 'active',
+          status: 'active' as const,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
+        };
+
+        let authUserId: string | null = null;
+        try {
+          // Tenta criar conta no Auth (fluxo ideal)
+          const { userId } = await createEmployeeAuthUser({
+            email,
+            password: form.password,
+            metadata: { nome: form.nome, cargo: cargoFinal },
+          });
+          authUserId = userId;
+          // Segurança: se o auth provider ignorar email_confirm, tenta confirmar via endpoint existente.
+          await confirmEmployeeEmailInAuth(email);
+        } catch (authErr: any) {
+          const msg = String(authErr?.message ?? '');
+          const status = authErr?.status ?? authErr?.statusCode ?? null;
+          const code = authErr?.code ?? '';
+          const lower = msg.toLowerCase();
+          const is404 =
+            status === 404 ||
+            code === '404' ||
+            lower.includes('404') ||
+            lower.includes('not found');
+
+          if (!is404) {
+            // Para erros "reais" (duplicado, 429, etc.), mantém o comportamento existente.
+            throw authErr;
+          }
+          // 404: backend de Auth não está disponível.
+          // Vamos seguir com cadastro apenas local (sem acesso ao login).
+        }
+
+        let userIdLocal: string;
+        if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+          userIdLocal = crypto.randomUUID();
+        } else {
+          userIdLocal = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        }
+
+        await db.insert('users', {
+          id: userIdLocal,
+          auth_user_id: authUserId,
+          ...basePayload,
         });
-        // Segurança: se o auth provider ignorar email_confirm, tenta confirmar via endpoint existente.
-        await confirmEmployeeEmailInAuth(email);
-        setSuccess('Funcionário cadastrado. Ele pode fazer login com o e-mail e a senha provisória informada.');
+
+        setSuccess(
+          authUserId
+            ? 'Funcionário cadastrado. Ele pode fazer login com o e-mail e a senha provisória informada.'
+            : 'Funcionário cadastrado apenas no sistema (backend de autenticação indisponível).'
+        );
         setModalOpen(false);
         setForm({ ...form, password: '' });
         loadData();
@@ -638,16 +677,44 @@ const AdminEmployees: React.FC = () => {
       const scheduleId = row.escala ? schedByName.get(row.escala.trim().toLowerCase()) || '' : '';
 
       const doCreateAndInsert = async (): Promise<boolean> => {
-        // Usa o mesmo fluxo seguro do cadastro manual, evitando trocar a sessão do admin.
-        const { userId } = await createEmployeeAuthUser({
-          email: emailFinal.toLowerCase(),
-          password: senha,
-          metadata: { nome: nomeFinal, cargo: cargoFinal },
-        });
-        await confirmEmployeeEmailInAuth(emailFinal.toLowerCase());
+        let authUserId: string | null = null;
+        try {
+          // Fluxo ideal: criar conta no Auth primeiro
+          const { userId } = await createEmployeeAuthUser({
+            email: emailFinal.toLowerCase(),
+            password: senha,
+            metadata: { nome: nomeFinal, cargo: cargoFinal },
+          });
+          authUserId = userId;
+          await confirmEmployeeEmailInAuth(emailFinal.toLowerCase());
+        } catch (authErr: any) {
+          const msg = String(authErr?.message ?? '');
+          const status = authErr?.status ?? authErr?.statusCode ?? null;
+          const code = authErr?.code ?? '';
+          const lower = msg.toLowerCase();
+          const is404 =
+            status === 404 ||
+            code === '404' ||
+            lower.includes('404') ||
+            lower.includes('not found');
+
+          if (!is404) {
+            // Para outros erros (duplicado, 429, etc.) deixa o chamador tratar.
+            throw authErr;
+          }
+          // 404: backend de Auth não está disponível -> segue sem Auth.
+        }
+
+        let userIdLocal: string;
+        if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+          userIdLocal = crypto.randomUUID();
+        } else {
+          userIdLocal = `import-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        }
 
         const payload: any = {
-          id: userId,
+          id: userIdLocal,
+          auth_user_id: authUserId,
           nome: nomeFinal,
           cpf: row.cpf?.trim() || null,
           email: emailFinal.toLowerCase(),
@@ -661,7 +728,6 @@ const AdminEmployees: React.FC = () => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
-        if (userId) payload.id = userId;
 
         await db.insert('users', payload);
         return true;
@@ -681,19 +747,7 @@ const AdminEmployees: React.FC = () => {
         const lower = msg.toLowerCase();
         const is429 = status === 429 || code === '429' || lower.includes('429') || lower.includes('rate limit') || lower.includes('too many requests');
         const isDup = code === '23505' || msg.includes('duplicate') || /already registered|already exists|user already/i.test(msg);
-        const is404Auth =
-          status === 404 ||
-          code === '404' ||
-          lower.includes('404') ||
-          lower.includes('not found');
-
-        if (is404Auth) {
-          failed.push({
-            row: rowNum,
-            email: emailFinal,
-            reason: 'Falha ao criar conta de acesso (endpoint /api/create-employee-auth não encontrado). Peça ao suporte para configurar o backend de autenticação antes de importar.',
-          });
-        } else if (is429) {
+        if (is429) {
           await delay(RETRY_AFTER_429_MS);
           try {
             const retryOk = await doCreateAndInsert();
