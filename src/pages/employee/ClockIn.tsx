@@ -262,8 +262,10 @@ const EmployeeClockIn: React.FC = () => {
 
   if (loading || !user) return <LoadingState message="Carregando..." />;
 
+  const buttonBase = 'flex flex-col items-center justify-center gap-4 p-8 rounded-2xl border-2 min-h-[44px] touch-manipulation cursor-pointer select-none transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]';
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 relative z-10">
       <PageHeader title="Registrar Ponto" />
 
       {error && (
@@ -272,21 +274,23 @@ const EmployeeClockIn: React.FC = () => {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2 p-3 rounded-xl bg-slate-100 dark:bg-slate-800/50">
+      <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-slate-100 dark:bg-slate-800/50">
         <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Método:</span>
         <button
           type="button"
           onClick={() => setUseDigital(false)}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${!useDigital ? 'bg-emerald-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+          onTouchEnd={(e) => e.currentTarget.blur()}
+          className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-medium border-2 touch-manipulation cursor-pointer select-none transition-colors ${!useDigital ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
         >
-          <Camera className="w-4 h-4" /> Foto
+          <Camera className="w-4 h-4 shrink-0" /> Foto
         </button>
         <button
           type="button"
           onClick={() => setUseDigital(true)}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${useDigital ? 'bg-emerald-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+          onTouchEnd={(e) => e.currentTarget.blur()}
+          className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-medium border-2 touch-manipulation cursor-pointer select-none transition-colors ${useDigital ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
         >
-          <Fingerprint className="w-4 h-4" /> Digital (WebAuthn)
+          <Fingerprint className="w-4 h-4 shrink-0" /> Digital (WebAuthn)
         </button>
         <span className="text-xs text-slate-500 dark:text-slate-500 ml-1">Se não suportado, usa foto.</span>
       </div>
@@ -296,42 +300,42 @@ const EmployeeClockIn: React.FC = () => {
           type="button"
           disabled={saving || isIn}
           onClick={() => handlePunch(LogType.IN)}
-          className="flex flex-col items-center justify-center gap-4 p-8 rounded-2xl border-2 border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          className={`${buttonBase} border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30`}
         >
-          <LogIn className="w-16 h-16" />
+          <LogIn className="w-16 h-16 shrink-0" />
           <span className="text-xl font-bold">Registrar Entrada</span>
         </button>
         <button
           type="button"
           disabled={saving || !isIn}
           onClick={() => handlePunch(LogType.OUT)}
-          className="flex flex-col items-center justify-center gap-4 p-8 rounded-2xl border-2 border-red-500 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          className={`${buttonBase} border-red-500 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30`}
         >
-          <LogOut className="w-16 h-16" />
+          <LogOut className="w-16 h-16 shrink-0" />
           <span className="text-xl font-bold">Registrar Saída</span>
         </button>
         <button
           type="button"
           disabled={saving || !isIn || isBreak}
           onClick={() => handlePunch(LogType.BREAK)}
-          className="flex flex-col items-center justify-center gap-4 p-8 rounded-2xl border-2 border-amber-500 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          className={`${buttonBase} border-amber-500 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30`}
         >
-          <Coffee className="w-16 h-16" />
+          <Coffee className="w-16 h-16 shrink-0" />
           <span className="text-xl font-bold">Iniciar Intervalo</span>
         </button>
         <button
           type="button"
           disabled={saving || !isBreak}
           onClick={() => handlePunch(LogType.BREAK)}
-          className="flex flex-col items-center justify-center gap-4 p-8 rounded-2xl border-2 border-sky-500 bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          className={`${buttonBase} border-sky-500 bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/30`}
         >
-          <Coffee className="w-16 h-16" />
+          <Coffee className="w-16 h-16 shrink-0" />
           <span className="text-xl font-bold">Finalizar Intervalo</span>
         </button>
       </div>
 
       <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2">
-        <MapPin className="w-4 h-4" /> GPS e {useDigital ? 'impressão digital (ou foto como fallback)' : 'foto'} ao registrar.
+        <MapPin className="w-4 h-4 shrink-0" /> GPS e {useDigital ? 'impressão digital (ou foto como fallback)' : 'foto'} ao registrar.
       </p>
 
       <video ref={videoRef} className="hidden" playsInline muted />
