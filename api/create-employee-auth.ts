@@ -102,7 +102,10 @@ export default async function handler(request: Request): Promise<Response> {
         const authUser = await authRes.json();
         const callerId = authUser?.id;
         if (callerId) {
-          const { data: row } = await adminSup.from('users').select('role').eq('id', callerId).maybeSingle();
+          // Busca por id (admin antigo) ou auth_user_id (admin com id local)
+          const byId = await adminSup.from('users').select('role').eq('id', callerId).maybeSingle();
+          const byAuthId = await adminSup.from('users').select('role').eq('auth_user_id', callerId).maybeSingle();
+          const row = byId?.data ?? byAuthId?.data;
           if (row?.role) callerRole = String(row.role).toLowerCase();
         }
       }
@@ -114,19 +117,28 @@ export default async function handler(request: Request): Promise<Response> {
       );
     }
 
-    const adminAuth = (adminSup.auth as any).admin;
+    const adminAuth = (adminSup.auth as any)?.admin;
+    if (!adminAuth || typeof adminAuth.createUser !== 'function') {
+      return Response.json(
+        { error: 'Configuração do Auth admin indisponível.', code: 'ADMIN_AUTH_MISSING' },
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
     const { data, error } = await adminAuth.createUser({
       email,
       password,
       email_confirm: true,
       user_metadata: metadata,
     });
+
     if (error) {
       return Response.json(
         { error: error.message || 'Falha ao criar usuário no Auth.', code: 'CREATE_FAILED' },
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
+
     const userId = data?.user?.id;
     if (!userId) {
       return Response.json(
@@ -140,8 +152,9 @@ export default async function handler(request: Request): Promise<Response> {
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (e: any) {
+    const errMsg = e?.message || String(e) || 'Erro interno.';
     return Response.json(
-      { error: e?.message || 'Erro interno.', code: 'INTERNAL_ERROR' },
+      { error: errMsg, code: 'INTERNAL_ERROR' },
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   }
