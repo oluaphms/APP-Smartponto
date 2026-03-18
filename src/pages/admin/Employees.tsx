@@ -160,7 +160,8 @@ const AdminEmployees: React.FC = () => {
     invalid: { row: NormalizedEmployeeRow; reason: string }[];
   } | null>(null);
   const [importParseError, setImportParseError] = useState<string | null>(null);
-  type ImportStep = 'upload' | 'mapping' | 'preview' | 'result';
+  const [importError, setImportError] = useState<string | null>(null);
+  type ImportStep = 'upload' | 'preview' | 'result';
   const [importStep, setImportStep] = useState<ImportStep>('upload');
   const [importRawRows, setImportRawRows] = useState<Record<string, string>[] | null>(null);
   const [importHeaders, setImportHeaders] = useState<string[]>([]);
@@ -606,7 +607,7 @@ const AdminEmployees: React.FC = () => {
     return { valid, invalid };
   };
 
-  /** Pausa entre cada signUp para respeitar rate limit do Supabase Auth (evitar 429). */
+  /** Pausa entre cada criação para respeitar rate limit do Supabase Auth (evitar 429). */
   const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   const runBulkImport = async (toImport: ImportRow[]) => {
@@ -616,7 +617,7 @@ const AdminEmployees: React.FC = () => {
     const deptByName = new Map(departments.map((d) => [d.name.trim().toLowerCase(), d.id]));
     const schedByName = new Map(schedules.map((s) => [s.name.trim().toLowerCase(), s.id]));
     const stripCpf = (s: string) => (s || '').replace(/\D/g, '');
-    const DELAY_BETWEEN_MS = 2500; // ~24 signups/min; Supabase free tier é restritivo
+    const DELAY_BETWEEN_MS = 2500; // ~24 criações/min; Supabase free tier é restritivo
     const RETRY_AFTER_429_MS = 6000; // esperar 6s antes de retry ou antes de continuar
     for (let i = 0; i < toImport.length; i++) {
       const row = toImport[i];
@@ -634,12 +635,16 @@ const AdminEmployees: React.FC = () => {
       const departmentId = row.departamento ? deptByName.get(row.departamento.trim().toLowerCase()) || '' : '';
       const scheduleId = row.escala ? schedByName.get(row.escala.trim().toLowerCase()) || '' : '';
 
-      const doSignUpAndInsert = async (): Promise<boolean> => {
-        const authData = await auth.signUp(emailFinal.toLowerCase(), senha, { nome: nomeFinal, cargo: cargoFinal });
-        if (!authData?.user?.id) return false;
+      const doCreateAndInsert = async (): Promise<boolean> => {
+        // Usa o mesmo fluxo seguro do cadastro manual, evitando trocar a sessão do admin.
+        const { userId } = await createEmployeeAuthUser({
+          email: emailFinal.toLowerCase(),
+          password: senha,
+          metadata: { nome: nomeFinal, cargo: cargoFinal },
+        });
         await confirmEmployeeEmailInAuth(emailFinal.toLowerCase());
         await db.insert('users', {
-          id: authData.user.id,
+          id: userId,
           nome: nomeFinal,
           cpf: row.cpf?.trim() || null,
           email: emailFinal.toLowerCase(),
@@ -657,7 +662,7 @@ const AdminEmployees: React.FC = () => {
       };
 
       try {
-        let ok = await doSignUpAndInsert();
+        let ok = await doCreateAndInsert();
         if (!ok) {
           failed.push({ row: rowNum, email: emailFinal, reason: 'Conta criada mas ID não retornado' });
         } else {
@@ -671,7 +676,7 @@ const AdminEmployees: React.FC = () => {
         if (is429) {
           await delay(RETRY_AFTER_429_MS);
           try {
-            const retryOk = await doSignUpAndInsert();
+            const retryOk = await doCreateAndInsert();
             if (retryOk) success++;
             else failed.push({ row: rowNum, email: emailFinal, reason: 'Limite de requisições (429) após retry' });
           } catch (retryErr: any) {
@@ -698,6 +703,7 @@ const AdminEmployees: React.FC = () => {
     setImportResult(null);
     setImportPreview(null);
     setImportParseError(null);
+    setImportError(null);
     setImporting(true);
     setError(null);
     setSuccess(null);
@@ -709,13 +715,32 @@ const AdminEmployees: React.FC = () => {
         setImporting(false);
         return;
       }
+
       const headers = extractHeaders(rawRows);
       const mapping = suggestMapping(headers);
+      const normalized = normalizeAllRows(rawRows, mapping);
+      if (!normalized || normalized.length === 0) {
+        setImportParseError(
+          'Nenhuma linha válida encontrada. Verifique se o arquivo segue o modelo de cabeçalho (nome, email, senha, cargo, telefone, cpf, departamento, escala).'
+        );
+        e.target.value = '';
+        setImporting(false);
+        return;
+      }
+
+      const { valid, invalid } = validateImportRows(normalized, rows);
+
       setImportRawRows(rawRows);
       setImportHeaders(headers);
       setImportMapping(mapping);
       setImportFileName(file.name);
-      setImportStep('mapping');
+      setImportPreview({
+        fileName: file.name,
+        total: normalized.length,
+        valid,
+        invalid,
+      });
+      setImportStep('preview');
     } catch (err: any) {
       setImportParseError(err?.message || 'Erro ao processar arquivo. Formatos: CSV, TXT, XLSX, XLS, PDF, DOC, DOCX.');
     } finally {
@@ -724,29 +749,10 @@ const AdminEmployees: React.FC = () => {
     }
   };
 
-  const handleConfirmMapping = () => {
-    if (!importRawRows || importRawRows.length === 0) return;
-    const normalized = normalizeAllRows(importRawRows, importMapping);
-    if (normalized.length === 0) {
-      setImportParseError('Nenhuma linha válida após mapeamento. Mapeie ao menos Nome ou CPF.');
-      return;
-    }
-    const { valid, invalid } = validateImportRows(normalized, rows);
-    setImportPreview({
-      fileName: importFileName,
-      total: normalized.length,
-      valid,
-      invalid,
-    });
-    setImportParseError(null);
-    setImportStep('preview');
-  };
-
   const handleConfirmImport = async () => {
     if (!importPreview || importPreview.valid.length === 0 || !user?.companyId) return;
     setImporting(true);
-    setError(null);
-    setSuccess(null);
+    setImportError(null);
     try {
       await runBulkImport(importPreview.valid as ImportRow[]);
       setImportStep('result');
@@ -756,7 +762,7 @@ const AdminEmployees: React.FC = () => {
       setImportHeaders([]);
       setImportMapping({});
     } catch (err: any) {
-      setError(err?.message || 'Erro ao importar.');
+      setImportError(err?.message || 'Erro ao importar. Verifique a conexão e tente novamente.');
     } finally {
       setImporting(false);
     }
@@ -768,6 +774,7 @@ const AdminEmployees: React.FC = () => {
     setImportResult(null);
     setImportPreview(null);
     setImportParseError(null);
+    setImportError(null);
     setImportRawRows(null);
     setImportHeaders([]);
     setImportMapping({});
@@ -1193,7 +1200,7 @@ const AdminEmployees: React.FC = () => {
         {importModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={() => !importing && setImportModalOpen(false)}>
             <div
-              className={`bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 ${importStep === 'mapping' ? 'max-w-2xl' : 'max-w-lg'}`}
+              className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 max-w-lg"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between">
@@ -1202,97 +1209,42 @@ const AdminEmployees: React.FC = () => {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              {(importStep === 'upload' || importStep === 'mapping') && (
+              {importStep === 'upload' && (
                 <>
                   <p className="text-sm text-slate-600 dark:text-slate-400">
-                    {importStep === 'upload'
-                      ? 'Envie uma planilha em qualquer formato. O ChronoDigital detecta as colunas e permite mapear para os campos do sistema. Aceitos: CSV, TXT, Excel (XLSX/XLS), PDF, Word (DOC/DOCX). A primeira linha deve ser o cabeçalho.'
-                      : `Arquivo: ${importFileName} — ${importRawRows?.length ?? 0} linha(s). Confirme o mapeamento abaixo.`}
+                    Envie uma planilha em qualquer formato. O ChronoDigital detecta as colunas e importa automaticamente usando o modelo padrão.
                   </p>
-                  {importStep === 'upload' && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={handleDownloadTemplate}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800"
-                      >
-                        <FileDown className="w-4 h-4" /> Baixar modelo CSV
-                      </button>
-                      <div>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept=".csv,.txt,.pdf,.xlsx,.xls,.doc,.docx,text/csv,text/plain,application/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/octet-stream,*/*"
-                          onChange={handleImportFile}
-                          className="hidden"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          disabled={importing}
-                          className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50"
-                        >
-                          <Upload className="w-5 h-5" />
-                          {importing ? 'Analisando arquivo...' : 'Selecionar arquivo (CSV, TXT, PDF, Excel, Word…)'}
-                        </button>
-                      </div>
-                    </>
-                  )}
-                  {importStep === 'mapping' && (
-                    <div className="space-y-3">
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Mapear colunas da planilha</p>
-                      <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
-                              <th className="text-left px-3 py-2 font-medium text-slate-500 dark:text-slate-400">Campo no sistema</th>
-                              <th className="text-left px-3 py-2 font-medium text-slate-500 dark:text-slate-400">Coluna da planilha</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {SYSTEM_FIELDS.map((field) => (
-                              <tr key={field} className="border-b border-slate-100 dark:border-slate-800 last:border-0">
-                                <td className="px-3 py-2 text-slate-700 dark:text-slate-300">
-                                  {field === 'nome' || field === 'cpf' ? `${field} *` : field}
-                                </td>
-                                <td className="px-3 py-2">
-                                  <select
-                                    value={importMapping[field] ?? ''}
-                                    onChange={(e) => setImportMapping((m) => ({ ...m, [field]: e.target.value || undefined }))}
-                                    className="w-full px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
-                                  >
-                                    <option value="">— Não mapear</option>
-                                    {importHeaders.map((h) => (
-                                      <option key={h} value={h}>{h}</option>
-                                    ))}
-                                  </select>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => { setImportStep('upload'); setImportRawRows(null); setImportHeaders([]); setImportMapping({}); setImportParseError(null); }}
-                          className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-800"
-                        >
-                          Voltar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleConfirmMapping}
-                          className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700"
-                        >
-                          Continuar para preview
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Aceitos: CSV, TXT, Excel (XLSX/XLS), PDF, Word (DOC/DOCX). Use o modelo com cabeçalho: nome, email, senha, cargo, telefone, cpf, departamento, escala.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplate}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800"
+                  >
+                    <FileDown className="w-4 h-4" /> Baixar modelo CSV
+                  </button>
+                  <div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".csv,.txt,.pdf,.xlsx,.xls,.doc,.docx,text/csv,text/plain,application/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/octet-stream,*/*"
+                      onChange={handleImportFile}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={importing}
+                      className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      <Upload className="w-5 h-5" />
+                      {importing ? 'Analisando arquivo...' : 'Selecionar arquivo (CSV, TXT, PDF, Excel, Word…)'}
+                    </button>
+                  </div>
                 </>
               )}
-              {importParseError && (importStep === 'upload' || importStep === 'mapping') && (
+              {importParseError && importStep === 'upload' && (
                 <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-700 dark:text-red-300">
                   {importParseError}
                 </div>
@@ -1327,7 +1279,7 @@ const AdminEmployees: React.FC = () => {
                   <div className="flex flex-wrap gap-2 pt-2">
                     <button
                       type="button"
-                      onClick={() => setImportStep('mapping')}
+                      onClick={() => setImportStep('upload')}
                       disabled={importing}
                       className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium"
                     >
@@ -1342,6 +1294,11 @@ const AdminEmployees: React.FC = () => {
                       {importing ? 'Importando...' : `Importar (${importPreview.valid.length})`}
                     </button>
                   </div>
+                  {importError && (
+                    <div className="mt-3 rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-3 text-xs text-red-700 dark:text-red-300">
+                      {importError}
+                    </div>
+                  )}
                 </div>
               )}
               {importStep === 'result' && importResult && (
@@ -1358,6 +1315,11 @@ const AdminEmployees: React.FC = () => {
                         </li>
                       ))}
                     </ul>
+                  )}
+                  {importError && (
+                    <div className="mt-2 rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-3 text-xs text-red-700 dark:text-red-300">
+                      {importError}
+                    </div>
                   )}
                 </div>
               )}
