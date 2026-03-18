@@ -81,7 +81,7 @@ export function startReminderCheck() {
     const now = new Date();
     for (const t of config.times) {
       if (isWithinWindow(now, t) && !remindedToday(t)) {
-        showReminder('SmartPonto', 'Hora de bater o ponto!');
+        showReminder('ChronoDigital', 'Hora de bater o ponto!');
         markReminded(t);
       }
     }

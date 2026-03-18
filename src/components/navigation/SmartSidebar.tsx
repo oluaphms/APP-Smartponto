@@ -165,7 +165,7 @@ const SmartSidebar: React.FC<SmartSidebarProps> = ({ user, onLogout, onCollapsed
           </div>
           {!collapsed && (
             <div className="min-w-0">
-              <span className="text-lg font-bold text-slate-900 dark:text-white tracking-tight block truncate">SmartPonto</span>
+              <span className="text-lg font-bold text-slate-900 dark:text-white tracking-tight block truncate">ChronoDigital</span>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">SaaS</span>
             </div>
           )}

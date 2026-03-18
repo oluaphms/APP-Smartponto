@@ -36,10 +36,10 @@ const AdminAjuda: React.FC = () => {
     if (!isSupabaseConfigured || !supabase) return;
 
     const seedList: { id: HelpTopic; label: string }[] = [
-      { id: 'instalacao', label: 'Instalando o SmartPonto' },
-      { id: 'atualizacao', label: 'Atualizando o SmartPonto' },
+      { id: 'instalacao', label: 'Instalando o ChronoDigital' },
+      { id: 'atualizacao', label: 'Atualizando o ChronoDigital' },
       { id: 'tela', label: 'Tela Principal' },
-      { id: 'cadastros', label: 'Cadastrando no SmartPonto' },
+      { id: 'cadastros', label: 'Cadastrando no ChronoDigital' },
       { id: 'movimentacoes', label: 'Movimentações' },
       { id: 'manutencao', label: 'Manutenção' },
       { id: 'relatorios', label: 'Relatórios' },
@@ -201,7 +201,7 @@ const AdminAjuda: React.FC = () => {
               </h2>
             </div>
             <p className="text-sm text-slate-600 dark:text-slate-300">
-              O sistema SmartPonto trata dados pessoais de colaboradores para fins de registro de ponto, gestão de
+              O sistema ChronoDigital trata dados pessoais de colaboradores para fins de registro de ponto, gestão de
               jornada e cumprimento de obrigações legais trabalhistas.
             </p>
             <ul className="list-disc list-inside text-sm text-slate-600 dark:text-slate-300 space-y-1">
@@ -259,12 +259,12 @@ const AdminAjuda: React.FC = () => {
             </p>
           </section>
 
-          {/* Manual do sistema SmartPonto – menu lateral + conteúdo */}
+          {/* Manual do sistema ChronoDigital – menu lateral + conteúdo */}
           <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-5 space-y-5 lg:col-span-2">
             <div className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
               <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wide">
-                Manual do Sistema SmartPonto
+                Manual do Sistema ChronoDigital
               </h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-[230px,1fr] gap-4">
@@ -272,10 +272,10 @@ const AdminAjuda: React.FC = () => {
               <div className="space-y-2">
                 {(() => {
                   const staticTopics: { id: HelpTopic; label: string }[] = [
-                    { id: 'instalacao', label: 'Instalando o SmartPonto' },
-                    { id: 'atualizacao', label: 'Atualizando o SmartPonto' },
+                    { id: 'instalacao', label: 'Instalando o ChronoDigital' },
+                    { id: 'atualizacao', label: 'Atualizando o ChronoDigital' },
                     { id: 'tela', label: 'Tela Principal' },
-                    { id: 'cadastros', label: 'Cadastrando no SmartPonto' },
+                    { id: 'cadastros', label: 'Cadastrando no ChronoDigital' },
                     { id: 'movimentacoes', label: 'Movimentações' },
                     { id: 'manutencao', label: 'Manutenção' },
                     { id: 'relatorios', label: 'Relatórios' },
@@ -310,7 +310,7 @@ const AdminAjuda: React.FC = () => {
               <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 p-4 space-y-3 text-sm text-slate-700 dark:text-slate-200">
                 {selectedTopic === 'instalacao' && (
                   <>
-                    <h3 className="font-semibold text-slate-900 dark:text-white">Instalando o SmartPonto</h3>
+                    <h3 className="font-semibold text-slate-900 dark:text-white">Instalando o ChronoDigital</h3>
                     <p>
                       Descreve como preparar o ambiente (Supabase, variáveis <span className="font-mono text-xs">VITE_*</span>, deploy em Vercel ou servidor próprio),
                       configurar a URL do projeto, chaves de API e conexão com o banco.
@@ -319,7 +319,7 @@ const AdminAjuda: React.FC = () => {
                 )}
                 {selectedTopic === 'atualizacao' && (
                   <>
-                    <h3 className="font-semibold text-slate-900 dark:text-white">Atualizando o SmartPonto</h3>
+                    <h3 className="font-semibold text-slate-900 dark:text-white">Atualizando o ChronoDigital</h3>
                     <p>
                       Orienta como aplicar novas versões do sistema, executar migrações SQL localizadas em{' '}
                       <span className="font-mono text-xs">supabase/migrations</span> e revisar as notas de versão antes
@@ -338,7 +338,7 @@ const AdminAjuda: React.FC = () => {
                 )}
                 {selectedTopic === 'cadastros' && (
                   <>
-                    <h3 className="font-semibold text-slate-900 dark:text-white">Cadastrando no SmartPonto</h3>
+                    <h3 className="font-semibold text-slate-900 dark:text-white">Cadastrando no ChronoDigital</h3>
                     <p className="mb-1">
                       Guia para configuração dos cadastros base do sistema, incluindo:
                     </p>

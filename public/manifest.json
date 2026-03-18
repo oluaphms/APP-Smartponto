@@ -1,6 +1,6 @@
 {
-  "name": "SmartPonto - Ponto Eletrônico",
-  "short_name": "SmartPonto",
+  "name": "ChronoDigital - Ponto Eletrônico",
+  "short_name": "ChronoDigital",
   "description": "Sistema de controle de ponto moderno e seguro com análise de produtividade via IA",
   "start_url": "/",
   "display": "standalone",

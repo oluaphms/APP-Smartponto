@@ -1175,7 +1175,7 @@ const AdminEmployees: React.FC = () => {
                 <>
                   <p className="text-sm text-slate-600 dark:text-slate-400">
                     {importStep === 'upload'
-                      ? 'Envie uma planilha em qualquer formato. O SmartPonto detecta as colunas e permite mapear para os campos do sistema. Aceitos: CSV, TXT, Excel (XLSX/XLS), PDF, Word (DOC/DOCX). A primeira linha deve ser o cabeçalho.'
+                      ? 'Envie uma planilha em qualquer formato. O ChronoDigital detecta as colunas e permite mapear para os campos do sistema. Aceitos: CSV, TXT, Excel (XLSX/XLS), PDF, Word (DOC/DOCX). A primeira linha deve ser o cabeçalho.'
                       : `Arquivo: ${importFileName} — ${importRawRows?.length ?? 0} linha(s). Confirme o mapeamento abaixo.`}
                   </p>
                   {importStep === 'upload' && (
