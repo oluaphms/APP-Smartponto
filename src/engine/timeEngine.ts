@@ -346,6 +346,22 @@ export async function processEmployeeMonth(
   return results;
 }
 
+/**
+ * Helper para montar o espelho mensal (timesheet) de um colaborador.
+ * Usado por rotas API externas sem acoplar diretamente ao client do Supabase.
+ */
+export async function buildTimesheetForPeriod(params: {
+  supabase?: unknown; // mantido apenas para compatibilidade com chamadas existentes
+  employeeId: string;
+  companyId?: string;
+  year: number;
+  month: number;
+}): Promise<DaySummary[]> {
+  const { employeeId, companyId, year, month } = params;
+  // Reaproveita o motor interno, usando companyId vazio se não fornecido.
+  return processEmployeeMonth(employeeId, companyId ?? '', year, month);
+}
+
 function defaultSchedule(): WorkScheduleInfo {
   return {
     start_time: '08:00',

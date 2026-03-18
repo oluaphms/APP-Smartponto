@@ -60,10 +60,11 @@ const authStorage =
 // Timeout por requisição (auth + REST). Free tier pode ter cold start; 30s evita falso "Tempo esgotado".
 const SUPABASE_FETCH_TIMEOUT_MS = 30000;
 
-const fetchWithTimeout: typeof fetch = (...args) =>
+// Wrapper de fetch com timeout explícito, evitando uso de spread em typeof fetch (TS 5.8).
+const fetchWithTimeout = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
   Promise.race([
-    fetch(...args),
-    new Promise<never>((_, reject) =>
+    fetch(input, init),
+    new Promise<Response>((_, reject) =>
       setTimeout(() => reject(new Error('Supabase timeout')), SUPABASE_FETCH_TIMEOUT_MS),
     ),
   ]);
