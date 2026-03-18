@@ -174,6 +174,7 @@ VITE_SUPABASE_ANON_KEY=sua-chave-anon`}
 }
 
 const AppMain: React.FC = () => {
+  console.log('React instance:', React);
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [insights, setInsights] = useState<{ insight: string, score: number } | null>(null);
@@ -641,6 +642,20 @@ const AppMain: React.FC = () => {
     setLoginData({ identifier: '', password: '' });
     try {
       await authService.signOut();
+      // Em PWA, caches podem manter respostas/artefatos antigos em memória.
+      // Limpar caches no logout reduz casos de “login travado até fechar o app”.
+      try {
+        if (typeof window !== 'undefined' && 'caches' in window) {
+          const names = await caches.keys();
+          await Promise.all(
+            names
+              .filter((n) => n.startsWith('smartponto-'))
+              .map((n) => caches.delete(n)),
+          );
+        }
+      } catch {
+        // ignora falha ao limpar caches
+      }
     } catch (error) {
       console.error('Erro ao fazer logout:', error);
     }

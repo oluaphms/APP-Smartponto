@@ -5,7 +5,7 @@
  */
 
 import { getAppBaseUrl } from './appUrl';
-import { auth, db, isSupabaseConfigured, supabase } from './supabase';
+import { auth, clearLocalAuthSession, db, isSupabaseConfigured, supabase } from './supabase';
 import { User } from '../types';
 
 export interface AuthResult {
@@ -495,25 +495,46 @@ class AuthService {
    * Logout: limpa sessão no Supabase e todo rastro local (evita loop ao logar novamente).
    */
   async signOut(): Promise<void> {
+    const startedAt = Date.now();
     try {
-      await auth.signOut();
+      // 1) Derruba a sessão local imediatamente (instantâneo).
+      // Isso evita ficar preso num estado “meio logado” no PWA.
+      await clearLocalAuthSession();
+
+      // 2) Tenta invalidar sessão no servidor também (quando houver rede).
+      // `global` faz logout mais robusto em cenários com múltiplos dispositivos/sessões.
+      await auth.signOut({ scope: 'global' });
     } catch (error) {
-      console.error('Erro ao fazer logout:', error);
+      if (import.meta.env?.DEV && typeof console !== 'undefined') {
+        console.warn('[Auth] signOut falhou (seguindo com limpeza local):', error);
+      } else {
+        console.error('Erro ao fazer logout:', error);
+      }
     } finally {
       try {
         if (typeof window !== 'undefined') {
+          // Perfil app
           window.localStorage.removeItem('current_user');
-          if (window.sessionStorage) {
+
+          // Tokens/artefatos do Supabase
+          const clearSbKeys = (storage: Storage | undefined) => {
+            if (!storage) return;
             const keys: string[] = [];
-            for (let i = 0; i < window.sessionStorage.length; i++) {
-              const k = window.sessionStorage.key(i);
+            for (let i = 0; i < storage.length; i++) {
+              const k = storage.key(i);
               if (k && k.startsWith('sb-')) keys.push(k);
             }
-            keys.forEach((k) => window.sessionStorage.removeItem(k));
-          }
+            keys.forEach((k) => storage.removeItem(k));
+          };
+          clearSbKeys(window.sessionStorage);
+          clearSbKeys(window.localStorage);
         }
       } catch {
         // ignora falha ao limpar storage
+      } finally {
+        if (import.meta.env?.DEV && typeof console !== 'undefined') {
+          console.info('[Auth] Logout concluído em', Date.now() - startedAt, 'ms');
+        }
       }
     }
   }

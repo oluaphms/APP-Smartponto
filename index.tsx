@@ -23,7 +23,9 @@ root.render(
     <BrowserRouter>
       <LanguageProvider>
         <ToastProvider>
-          <App />
+          <ErrorBoundary>
+            <App />
+          </ErrorBoundary>
         </ToastProvider>
       </LanguageProvider>
     </BrowserRouter>

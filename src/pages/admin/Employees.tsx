@@ -23,6 +23,32 @@ async function confirmEmployeeEmailInAuth(email: string): Promise<void> {
     // Ignora; funcionário foi criado, admin pode confirmar manualmente no Supabase se precisar
   }
 }
+
+/** Cria usuário no Supabase Auth via API server (não troca sessão do admin no client). */
+async function createEmployeeAuthUser(params: { email: string; password: string; metadata?: Record<string, any> }): Promise<{ userId: string }> {
+  const email = params.email.trim().toLowerCase();
+  if (!email) throw new Error('E-mail é obrigatório.');
+  if (!params.password?.trim()) throw new Error('Senha é obrigatória.');
+
+  const session = await auth.getSession();
+  const token = (session as { access_token?: string } | null)?.access_token;
+  if (!token) throw new Error('Sessão do administrador não encontrada. Faça login novamente.');
+
+  const base = (import.meta.env.VITE_APP_URL as string) || (typeof window !== 'undefined' ? window.location.origin : '');
+  if (!base) throw new Error('URL do app não resolvida.');
+
+  const res = await fetch(`${base.replace(/\/$/, '')}/api/create-employee-auth`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ email, password: params.password, metadata: params.metadata || undefined }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error || data?.message || res.statusText || 'Falha ao criar usuário no Auth.');
+  }
+  if (!data?.userId) throw new Error('Conta criada mas ID não retornado.');
+  return { userId: String(data.userId) };
+}
 import { LoadingState } from '../../../components/UI';
 import RoleGuard from '../../components/auth/RoleGuard';
 import { parseFile, extractHeaders } from '../../services/fileParser';
@@ -413,11 +439,14 @@ const AdminEmployees: React.FC = () => {
         }
       } else {
         const email = form.email.trim().toLowerCase();
-        const authData = await auth.signUp(email, form.password, { nome: form.nome, cargo: cargoFinal });
-        if (!authData?.user?.id) throw new Error('Conta criada mas ID não retornado.');
-        await confirmEmployeeEmailInAuth(email);
+        // Importante: NÃO usar auth.signUp no client (isso pode trocar a sessão do admin para o funcionário recém-criado).
+        const { userId } = await createEmployeeAuthUser({
+          email,
+          password: form.password,
+          metadata: { nome: form.nome, cargo: cargoFinal },
+        });
         await db.insert('users', {
-          id: authData.user.id,
+          id: userId,
           ...payload,
           email,
           role: 'employee',
@@ -426,6 +455,8 @@ const AdminEmployees: React.FC = () => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
+        // Segurança: se o auth provider ignorar email_confirm, tenta confirmar via endpoint existente.
+        await confirmEmployeeEmailInAuth(email);
         setSuccess('Funcionário cadastrado. Ele pode fazer login com o e-mail e a senha provisória informada.');
         setModalOpen(false);
         setForm({ ...form, password: '' });

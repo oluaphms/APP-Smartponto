@@ -1,8 +1,8 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
 
-const projectRoot = path.resolve(__dirname)
+const projectRoot = path.resolve(__dirname);
 
 export default defineConfig(({ mode }) => {
   const isProduction = mode === 'production'
@@ -86,4 +86,4 @@ export default defineConfig(({ mode }) => {
       }
     }
   }
-})          
+});          

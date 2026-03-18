@@ -162,7 +162,7 @@ export async function withSupabaseTimeout<T>(
 const stubAuth = {
   signIn: async () => notConfigured(),
   signUp: async () => notConfigured(),
-  signOut: async (_options?: { scope?: 'local' }) => {
+  signOut: async (_options?: { scope?: 'local' | 'global' | 'others' }) => {
     console.warn('Supabase not configured - signOut ignored');
   },
   getUser: async () => {
@@ -205,7 +205,7 @@ const realAuth = configured
         if (!data) throw new Error('Erro ao criar conta: dados não retornados');
         return data;
       },
-      signOut: async (options?: { scope?: 'local' }) => {
+      signOut: async (options?: { scope?: 'local' | 'global' | 'others' }) => {
         try {
           const { error } = await client!.auth.signOut(options);
           if (error) throw error;

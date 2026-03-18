@@ -10,7 +10,7 @@ import {
   supabase,
   auth,
   storage,
-} from '../../../services/supabase';
+} from '../../services/supabase';
 
 describe('Supabase connection', () => {
   beforeAll(() => {

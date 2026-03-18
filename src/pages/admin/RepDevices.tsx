@@ -195,87 +195,174 @@ const AdminRepDevices: React.FC = () => {
       {loadingList ? (
         <LoadingState message="Carregando dispositivos..." />
       ) : (
-        <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-          <table className="w-full text-left">
-            <thead className="bg-slate-50 dark:bg-slate-800/50">
-              <tr>
-                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Nome</th>
-                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Fabricante / Modelo</th>
-                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Conexão</th>
-                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Status</th>
-                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Última sincronização</th>
-                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-              {devices.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">
-                    Nenhum relógio cadastrado. Clique em &quot;Cadastrar relógio&quot; para adicionar.
-                  </td>
-                </tr>
-              ) : (
-                devices.map((d) => (
-                  <tr key={d.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{d.nome_dispositivo}</td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                      {[d.fabricante, d.modelo].filter(Boolean).join(' / ') || '—'}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                      {d.tipo_conexao === 'rede' && d.ip ? `${d.ip}:${d.porta ?? 80}` : TIPOS_CONEXAO.find((t) => t.value === d.tipo_conexao)?.label ?? d.tipo_conexao}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
-                          d.status === 'ativo'
-                            ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
-                            : d.status === 'erro'
-                              ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'
-                              : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                        }`}
-                      >
-                        {d.status === 'ativo' ? <Wifi size={12} /> : <WifiOff size={12} />}
-                        {d.status || 'inativo'}
+        <>
+          {/* Mobile: layout em cards (stack) para evitar overflow horizontal */}
+          <div className="md:hidden space-y-3">
+            {devices.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-6 text-center text-slate-500 dark:text-slate-400">
+                Nenhum relógio cadastrado. Clique em &quot;Cadastrar relógio&quot; para adicionar.
+              </div>
+            ) : (
+              devices.map((d) => (
+                <div key={d.id} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 dark:text-white break-words">{d.nome_dispositivo}</div>
+                      <div className="mt-1 text-sm text-slate-600 dark:text-slate-300 break-words">
+                        {[d.fabricante, d.modelo].filter(Boolean).join(' / ') || '—'}
+                      </div>
+                    </div>
+                    <span
+                      className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
+                        d.status === 'ativo'
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
+                          : d.status === 'erro'
+                            ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'
+                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      {d.status === 'ativo' ? <Wifi size={12} /> : <WifiOff size={12} />}
+                      {d.status || 'inativo'}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 gap-2 text-sm">
+                    <div className="flex justify-between gap-3">
+                      <span className="text-slate-500 dark:text-slate-400">Conexão</span>
+                      <span className="text-slate-700 dark:text-slate-200 text-right break-all">
+                        {d.tipo_conexao === 'rede' && d.ip
+                          ? `${d.ip}:${d.porta ?? 80}`
+                          : TIPOS_CONEXAO.find((t) => t.value === d.tipo_conexao)?.label ?? d.tipo_conexao}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300 text-sm">{formatDate(d.ultima_sincronizacao)}</td>
-                    <td className="px-4 py-3 flex flex-wrap gap-2">
-                      {d.tipo_conexao === 'rede' && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={testingId === d.id}
-                            onClick={() => handleTestConnection(d.id)}
-                          >
-                            Testar
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={syncingId === d.id}
-                            onClick={() => handleSync(d.id)}
-                          >
-                            <RefreshCw size={14} className={syncingId === d.id ? 'animate-spin' : ''} />
-                            Sincronizar
-                          </Button>
-                        </>
-                      )}
-                      <Button size="sm" variant="outline" onClick={() => openEdit(d)}>
-                        <Pencil size={14} />
-                      </Button>
-                    </td>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="text-slate-500 dark:text-slate-400">Última sincronização</span>
+                      <span className="text-slate-700 dark:text-slate-200 text-right">{formatDate(d.ultima_sincronizacao)}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {d.tipo_conexao === 'rede' && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 min-w-[120px]"
+                          disabled={testingId === d.id}
+                          onClick={() => handleTestConnection(d.id)}
+                        >
+                          Testar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 min-w-[140px]"
+                          disabled={syncingId === d.id}
+                          onClick={() => handleSync(d.id)}
+                        >
+                          <RefreshCw size={14} className={syncingId === d.id ? 'animate-spin' : ''} />
+                          Sincronizar
+                        </Button>
+                      </>
+                    )}
+                    <Button size="sm" variant="outline" className="min-w-[44px]" onClick={() => openEdit(d)}>
+                      <Pencil size={14} />
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop/Tablet: tabela com scroll horizontal se necessário */}
+          <div className="hidden md:block rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div className="w-full overflow-x-auto">
+              <table className="min-w-[980px] w-full text-left">
+                <thead className="bg-slate-50 dark:bg-slate-800/50">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Nome</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Fabricante / Modelo</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Conexão</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Status</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Última sincronização</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Ações</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                  {devices.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">
+                        Nenhum relógio cadastrado. Clique em &quot;Cadastrar relógio&quot; para adicionar.
+                      </td>
+                    </tr>
+                  ) : (
+                    devices.map((d) => (
+                      <tr key={d.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                        <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{d.nome_dispositivo}</td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                          {[d.fabricante, d.modelo].filter(Boolean).join(' / ') || '—'}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                          {d.tipo_conexao === 'rede' && d.ip
+                            ? `${d.ip}:${d.porta ?? 80}`
+                            : TIPOS_CONEXAO.find((t) => t.value === d.tipo_conexao)?.label ?? d.tipo_conexao}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
+                              d.status === 'ativo'
+                                ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
+                                : d.status === 'erro'
+                                  ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'
+                                  : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                            }`}
+                          >
+                            {d.status === 'ativo' ? <Wifi size={12} /> : <WifiOff size={12} />}
+                            {d.status || 'inativo'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300 text-sm">{formatDate(d.ultima_sincronizacao)}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-2">
+                            {d.tipo_conexao === 'rede' && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={testingId === d.id}
+                                  onClick={() => handleTestConnection(d.id)}
+                                >
+                                  Testar
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={syncingId === d.id}
+                                  onClick={() => handleSync(d.id)}
+                                >
+                                  <RefreshCw size={14} className={syncingId === d.id ? 'animate-spin' : ''} />
+                                  Sincronizar
+                                </Button>
+                              </>
+                            )}
+                            <Button size="sm" variant="outline" onClick={() => openEdit(d)}>
+                              <Pencil size={14} />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
 
       {modalOpen && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-md w-full max-h-[85vh] overflow-y-auto p-6 flex flex-col">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-3 sm:p-4" role="dialog" aria-modal="true">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6 flex flex-col">
             <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">
               {editingId ? 'Editar relógio' : 'Novo relógio REP'}
             </h2>
@@ -359,11 +446,13 @@ const AdminRepDevices: React.FC = () => {
                 </label>
               </div>
             </div>
-            <div className="flex gap-2 mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
-              <Button variant="secondary" onClick={() => setModalOpen(false)}>
+            <div className="flex flex-col-reverse sm:flex-row gap-2 mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
+              <Button className="w-full sm:w-auto" variant="secondary" onClick={() => setModalOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={saveDevice}>Salvar</Button>
+              <Button className="w-full sm:w-auto" onClick={saveDevice}>
+                Salvar
+              </Button>
             </div>
           </div>
         </div>

@@ -67,6 +67,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Não cachear endpoints de API (podem conter dados sensíveis / variáveis por usuário)
+  if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) {
+    return;
+  }
+
   // Ignorar requisições para APIs externas (Firebase, etc)
   if (url.origin !== self.location.origin && 
       !url.hostname.includes('firebase') &&
@@ -99,7 +104,8 @@ self.addEventListener('fetch', (event) => {
             const responseToCache = response.clone();
 
             // Cachear assets estáticos
-            if (STATIC_ASSETS.some(asset => url.pathname.includes(asset))) {
+            const isStaticAsset = STATIC_ASSETS.some((asset) => url.pathname === asset);
+            if (isStaticAsset) {
               caches.open(CACHE_NAME)
                 .then((cache) => {
                   cache.put(request, responseToCache).catch(err => {
