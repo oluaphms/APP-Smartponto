@@ -233,8 +233,9 @@ const AdminEmployees: React.FC = () => {
     if (!user?.companyId || !isSupabaseConfigured) return;
     setLoadingData(true);
     try {
-      const [usersRows, schedRows, deptRows, jobTitlesRows, motivosRows, estruturasRows] = await Promise.all([
+      const [usersRows, legacyEmployeesRows, schedRows, deptRows, jobTitlesRows, motivosRows, estruturasRows] = await Promise.all([
         db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }], { column: 'created_at', ascending: false }) as Promise<any[]>,
+        db.select('employees', [{ column: 'company_id', operator: 'eq', value: user.companyId }]).catch(() => []) as Promise<any[]>,
         db.select('schedules', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
         db.select('departments', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
         db.select('job_titles', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
@@ -245,7 +246,7 @@ const AdminEmployees: React.FC = () => {
       const schedMap = new Map((schedRows ?? []).map((s: any) => [s.id, s.name]));
       const motivoMap = new Map((motivosRows ?? []).map((m: any) => [m.id, m.name]));
       const estruturaMap = new Map((estruturasRows ?? []).map((e: any) => [e.id, e.descricao || e.codigo]));
-      const list = (usersRows ?? []).map((u: any) => {
+      const listFromUsers: EmployeeRow[] = (usersRows ?? []).map((u: any) => {
         // TODO: substituir contagens estáticas por dados reais de atrasos, faltas, ajustes e inconsistências.
         const inputs: ReliabilityInputs = {
           atrasos: u.atrasos_count ?? 0,
@@ -255,34 +256,87 @@ const AdminEmployees: React.FC = () => {
         };
         const score = calcularScoreConfiabilidade(inputs);
         return {
-        id: u.id,
-        nome: u.nome || '',
-        cpf: u.cpf,
-        email: u.email || '',
-        phone: u.phone,
-        cargo: u.cargo || 'Colaborador',
-        department_id: u.department_id,
-        department_name: u.department_id ? deptMap.get(u.department_id) : undefined,
-        schedule_id: u.schedule_id,
-        schedule_name: u.schedule_id ? schedMap.get(u.schedule_id) : undefined,
-        estrutura_id: u.estrutura_id,
-        estrutura_name: u.estrutura_id ? estruturaMap.get(u.estrutura_id) : undefined,
-        status: u.status || 'active',
-        created_at: u.created_at,
-        numero_folha: u.numero_folha,
-        pis_pasep: u.pis_pasep,
-        numero_identificador: u.numero_identificador,
-        ctps: u.ctps,
-        admissao: u.admissao,
-        demissao: u.demissao,
-        motivo_demissao_id: u.motivo_demissao_id,
-        motivo_demissao_name: u.motivo_demissao_id ? motivoMap.get(u.motivo_demissao_id) : undefined,
-        observacoes: u.observacoes,
-        invisivel: !!u.invisivel,
-        employee_config: u.employee_config || {},
-        reliability_score: score,
-      }});
-      setRows(list);
+          id: u.id,
+          nome: u.nome || '',
+          cpf: u.cpf,
+          email: u.email || '',
+          phone: u.phone,
+          cargo: u.cargo || 'Colaborador',
+          department_id: u.department_id,
+          department_name: u.department_id ? deptMap.get(u.department_id) : undefined,
+          schedule_id: u.schedule_id,
+          schedule_name: u.schedule_id ? schedMap.get(u.schedule_id) : undefined,
+          estrutura_id: u.estrutura_id,
+          estrutura_name: u.estrutura_id ? estruturaMap.get(u.estrutura_id) : undefined,
+          status: u.status || 'active',
+          created_at: u.created_at,
+          numero_folha: u.numero_folha,
+          pis_pasep: u.pis_pasep,
+          numero_identificador: u.numero_identificador,
+          ctps: u.ctps,
+          admissao: u.admissao,
+          demissao: u.demissao,
+          motivo_demissao_id: u.motivo_demissao_id,
+          motivo_demissao_name: u.motivo_demissao_id ? motivoMap.get(u.motivo_demissao_id) : undefined,
+          observacoes: u.observacoes,
+          invisivel: !!u.invisivel,
+          employee_config: u.employee_config || {},
+          reliability_score: score,
+        };
+      });
+
+      // Alguns ambientes ainda usam tabela legacy employees; garantir que todo colaborador apareça na listagem,
+      // mesmo que ainda não tenha linha correspondente em users.
+      const byEmail = new Map(
+        listFromUsers
+          .filter((u) => u.email)
+          .map((u) => [u.email.toLowerCase(), u]),
+      );
+
+      const listFromLegacy: EmployeeRow[] = (legacyEmployeesRows ?? [])
+        .filter((e: any) => {
+          const email = (e.email || '').toString().trim().toLowerCase();
+          if (!email) return false;
+          return !byEmail.has(email);
+        })
+        .map((e: any) => {
+          const nome = e.nome || e.nome_completo || '';
+          const email = (e.email || '').toString().trim().toLowerCase();
+          const deptId = e.department_id || e.departamento_id || null;
+          const schedId = e.schedule_id || e.escala_id || null;
+          return {
+            id: e.id || `legacy-${email}`,
+            nome,
+            cpf: e.cpf || null,
+            email,
+            phone: e.phone || e.telefone || null,
+            cargo: e.cargo || 'Colaborador',
+            department_id: deptId,
+            department_name: deptId ? deptMap.get(deptId) : undefined,
+            schedule_id: schedId,
+            schedule_name: schedId ? schedMap.get(schedId) : undefined,
+            estrutura_id: e.estrutura_id || null,
+            estrutura_name: (e.estrutura_id && estruturaMap.get(e.estrutura_id)) || undefined,
+            status: e.status || 'active',
+            created_at: e.created_at || new Date().toISOString(),
+            numero_folha: e.numero_folha || null,
+            pis_pasep: e.pis_pasep || null,
+            numero_identificador: e.numero_identificador || null,
+            ctps: e.ctps || null,
+            admissao: e.admissao || null,
+            demissao: e.demissao || null,
+            motivo_demissao_id: e.motivo_demissao_id || null,
+            motivo_demissao_name: e.motivo_demissao_id ? motivoMap.get(e.motivo_demissao_id) : undefined,
+            observacoes: e.observacoes || null,
+            invisivel: !!e.invisivel,
+            employee_config: {} as EmployeeConfig,
+            reliability_score: undefined,
+            company_name: undefined,
+          };
+        });
+
+      const mergedList = [...listFromUsers, ...listFromLegacy];
+      setRows(mergedList);
       setSchedules((schedRows ?? []).map((s: any) => ({ id: s.id, name: s.name })));
       setDepartments((deptRows ?? []).map((d: any) => ({ id: d.id, name: d.name })));
       setEstruturas((estruturasRows ?? []).map((e: any) => ({ id: e.id, codigo: e.codigo || '', descricao: e.descricao || e.codigo || '' })));
