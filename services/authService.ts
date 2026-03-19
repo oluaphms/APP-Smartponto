@@ -29,7 +29,9 @@ class AuthService {
     const raw = (identifier || '').trim();
     if (!raw) return raw;
 
-    const lower = raw.toLowerCase();
+    // Normaliza espaços para evitar falhas de match por múltiplos espaços/tabs.
+    const rawNormalized = raw.replace(/\s+/g, ' ');
+    const lower = rawNormalized.toLowerCase();
 
     // 0) Atalhos comuns: "admin" e "administrador" sempre usam a conta admin padrão
     if (lower === 'admin' || lower === 'administrador') {
@@ -53,7 +55,7 @@ class AuthService {
     }
 
     // 2) CPF (somente dígitos, 11 caracteres)
-    const digitsOnly = raw.replace(/\D/g, '');
+    const digitsOnly = rawNormalized.replace(/\D/g, '');
     if (digitsOnly.length === 11) {
       try {
         const byCpf = await db.select('users', [
@@ -70,7 +72,8 @@ class AuthService {
     // 3) Nome completo exato
     try {
       const byFullName = await db.select('users', [
-        { column: 'nome', operator: 'eq', value: raw },
+        // `eq` é case-sensitive; `ilike` torna a busca case-insensitive.
+        { column: 'nome', operator: 'ilike', value: rawNormalized },
       ], undefined, 1);
       if (byFullName?.[0]?.email) {
         return String(byFullName[0].email).trim().toLowerCase();
@@ -80,7 +83,7 @@ class AuthService {
     }
 
     // 4) Primeiro nome com ILIKE (início do nome)
-    const firstName = raw.split(/\s+/)[0];
+    const firstName = rawNormalized.split(/\s+/)[0];
     if (firstName) {
       try {
         const byFirstName = await db.select('users', [
@@ -88,6 +91,19 @@ class AuthService {
         ], undefined, 1);
         if (byFirstName?.[0]?.email) {
           return String(byFirstName[0].email).trim().toLowerCase();
+        }
+      } catch {
+        // ignora; cai no fallback
+      }
+
+      // 4.1) Primeiro nome contido em qualquer posição
+      // (ex.: "Morais Paulo" precisa casar com "%Paulo%")
+      try {
+        const byFirstNameContains = await db.select('users', [
+          { column: 'nome', operator: 'ilike', value: `%${firstName}%` },
+        ], undefined, 1);
+        if (byFirstNameContains?.[0]?.email) {
+          return String(byFirstNameContains[0].email).trim().toLowerCase();
         }
       } catch {
         // ignora; cai no fallback
