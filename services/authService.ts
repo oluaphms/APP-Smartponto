@@ -99,6 +99,62 @@ class AuthService {
   }
 
   /**
+   * Perfil mínimo quando existe sessão no Supabase Auth mas `public.users` falha
+   * (RLS, timeout, rede lenta). Mantém o usuário logado no React em vez de voltar à tela de login.
+   */
+  private async buildMinimalAppUserFromAuthUser(supabaseUser: any): Promise<User> {
+    const email = (supabaseUser?.email || '').trim().toLowerCase();
+    let fallbackRole: User['role'] = 'employee';
+    let fallbackCompanyId = '';
+    if (email && supabaseUser?.id) {
+      try {
+        const roleRows = await Promise.race([
+          db.select('users', [{ column: 'id', operator: 'eq', value: supabaseUser.id }], undefined as any, 1),
+          new Promise<any[]>((r) => setTimeout(() => r([]), 4000)),
+        ]);
+        if (roleRows?.[0]) {
+          const row = roleRows[0];
+          if (row.role) {
+            const r = String(row.role).toLowerCase();
+            if (r === 'admin' || r === 'hr' || r === 'supervisor') fallbackRole = r as User['role'];
+          }
+          if (row.company_id) fallbackCompanyId = String(row.company_id);
+        }
+      } catch {
+        // mantém defaults
+      }
+    }
+    const metaRoleRaw =
+      supabaseUser.app_metadata?.role ??
+      supabaseUser.user_metadata?.role ??
+      (Array.isArray(supabaseUser.app_metadata?.roles) ? supabaseUser.app_metadata.roles[0] : undefined);
+    if (typeof metaRoleRaw === 'string') {
+      const r = metaRoleRaw.toLowerCase();
+      if (r === 'admin' || r === 'hr' || r === 'supervisor' || r === 'employee') {
+        fallbackRole = r as User['role'];
+      }
+    }
+    if (email === 'admin@smartponto.com' || email === 'desenvolvedor@smartponto.com') {
+      fallbackRole = 'admin';
+    }
+    if (email === 'funcionario@smartponto.com') {
+      fallbackRole = 'employee';
+    }
+    return {
+      id: supabaseUser.id,
+      nome: supabaseUser.user_metadata?.nome || (email ? email.split('@')[0] : 'Usuário'),
+      email: supabaseUser.email || '',
+      cargo: 'Colaborador',
+      role: fallbackRole,
+      createdAt: new Date(),
+      companyId: fallbackCompanyId,
+      departmentId: '',
+      avatar: supabaseUser.user_metadata?.avatar_url,
+      preferences: { notifications: true, theme: 'light', allowManualPunch: true, language: 'pt-BR' },
+    };
+  }
+
+  /**
    * Converte Supabase User para User do sistema
    */
   private async supabaseUserToAppUser(supabaseUser: any): Promise<User | null> {
@@ -169,12 +225,11 @@ class AuthService {
         }
       }
       const emailLower = email.toLowerCase();
-      if (
-        emailLower === 'admin@smartponto.com' ||
-        emailLower === 'desenvolvedor@smartponto.com' ||
-        emailLower === 'funcionario@smartponto.com'
-      ) {
+      if (emailLower === 'admin@smartponto.com' || emailLower === 'desenvolvedor@smartponto.com') {
         resolvedRole = 'admin';
+      }
+      if (emailLower === 'funcionario@smartponto.com') {
+        resolvedRole = 'employee';
       }
 
       const newUser: User = {
@@ -258,12 +313,11 @@ class AuthService {
         }
       }
       const emailLower = email.toLowerCase();
-      if (
-        emailLower === 'admin@smartponto.com' ||
-        emailLower === 'desenvolvedor@smartponto.com' ||
-        emailLower === 'funcionario@smartponto.com'
-      ) {
+      if (emailLower === 'admin@smartponto.com' || emailLower === 'desenvolvedor@smartponto.com') {
         resolvedRole = 'admin';
+      }
+      if (emailLower === 'funcionario@smartponto.com') {
+        resolvedRole = 'employee';
       }
 
       return {
@@ -323,60 +377,13 @@ class AuthService {
           }
           return { user: appUser, error: null };
         }
-        // Fallback: perfil não carregou a tempo (timeout). Tentar buscar só o role no DB
-        // para admin/desenvolvedor não caírem na dashboard de funcionário.
-        let fallbackRole: User['role'] = 'employee';
-        let fallbackCompanyId = '';
+        // Fallback: perfil não carregou a tempo (timeout) — mesmo fluxo que onAuthStateChanged (não deslogar)
+        const minimalUser = await this.buildMinimalAppUserFromAuthUser(data.user);
         try {
-          const roleRows = await Promise.race([
-            db.select('users', [{ column: 'id', operator: 'eq', value: data.user.id }], undefined as any, 1),
-            new Promise<any[]>(r => setTimeout(() => r([]), 4000)),
-          ]);
-          if (roleRows?.[0]) {
-            const row = roleRows[0];
-            if (row.role) {
-              const r = String(row.role).toLowerCase();
-              if (r === 'admin' || r === 'hr' || r === 'supervisor') fallbackRole = r as User['role'];
-            }
-            if (row.company_id) fallbackCompanyId = String(row.company_id);
-          }
+          localStorage.setItem('current_user', JSON.stringify(minimalUser));
         } catch {
-          // mantém employee e companyId vazio
+          // ignore
         }
-        // Se não conseguimos ler do banco, ainda tentamos usar role do metadata do usuário de auth
-        const metaRoleRaw =
-          data.user.app_metadata?.role ??
-          data.user.user_metadata?.role ??
-          (Array.isArray(data.user.app_metadata?.roles) ? data.user.app_metadata.roles[0] : undefined);
-        if (typeof metaRoleRaw === 'string') {
-          const r = metaRoleRaw.toLowerCase();
-          if (r === 'admin' || r === 'hr' || r === 'supervisor' || r === 'employee') {
-            fallbackRole = r as User['role'];
-          }
-        }
-        const u = data.user;
-        const emailForFallback = (u.email || '').trim().toLowerCase();
-        if (
-          emailForFallback === 'admin@smartponto.com' ||
-          emailForFallback === 'desenvolvedor@smartponto.com'
-        ) {
-          fallbackRole = 'admin';
-        }
-        if (emailForFallback === 'funcionario@smartponto.com') {
-          fallbackRole = 'employee';
-        }
-        const minimalUser: User = {
-          id: u.id,
-          nome: u.user_metadata?.nome || email.split('@')[0] || 'Usuário',
-          email: u.email || '',
-          cargo: 'Colaborador',
-          role: fallbackRole,
-          createdAt: new Date(),
-          companyId: fallbackCompanyId,
-          departmentId: '',
-          avatar: u.user_metadata?.avatar_url,
-          preferences: { notifications: true, theme: 'light', allowManualPunch: true, language: 'pt-BR' }
-        };
         return { user: minimalUser, error: null };
       }
       
@@ -667,27 +674,55 @@ class AuthService {
         return null;
       }
 
-      // Timeout de segurança para evitar travamento
-      const getUserPromise = auth.getUser();
-      const timeoutPromise = new Promise<any>((resolve) => {
-        setTimeout(() => resolve(null), 3000);
-      });
-      
-      const supabaseUser = await Promise.race([getUserPromise, timeoutPromise]);
-
-      if (!supabaseUser) {
-        // Sem sessão válida → força fluxo de login (não reaproveita usuário antigo do localStorage)
+      // Usar sessão local primeiro (rápido). `getUser()` valida na rede e podia perder a corrida de 3s,
+      // apagando `current_user` e mandando de volta ao login mesmo com sessão válida no sessionStorage.
+      const session = await auth.getSession();
+      if (!session?.user) {
         try {
           if (typeof window !== 'undefined') {
             window.localStorage.removeItem('current_user');
           }
         } catch {
-          // ignora erro de limpeza
+          // ignora
         }
         return null;
       }
 
-      return await this.supabaseUserToAppUser(supabaseUser);
+      const supabaseUser = session.user;
+
+      try {
+        const appUser = await this.supabaseUserToAppUser(supabaseUser);
+        if (appUser) {
+          try {
+            if (typeof window !== 'undefined') {
+              window.localStorage.setItem('current_user', JSON.stringify(appUser));
+            }
+          } catch {
+            // ignora
+          }
+          return appUser;
+        }
+      } catch (error: any) {
+        if (error?.message?.includes('Refresh Token') || error?.message?.includes('Auth session missing')) {
+          try {
+            await auth.signOut();
+          } catch {
+            // Ignorar erros ao limpar sessão
+          }
+          return null;
+        }
+        // Perfil completo falhou (RLS/rede): segue com usuário mínimo — não deslogar
+      }
+
+      const minimal = await this.buildMinimalAppUserFromAuthUser(supabaseUser);
+      try {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('current_user', JSON.stringify(minimal));
+        }
+      } catch {
+        // ignora
+      }
+      return minimal;
     } catch (error: any) {
       // Tratar erros de refresh token inválido silenciosamente (comportamento esperado quando não há sessão)
       if (error?.message?.includes('Refresh Token') || error?.message?.includes('Auth session missing')) {
@@ -712,8 +747,23 @@ class AuthService {
     return auth.onAuthStateChange(async (event, session) => {
       try {
         if (session?.user) {
-          const appUser = await this.supabaseUserToAppUser(session.user);
-          callback(appUser ?? null);
+          let appUser: User | null = null;
+          try {
+            appUser = await this.supabaseUserToAppUser(session.user);
+          } catch {
+            appUser = null;
+          }
+          if (!appUser) {
+            appUser = await this.buildMinimalAppUserFromAuthUser(session.user);
+          }
+          try {
+            if (typeof window !== 'undefined') {
+              window.localStorage.setItem('current_user', JSON.stringify(appUser));
+            }
+          } catch {
+            // ignora
+          }
+          callback(appUser);
         } else {
           try {
             if (typeof window !== 'undefined') window.localStorage.removeItem('current_user');
@@ -723,12 +773,33 @@ class AuthService {
           callback(null);
         }
       } catch (err) {
-        try {
-          if (typeof window !== 'undefined') window.localStorage.removeItem('current_user');
-        } catch {
-          // ignora
+        if (session?.user) {
+          try {
+            const appUser = await this.buildMinimalAppUserFromAuthUser(session.user);
+            try {
+              if (typeof window !== 'undefined') {
+                window.localStorage.setItem('current_user', JSON.stringify(appUser));
+              }
+            } catch {
+              // ignora
+            }
+            callback(appUser);
+          } catch {
+            try {
+              if (typeof window !== 'undefined') window.localStorage.removeItem('current_user');
+            } catch {
+              // ignora
+            }
+            callback(null);
+          }
+        } else {
+          try {
+            if (typeof window !== 'undefined') window.localStorage.removeItem('current_user');
+          } catch {
+            // ignora
+          }
+          callback(null);
         }
-        callback(null);
       }
     });
   }

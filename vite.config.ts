@@ -38,7 +38,7 @@ export default defineConfig(({ mode }) => {
 
     server: {
       port: 3010,
-      strictPort: false,
+      strictPort: true,
       host: true,
       open: true
     },
@@ -60,18 +60,48 @@ export default defineConfig(({ mode }) => {
         'es-toolkit/compat/get': path.resolve(projectRoot, 'src/shim/es-toolkit-compat-get.js'),
         // shim importa daqui (evita caminho relativo frágil)
         'es-toolkit-compat-get-internal': path.resolve(projectRoot, 'node_modules/es-toolkit/dist/compat/object/get.js'),
+        // outras funções de es-toolkit usadas como default (ex.: uniqBy, sortBy)
+        'es-toolkit/compat/uniqBy': path.resolve(projectRoot, 'src/shim/es-toolkit-compat-uniqBy.js'),
+        'es-toolkit/compat/sortBy': path.resolve(projectRoot, 'src/shim/es-toolkit-compat-sortBy.js'),
+        'es-toolkit/compat/throttle': path.resolve(projectRoot, 'src/shim/es-toolkit-compat-throttle.js'),
+        'es-toolkit/compat/mapValues': path.resolve(projectRoot, 'src/shim/es-toolkit-compat-mapValues.js'),
+        'es-toolkit/compat/range': path.resolve(projectRoot, 'src/shim/es-toolkit-compat-range.js'),
+        'es-toolkit/compat/range.js': path.resolve(projectRoot, 'src/shim/es-toolkit-compat-range.js'),
+        'es-toolkit/compat/every': path.resolve(projectRoot, 'src/shim/es-toolkit-compat-every.js'),
+        // use-sync-external-store: dependências (ex.: recharts) importam /with-selector; o módulo é CJS e não expõe named no ESM.
+        // Só /with-selector aponta para o nosso shim. O shim importa o pacote real em /shim/with-selector (node_modules) — NÃO aliasar shim/ para evitar import circular.
+        'use-sync-external-store/with-selector': path.resolve(projectRoot, 'src/shim/use-sync-external-store-with-selector.js'),
+        'use-sync-external-store/with-selector.js': path.resolve(projectRoot, 'src/shim/use-sync-external-store-with-selector.js'),
         // victory-vendor: pacote não inclui ./es/d3-*.js no npm
         'victory-vendor/d3-shape': path.resolve(projectRoot, 'node_modules/d3-shape'),
         'victory-vendor/d3-scale': path.resolve(projectRoot, 'node_modules/d3-scale'),
+        // eventemitter3: index.mjs importa default de index.js (CJS) → quebra no Vite dev sem interop
+        eventemitter3: path.resolve(projectRoot, 'src/shim/eventemitter3.js'),
+        'eventemitter3/index.mjs': path.resolve(projectRoot, 'src/shim/eventemitter3.js'),
+        'eventemitter3-cjs-entry': path.resolve(projectRoot, 'node_modules/eventemitter3/index.js'),
       },
       dedupe: ['react', 'react-dom'],
     },
 
     optimizeDeps: {
-      // Só pre-bundlar React: libs que usam React ficam de fora e importam o mesmo react (evita useState of null)
-      // es-toolkit NÃO deve estar em include: o pacote usa named exports; pre-bundlar quebra "does not provide an export named 'default'"
-      include: ['react', 'react-dom', 'scheduler', 'cookie', 'set-cookie-parser'],
-      exclude: ['recharts', 'lucide-react', 'framer-motion', 'react-router-dom'],
+      // Pre-bundlar React e libs problemáticas: recharts puxa es-toolkit (default imports) e use-sync-external-store (CJS);
+      // ao incluir recharts, o Vite resolve os aliases (shims es-toolkit + use-sync-external-store) durante o pre-bundle.
+      // es-toolkit NÃO como entrada direta: só via shims (alias). use-sync-external-store: via nosso shim.
+      include: [
+        'react',
+        'react-dom',
+        'eventemitter3',
+        'use-sync-external-store/shim/with-selector',
+        'use-sync-external-store/shim/with-selector.js',
+        'es-toolkit/compat/range',
+        'es-toolkit/compat/range.js',
+        'recharts',
+        'scheduler',
+        'cookie',
+        'set-cookie-parser',
+      ],
+      // recharts precisa passar pelo pre-bundle para que deps CJS (ex.: eventemitter3) tenham interop ESM correto
+      exclude: ['lucide-react', 'framer-motion', 'react-router-dom'],
       esbuildOptions: {
         mainFields: ['module', 'main'],
       },

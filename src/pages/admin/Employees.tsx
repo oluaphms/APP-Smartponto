@@ -1163,12 +1163,24 @@ const AdminEmployees: React.FC = () => {
         </div>
 
         {modalOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={() => !saving && setModalOpen(false)}>
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => !saving && setModalOpen(false)}
+          >
             <div
               ref={scrollModalTopRef}
               className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-6"
               onClick={(e) => e.stopPropagation()}
             >
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!saving) handleSave();
+                }}
+                className="space-y-6"
+              >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0">
                   <User className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
@@ -1450,8 +1462,15 @@ const AdminEmployees: React.FC = () => {
               </p>
               <div className="flex gap-3 pt-2 border-t border-slate-200 dark:border-slate-700">
                 <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium">Cancelar</button>
-                <button type="button" onClick={handleSave} disabled={saving} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50">{editingId ? 'Concluir' : 'Concluir'}</button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {editingId ? 'Concluir' : 'Concluir'}
+                </button>
               </div>
+              </form>
             </div>
           </div>
         )}
