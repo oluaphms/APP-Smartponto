@@ -38,6 +38,14 @@ const ReportsView: React.FC<ReportsViewProps> = ({ admin }) => {
   const [selectedDepartment, setSelectedDepartment] = useState('');
 
   useEffect(() => {
+    const prevTitle = document.title;
+    document.title = 'ChronoDigital | Ponto Inteligente';
+    return () => {
+      document.title = prevTitle;
+    };
+  }, []);
+
+  useEffect(() => {
     PontoService.getAllEmployees(admin.companyId).then(setEmployees);
     PontoService.getDepartments(admin.companyId).then(setDepartments);
     handleGenerateReport();

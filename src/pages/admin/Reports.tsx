@@ -38,6 +38,14 @@ const AdminReports: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
+    const prevTitle = document.title;
+    document.title = 'ChronoDigital | Relatórios';
+    return () => {
+      document.title = prevTitle;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!user?.companyId || !isSupabaseConfigured) return;
     const load = async () => {
       const usersRows = (await db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }])) as any[];
@@ -238,8 +246,50 @@ const AdminReports: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #admin-reports-print-root,
+          #admin-reports-print-root * {
+            visibility: visible !important;
+          }
+          #admin-reports-print-root {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            background: #fff !important;
+            color: #000 !important;
+            margin: 0;
+            padding: 0;
+          }
+          .no-print {
+            display: none !important;
+          }
+          .print-table-wrap {
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 10px !important;
+            overflow: hidden !important;
+          }
+          .print-header {
+            display: block !important;
+            margin-bottom: 12px !important;
+          }
+          .print-header h1 {
+            font-size: 20px !important;
+            font-weight: 700 !important;
+            margin: 0 0 4px 0 !important;
+          }
+          .print-header p {
+            margin: 0 !important;
+            font-size: 12px !important;
+            color: #334155 !important;
+          }
+        }
+      `}</style>
       <PageHeader title="Relatórios" />
-      <div className="flex flex-wrap gap-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+      <div className="flex flex-wrap gap-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 no-print">
         <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase self-center">Motor de jornada:</span>
         <Link to="/admin/reports/work-hours" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
           <Clock className="w-4 h-4" /> Jornada
@@ -258,11 +308,11 @@ const AdminReports: React.FC = () => {
         </Link>
       </div>
       {message && (
-        <div className={`p-4 rounded-xl ${message.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'} text-sm`}>
+        <div className={`p-4 rounded-xl ${message.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'} text-sm no-print`}>
           {message.text}
         </div>
       )}
-      <div className="flex flex-wrap gap-4 items-end p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+      <div className="flex flex-wrap gap-4 items-end p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 no-print">
         <div>
           <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Tipo</label>
           <select value={reportType} onChange={(e) => setReportType(e.target.value as ReportType)} className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white min-w-[180px]">
@@ -310,7 +360,14 @@ const AdminReports: React.FC = () => {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 overflow-x-auto print:block">
+      <div id="admin-reports-print-root" className="space-y-3">
+        <div className="hidden print-header">
+          <h1>ChronoDigital - Relatório</h1>
+          <p>
+            Tipo: {reportType === 'hours' ? 'Horas trabalhadas' : reportType === 'absences' ? 'Faltas' : reportType === 'delays' ? 'Atrasos' : 'Banco de horas'} | Período: {periodStart} até {periodEnd}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 overflow-x-auto print:block print-table-wrap">
         {loadingData ? (
           <div className="p-12 text-center text-slate-500">Carregando...</div>
         ) : (
@@ -341,6 +398,7 @@ const AdminReports: React.FC = () => {
         {!loadingData && data.length === 0 && (
           <p className="p-8 text-center text-slate-500 dark:text-slate-400">Execute o relatório para ver dados.</p>
         )}
+        </div>
       </div>
     </div>
   );
