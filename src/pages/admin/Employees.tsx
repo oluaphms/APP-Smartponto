@@ -135,6 +135,13 @@ interface ScheduleOption {
 
 const OUTRO_CARGO_VALUE = '__outro__';
 
+/** Normaliza valor vindo do banco (boolean ou string 'true'/'false') para boolean. Evita que funcionários com invisivel='false' (string) fiquem ocultos. */
+function parseBooleanFromDb(value: unknown): boolean {
+  if (value === true || value === 'true' || value === 1) return true;
+  if (value === false || value === 'false' || value === 0 || value === null || value === undefined) return false;
+  return !!value;
+}
+
 /** Linha do CSV de importação (colunas: nome, email, senha, cargo, telefone, cpf, departamento, escala) */
 interface ImportRow {
   nome: string;
@@ -279,7 +286,7 @@ const AdminEmployees: React.FC = () => {
           motivo_demissao_id: u.motivo_demissao_id,
           motivo_demissao_name: u.motivo_demissao_id ? motivoMap.get(u.motivo_demissao_id) : undefined,
           observacoes: u.observacoes,
-          invisivel: !!u.invisivel,
+          invisivel: parseBooleanFromDb(u.invisivel),
           employee_config: u.employee_config || {},
           reliability_score: score,
         };
@@ -328,7 +335,7 @@ const AdminEmployees: React.FC = () => {
             motivo_demissao_id: e.motivo_demissao_id || null,
             motivo_demissao_name: e.motivo_demissao_id ? motivoMap.get(e.motivo_demissao_id) : undefined,
             observacoes: e.observacoes || null,
-            invisivel: !!e.invisivel,
+            invisivel: parseBooleanFromDb(e.invisivel),
             employee_config: {} as EmployeeConfig,
             reliability_score: undefined,
             company_name: undefined,
