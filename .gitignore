@@ -9,6 +9,8 @@ lerna-debug.log*
 
 # Dependencies
 node_modules
+# Deploy (Vercel): use apenas package-lock.json + npm; evita detecção de pnpm e falha de peers
+pnpm-lock.yaml
 .pnp
 .pnp.js
 .pnpm-store
