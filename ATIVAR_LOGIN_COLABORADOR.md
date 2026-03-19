@@ -1,6 +1,6 @@
 # Ativar login de colaborador já cadastrado
 
-Quando um colaborador aparece na tabela de funcionários mas **não consegue logar** (erro "Usuário ou senha incorreto" ou 400 no login), em geral ele foi cadastrado ou importado **antes** da rota `/api/create-employee-auth` estar ativa. Nesse caso o registro existe em `public.users`, mas **não** em `auth.users`, então o Supabase Auth rejeita o login.
+Quando um colaborador aparece na tabela de funcionários mas **não consegue logar** (erro "Usuário ou senha incorreto" ou 400 no login), em geral ele foi cadastrado ou importado **antes** da rota `/api/auth-admin` (ação create-user) estar ativa. Nesse caso o registro existe em `public.users`, mas **não** em `auth.users`, então o Supabase Auth rejeita o login.
 
 ## Como corrigir (um colaborador)
 
@@ -38,4 +38,4 @@ WHERE email = 'paulohmorais@hotmail.com';
 
 ## Para novos cadastros e importações
 
-Com as variáveis de ambiente configuradas na Vercel (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`) e a rota `/api/create-employee-auth` ativa, **novos** colaboradores (cadastrados manualmente ou importados) já passam a ter conta no Auth e conseguem logar normalmente. Colaboradores importados **sem senha na planilha** usam a senha provisória **123456**.
+Com as variáveis de ambiente configuradas na Vercel (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`) e a rota `/api/auth-admin` ativa, **novos** colaboradores (cadastrados manualmente ou importados) já passam a ter conta no Auth e conseguem logar normalmente. Colaboradores importados **sem senha na planilha** usam a senha provisória **123456**. (A API única `auth-admin` concentra as ações confirm-email, set-password e create-user para respeitar o limite de 12 Serverless Functions do plano Hobby.)

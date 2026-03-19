@@ -13,10 +13,10 @@ async function confirmEmployeeEmailInAuth(email: string): Promise<void> {
     if (!token) return;
     const base = (import.meta.env.VITE_APP_URL as string) || (typeof window !== 'undefined' ? window.location.origin : '');
     if (!base) return;
-    const res = await fetch(`${base.replace(/\/$/, '')}/api/confirm-employee-email`, {
+    const res = await fetch(`${base.replace(/\/$/, '')}/api/auth-admin`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      body: JSON.stringify({ action: 'confirm-email', email: email.trim().toLowerCase() }),
     });
     if (!res.ok) return;
   } catch {
@@ -32,10 +32,10 @@ async function setEmployeePasswordInAuth(email: string, newPassword: string): Pr
     if (!token) return { success: false, error: 'Sessão do administrador não encontrada.' };
     const base = (import.meta.env.VITE_APP_URL as string) || (typeof window !== 'undefined' ? window.location.origin : '');
     if (!base) return { success: false, error: 'URL do app não resolvida.' };
-    const res = await fetch(`${base.replace(/\/$/, '')}/api/set-employee-password`, {
+    const res = await fetch(`${base.replace(/\/$/, '')}/api/auth-admin`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ email: email.trim().toLowerCase(), newPassword: newPassword.trim() }),
+      body: JSON.stringify({ action: 'set-password', email: email.trim().toLowerCase(), newPassword: newPassword.trim() }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -48,7 +48,7 @@ async function setEmployeePasswordInAuth(email: string, newPassword: string): Pr
   }
 }
 
-/** Código de erro retornado pela API create-employee-auth (para mensagens consistentes). */
+/** Código de erro retornado pela API auth-admin action create-user (para mensagens consistentes). */
 const AUTH_ERROR_CODES: Record<string, string> = {
   USER_ALREADY_EXISTS: 'E-mail já cadastrado.',
   INVALID_PASSWORD: 'Senha inválida (mínimo 6 caracteres).',
@@ -71,10 +71,10 @@ async function createEmployeeAuthUser(params: { email: string; password: string;
   const base = (import.meta.env.VITE_APP_URL as string) || (typeof window !== 'undefined' ? window.location.origin : '');
   if (!base) throw new Error('URL do app não resolvida.');
 
-  const res = await fetch(`${base.replace(/\/$/, '')}/api/create-employee-auth`, {
+  const res = await fetch(`${base.replace(/\/$/, '')}/api/auth-admin`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ email, password: params.password, metadata: params.metadata || undefined }),
+    body: JSON.stringify({ action: 'create-user', email, password: params.password, metadata: params.metadata || undefined }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
