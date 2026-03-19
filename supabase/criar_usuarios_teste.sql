@@ -18,20 +18,64 @@
 -- PASSO 2 – Executar este script no SQL Editor do Supabase
 --    Ele cria uma empresa de teste (se não existir) e insere/atualiza
 --    os perfis em public.users com nome, cargo e role corretos.
+--
+--    Empresa extra só para testes isolados: supabase/seed_empresa_teste.sql
 -- ============================================================
 
--- Garantir empresa de teste para vincular os usuários
-INSERT INTO public.companies (id, nome, name, created_at, updated_at)
+-- Garantir empresa de teste para vincular os usuários (com settings/geofence para o app)
+INSERT INTO public.companies (
+  id,
+  nome,
+  name,
+  slug,
+  cnpj,
+  address,
+  geofence,
+  settings,
+  bairro,
+  cidade,
+  estado,
+  cep,
+  cei,
+  created_at,
+  updated_at
+)
 VALUES (
   'comp_1',
   'Empresa Teste SmartPonto',
   'Empresa Teste SmartPonto',
+  'empresa-teste-smartponto',
+  '47.960.950/0001-21',
+  'Rua Teste, 100',
+  '{"lat": -23.5614, "lng": -46.6559, "radius": 150}'::jsonb,
+  '{
+    "fence": {"lat": -23.5614, "lng": -46.6559, "radius": 150},
+    "allowManualPunch": true,
+    "requirePhoto": false,
+    "standardHours": {"start": "09:00", "end": "18:00"},
+    "delayPolicy": {"toleranceMinutes": 15}
+  }'::jsonb,
+  'Centro',
+  'São Paulo',
+  'SP',
+  '01000-000',
+  '12.345.67890-12',
   NOW(),
   NOW()
 )
 ON CONFLICT (id) DO UPDATE SET
   nome = EXCLUDED.nome,
   name = EXCLUDED.name,
+  slug = EXCLUDED.slug,
+  cnpj = EXCLUDED.cnpj,
+  address = EXCLUDED.address,
+  geofence = EXCLUDED.geofence,
+  settings = EXCLUDED.settings,
+  bairro = EXCLUDED.bairro,
+  cidade = EXCLUDED.cidade,
+  estado = EXCLUDED.estado,
+  cep = EXCLUDED.cep,
+  cei = EXCLUDED.cei,
   updated_at = NOW();
 
 -- Perfil e role para cada usuário de teste (quando existir em auth.users)
