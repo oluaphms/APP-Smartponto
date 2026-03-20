@@ -546,7 +546,11 @@ const AdminEmployees: React.FC = () => {
         employee_config: buildEmployeeConfig(),
       };
       if (editingId) {
-        await db.update('users', editingId, payload);
+        const resultRow = await db.update('users', editingId, payload).catch(() => null);
+        if (!resultRow) {
+          // If update didn't return a row, it might be a legacy employee not yet in the 'users' table.
+          await db.update('employees', editingId.replace(/^legacy-/, ''), payload).catch(() => null);
+        }
         setSuccess('Funcionário atualizado com sucesso.');
         setModalOpen(false);
         if (form.demissao?.trim()) {
@@ -1130,10 +1134,10 @@ const AdminEmployees: React.FC = () => {
                         {typeof row.reliability_score === 'number' ? (
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${row.reliability_score >= 90
-                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                                : row.reliability_score >= 70
-                                  ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-                                  : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                              : row.reliability_score >= 70
+                                ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                                : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
                               }`}
                             title="Score de confiabilidade baseado em atrasos, faltas, ajustes e inconsistências."
                           >
@@ -1384,7 +1388,7 @@ const AdminEmployees: React.FC = () => {
                     <div className="grid grid-cols-1 gap-3">
                       <div>
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Assinatura Digital (senha para Lançamento de Eventos)</label>
-                        <input type="password" value={form.assinatura_digital} onChange={(e) => setForm({ ...form, assinatura_digital: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Senha para eventos (vales, transporte, etc.)" />
+                        <input type="password" autoComplete="new-password" value={form.assinatura_digital} onChange={(e) => setForm({ ...form, assinatura_digital: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Senha para eventos (vales, transporte, etc.)" />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Periféricos</label>
@@ -1406,6 +1410,7 @@ const AdminEmployees: React.FC = () => {
                         <div className="relative">
                           <input
                             type={showSenhaWeb ? 'text' : 'password'}
+                            autoComplete="new-password"
                             value={form.senha_web}
                             onChange={(e) => setForm({ ...form, senha_web: e.target.value })}
                             className="w-full pl-3 pr-10 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
