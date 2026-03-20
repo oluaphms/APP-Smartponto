@@ -551,12 +551,23 @@ const AdminEmployees: React.FC = () => {
       if (editingId) {
         const editingRow = rows.find((r) => r.id === editingId);
         const isLegacyRow = editingId.startsWith('legacy-');
+        let updated = false;
 
         if (!isLegacyRow) {
-          const resultRow = await db.update('users', editingId, payload).catch(() => null);
-          if (!resultRow) {
+          try {
+            const resultRow = await db.update('users', editingId, payload);
+            updated = !!resultRow;
+          } catch {
+            updated = false;
+          }
+          if (!updated) {
             // Compatibilidade: se o registro não estiver em users, tentar atualizar em employees.
-            await db.update('employees', editingId, payload).catch(() => null);
+            try {
+              const legacyUpdated = await db.update('employees', editingId, payload);
+              updated = !!legacyUpdated;
+            } catch {
+              updated = false;
+            }
           }
         } else {
           // Linha legada (employees sem id estável na lista): localizar por id legado ou e-mail.
@@ -564,7 +575,8 @@ const AdminEmployees: React.FC = () => {
           const legacyId = editingRow?.legacy_id;
 
           if (legacyId) {
-            await db.update('employees', legacyId, payload);
+            const legacyUpdated = await db.update('employees', legacyId, payload);
+            updated = !!legacyUpdated;
           } else if (legacyEmail) {
             const legacyRows = await db.select('employees', [
               { column: 'company_id', operator: 'eq', value: user.companyId },
@@ -574,10 +586,14 @@ const AdminEmployees: React.FC = () => {
             if (!targetLegacy?.id) {
               throw new Error('Funcionário legado não encontrado para atualização.');
             }
-            await db.update('employees', targetLegacy.id, payload);
+            const legacyUpdated = await db.update('employees', targetLegacy.id, payload);
+            updated = !!legacyUpdated;
           } else {
             throw new Error('Não foi possível identificar o funcionário legado para salvar.');
           }
+        }
+        if (!updated) {
+          throw new Error('Não foi possível salvar as alterações. Verifique permissões da tabela users/employees e tente novamente.');
         }
         setSuccess('Funcionário atualizado com sucesso.');
         setModalOpen(false);
