@@ -466,10 +466,10 @@ const AdminEmployees: React.FC = () => {
       nao_inclusao_ponto_manual: !!web.nao_inclusao_ponto_manual,
       bloquear_web: !!web.bloquear_web,
       controlar_solicitacoes: (web.controlar_solicitacoes as any) || '',
-      afastamento_inicio: '',
-      afastamento_fim: '',
-      afastamento_justificativa: '',
-      afastamento_motivo: '',
+      afastamento_inicio: cfg.afastamentos?.[0]?.periodo_inicio || '',
+      afastamento_fim: cfg.afastamentos?.[0]?.periodo_fim || '',
+      afastamento_justificativa: cfg.afastamentos?.[0]?.justificativa || '',
+      afastamento_motivo: cfg.afastamentos?.[0]?.motivo || '',
       photo_preview: cfg.photo_url || '',
     });
     setModalOpen(true);
@@ -478,9 +478,12 @@ const AdminEmployees: React.FC = () => {
   };
 
   const buildEmployeeConfig = (): EmployeeConfig => {
+    const existingConfig = editingId ? (rows.find(r => r.id === editingId)?.employee_config || {}) : {};
     const cfg: EmployeeConfig = {
+      ...existingConfig,
       perifericos: form.perifericos,
       dados_web: {
+        ...(existingConfig.dados_web || {}),
         senha_web: form.senha_web || undefined,
         periodo_encerrado: form.periodo_encerrado || undefined,
         nao_alterar_dados_web: form.nao_alterar_dados_web,
@@ -491,9 +494,18 @@ const AdminEmployees: React.FC = () => {
     };
     if (form.assinatura_digital.trim()) cfg.assinatura_digital = form.assinatura_digital;
     if (form.photo_preview) cfg.photo_url = form.photo_preview;
+
     if (form.afastamento_inicio && form.afastamento_fim) {
-      cfg.afastamentos = [{ periodo_inicio: form.afastamento_inicio, periodo_fim: form.afastamento_fim, justificativa: form.afastamento_justificativa, motivo: form.afastamento_motivo }];
+      cfg.afastamentos = [{
+        periodo_inicio: form.afastamento_inicio,
+        periodo_fim: form.afastamento_fim,
+        justificativa: form.afastamento_justificativa,
+        motivo: form.afastamento_motivo
+      }];
+    } else {
+      delete cfg.afastamentos;
     }
+
     return cfg;
   };
 
@@ -702,14 +714,14 @@ const AdminEmployees: React.FC = () => {
   const visibleRows = showInvisiveis ? rows : rows.filter((r) => !r.invisivel);
   const filteredRows = searchLower
     ? visibleRows.filter(
-        (r) =>
-          r.nome.toLowerCase().includes(searchLower) ||
-          (r.email && r.email.toLowerCase().includes(searchLower)) ||
-          (r.cpf && r.cpf.replace(/\D/g, '').includes(searchLower)) ||
-          (r.pis_pasep && r.pis_pasep.replace(/\D/g, '').includes(searchLower)) ||
-          (r.numero_folha && r.numero_folha.includes(searchLower)) ||
-          (r.numero_identificador && r.numero_identificador.includes(searchLower))
-      )
+      (r) =>
+        r.nome.toLowerCase().includes(searchLower) ||
+        (r.email && r.email.toLowerCase().includes(searchLower)) ||
+        (r.cpf && r.cpf.replace(/\D/g, '').includes(searchLower)) ||
+        (r.pis_pasep && r.pis_pasep.replace(/\D/g, '').includes(searchLower)) ||
+        (r.numero_folha && r.numero_folha.includes(searchLower)) ||
+        (r.numero_identificador && r.numero_identificador.includes(searchLower))
+    )
     : visibleRows;
 
   const handleDelete = async (id: string) => {
@@ -1117,13 +1129,12 @@ const AdminEmployees: React.FC = () => {
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                         {typeof row.reliability_score === 'number' ? (
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                              row.reliability_score >= 90
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${row.reliability_score >= 90
                                 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
                                 : row.reliability_score >= 70
-                                ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-                                : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                            }`}
+                                  ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                                  : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                              }`}
                             title="Score de confiabilidade baseado em atrasos, faltas, ajustes e inconsistências."
                           >
                             {row.reliability_score}%</span>
@@ -1181,295 +1192,295 @@ const AdminEmployees: React.FC = () => {
                 }}
                 className="space-y-6"
               >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0">
-                  <User className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">Funcionários | {editingId ? 'Editar' : 'Incluir'}</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Cadastro de funcionários</p>
-                </div>
-              </div>
-              {error && (
-                <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 flex items-start gap-3">
-                  <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-semibold text-red-800 dark:text-red-200">Corrija para salvar</p>
-                    <p className="text-sm text-red-700 dark:text-red-300 mt-0.5">{error}</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-6">
-                {/* Dados de Identificação + Fotografia (lado a lado como no print) */}
-                <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="sm:col-span-2">
-                    <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Dados de Identificação</h4>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Nº Folha</label>
-                        <input type="text" value={form.numero_folha} onChange={(e) => setForm({ ...form, numero_folha: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ligação com folha de pagamento" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Nome <span className="text-red-500">*</span> <span className="text-xs font-normal text-blue-500">(Portaria 1510)</span></label>
-                        <input type="text" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Nome completo (obrigatório, enviado ao REP)" />
-                      </div>
-                    </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0">
+                    <User className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Fotografia</h4>
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-24 h-24 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center">
-                        {form.photo_preview ? <img src={form.photo_preview} alt="Foto" className="w-full h-full object-cover" /> : <User className="w-10 h-10 text-slate-400" />}
-                      </div>
-                      <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoFile} className="hidden" />
-                      <div className="flex gap-2 w-full">
-                        <button type="button" onClick={() => photoInputRef.current?.click()} className="flex-1 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-800">Alterar</button>
-                        <button type="button" onClick={() => setForm((f) => ({ ...f, photo_preview: '' }))} className="flex-1 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-800">Limpar</button>
-                      </div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Funcionários | {editingId ? 'Editar' : 'Incluir'}</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Cadastro de funcionários</p>
+                  </div>
+                </div>
+                {error && (
+                  <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-red-800 dark:text-red-200">Corrija para salvar</p>
+                      <p className="text-sm text-red-700 dark:text-red-300 mt-0.5">{error}</p>
                     </div>
                   </div>
-                </section>
+                )}
 
-                {/* Dados Genéricos */}
-                <section>
-                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Dados Genéricos</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Nº PIS/PASEP <span className="text-xs font-normal text-slate-500">(recomendado para REP/relatórios)</span></label>
-                      <input type="text" value={form.pis_pasep} onChange={(e) => setForm({ ...form, pis_pasep: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Enviado ao REP e relatórios" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Nº Identificador</label>
-                      <input type="text" value={form.numero_identificador} onChange={(e) => setForm({ ...form, numero_identificador: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Crachá/digital (único no sistema)" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">CTPS</label>
-                      <input type="text" value={form.ctps} onChange={(e) => setForm({ ...form, ctps: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Carteira de Trabalho" />
-                    </div>
+                <div className="space-y-6">
+                  {/* Dados de Identificação + Fotografia (lado a lado como no print) */}
+                  <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Empresa <span className="text-xs font-normal text-blue-500">(Portaria 1510)</span></label>
-                      <input type="text" value={user?.companyId ? 'Empresa atual' : ''} readOnly className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400" />
+                      <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Dados de Identificação</h4>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Nº Folha</label>
+                          <input type="text" value={form.numero_folha} onChange={(e) => setForm({ ...form, numero_folha: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ligação com folha de pagamento" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Nome <span className="text-red-500">*</span> <span className="text-xs font-normal text-blue-500">(Portaria 1510)</span></label>
+                          <input type="text" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Nome completo (obrigatório, enviado ao REP)" />
+                        </div>
+                      </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Estrutura</label>
-                      <select value={form.estrutura_id} onChange={(e) => setForm({ ...form, estrutura_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                        <option value="">Nenhuma</option>
-                        {estruturas.map((e) => <option key={e.id} value={e.id}>{e.descricao || e.codigo}</option>)}
-                      </select>
+                      <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Fotografia</h4>
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="w-24 h-24 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center">
+                          {form.photo_preview ? <img src={form.photo_preview} alt="Foto" className="w-full h-full object-cover" /> : <User className="w-10 h-10 text-slate-400" />}
+                        </div>
+                        <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoFile} className="hidden" />
+                        <div className="flex gap-2 w-full">
+                          <button type="button" onClick={() => photoInputRef.current?.click()} className="flex-1 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-800">Alterar</button>
+                          <button type="button" onClick={() => setForm((f) => ({ ...f, photo_preview: '' }))} className="flex-1 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-800">Limpar</button>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Horário</label>
-                      <select value={form.schedule_id} onChange={(e) => setForm({ ...form, schedule_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                        <option value="">Nenhum</option>
-                        {schedules.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Função <span className="text-red-500">*</span></label>
-                      <select value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                        {cargos.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
-                        <option value={OUTRO_CARGO_VALUE}>Outro (especificar)</option>
-                      </select>
-                      {form.cargo === OUTRO_CARGO_VALUE && (
-                        <input type="text" value={form.cargoOutro} onChange={(e) => setForm({ ...form, cargoOutro: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ex: Analista" />
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Departamento <span className="text-red-500">*</span></label>
-                      <select value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                        <option value="">Selecione</option>
-                        {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Admissão</label>
-                      <input type="date" value={form.admissao} onChange={(e) => setForm({ ...form, admissao: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Demissão</label>
-                      <input type="date" value={form.demissao} onChange={(e) => setForm({ ...form, demissao: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Motivo de Demissão</label>
-                      <select value={form.motivo_demissao_id} onChange={(e) => setForm({ ...form, motivo_demissao_id: e.target.value })} disabled={!form.demissao} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-50">
-                        <option value="">Selecione (habilitado quando Demissão preenchida)</option>
-                        {motivosDemissao.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                      </select>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Observações</label>
-                      <textarea value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Observações sobre o funcionário" />
-                    </div>
-                  </div>
-                </section>
+                  </section>
 
-                {/* Acesso (e-mail e senha provisória - criação; na edição: definir senha provisória) */}
-                <section>
-                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Acesso ao sistema</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">E-mail</label>
-                      <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="email@empresa.com" disabled={!!editingId} />
-                    </div>
-                    {!editingId && (
+                  {/* Dados Genéricos */}
+                  <section>
+                    <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Dados Genéricos</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Nº PIS/PASEP <span className="text-xs font-normal text-slate-500">(recomendado para REP/relatórios)</span></label>
+                        <input type="text" value={form.pis_pasep} onChange={(e) => setForm({ ...form, pis_pasep: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Enviado ao REP e relatórios" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Nº Identificador</label>
+                        <input type="text" value={form.numero_identificador} onChange={(e) => setForm({ ...form, numero_identificador: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Crachá/digital (único no sistema)" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">CTPS</label>
+                        <input type="text" value={form.ctps} onChange={(e) => setForm({ ...form, ctps: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Carteira de Trabalho" />
+                      </div>
                       <div className="sm:col-span-2">
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Senha provisória <span className="text-red-500">*</span></label>
-                        <div className="relative">
-                          <input
-                            type={showPassword ? 'text' : 'password'}
-                            value={form.password}
-                            onChange={(e) => setForm({ ...form, password: e.target.value })}
-                            className="w-full pl-3 pr-10 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                            placeholder="Senha para o funcionário fazer o primeiro login (vazio = 123456)"
-                            autoComplete="new-password"
-                          />
-                          <button type="button" onClick={() => setShowPassword((p) => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}>{showPassword ? <Eye size={18} /> : <EyeOff size={18} />}</button>
-                        </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">O funcionário fará login com o e-mail acima e esta senha provisória. Se não informar, use 123456. Recomende que ele altere a senha em Configurações após o primeiro acesso.</p>
+                        <label className="block text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Empresa <span className="text-xs font-normal text-blue-500">(Portaria 1510)</span></label>
+                        <input type="text" value={user?.companyId ? 'Empresa atual' : ''} readOnly className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400" />
                       </div>
-                    )}
-                    {editingId && form.email?.trim() && (
-                      <div className="sm:col-span-2 space-y-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3">
-                        <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Senha provisória (login do funcionário)</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Para o colaborador importado ou que nunca logou: defina a senha provisória 123456 para ele acessar com o e-mail acima.</p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            disabled={settingPassword}
-                            onClick={async () => {
-                              setPasswordMessage(null);
-                              setSettingPassword(true);
-                              const result = await setEmployeePasswordInAuth(form.email.trim(), '123456');
-                              setSettingPassword(false);
-                              setPasswordMessage(result.success ? 'Senha provisória 123456 definida. O funcionário já pode fazer login.' : (result.error || 'Falha ao definir senha.'));
-                            }}
-                            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-medium"
-                          >
-                            {settingPassword ? 'Definindo...' : 'Definir senha provisória 123456'}
-                          </button>
-                        </div>
-                        {passwordMessage && (
-                          <p className={`text-xs ${passwordMessage.startsWith('Senha') ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                            {passwordMessage}
-                          </p>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Estrutura</label>
+                        <select value={form.estrutura_id} onChange={(e) => setForm({ ...form, estrutura_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                          <option value="">Nenhuma</option>
+                          {estruturas.map((e) => <option key={e.id} value={e.id}>{e.descricao || e.codigo}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Horário</label>
+                        <select value={form.schedule_id} onChange={(e) => setForm({ ...form, schedule_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                          <option value="">Nenhum</option>
+                          {schedules.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Função <span className="text-red-500">*</span></label>
+                        <select value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                          {cargos.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                          <option value={OUTRO_CARGO_VALUE}>Outro (especificar)</option>
+                        </select>
+                        {form.cargo === OUTRO_CARGO_VALUE && (
+                          <input type="text" value={form.cargoOutro} onChange={(e) => setForm({ ...form, cargoOutro: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ex: Analista" />
                         )}
                       </div>
-                    )}
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">CPF</label>
-                      <input type="text" value={form.cpf} onChange={(e) => setForm({ ...form, cpf: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="CPF" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Telefone</label>
-                      <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Telefone" />
-                    </div>
-                  </div>
-                </section>
-
-                {/* Dados Adicionais */}
-                <section>
-                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Dados Adicionais</h4>
-                  <div className="grid grid-cols-1 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Assinatura Digital (senha para Lançamento de Eventos)</label>
-                      <input type="password" value={form.assinatura_digital} onChange={(e) => setForm({ ...form, assinatura_digital: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Senha para eventos (vales, transporte, etc.)" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Periféricos</label>
-                      <select value={form.perifericos} onChange={(e) => setForm({ ...form, perifericos: e.target.value as any })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                        <option value="padrao">Padrão (configuração do equipamento)</option>
-                        <option value="habilitado">Habilitado</option>
-                        <option value="desabilitado">Desabilitado</option>
-                      </select>
-                    </div>
-                  </div>
-                </section>
-
-                {/* Dados Módulo Web */}
-                <section>
-                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Dados Módulo Web</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Senha Web</label>
-                      <div className="relative">
-                        <input
-                          type={showSenhaWeb ? 'text' : 'password'}
-                          value={form.senha_web}
-                          onChange={(e) => setForm({ ...form, senha_web: e.target.value })}
-                          className="w-full pl-3 pr-10 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                          placeholder="Senha de acesso no Módulo Web"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowSenhaWeb((p) => !p)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                          aria-label={showSenhaWeb ? 'Ocultar senha' : 'Mostrar senha'}
-                        >
-                          {showSenhaWeb ? <Eye size={18} /> : <EyeOff size={18} />}
-                        </button>
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Salva em Supabase (employee_config). O login no app usa a senha do cadastro/importação (Supabase Auth), não esta Senha Web.</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Período encerrado</label>
-                      <input type="date" value={form.periodo_encerrado} onChange={(e) => setForm({ ...form, periodo_encerrado: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Data limite solicitações web" />
-                    </div>
-                    <div className="sm:col-span-2 space-y-2">
-                      <label className="flex items-center gap-2"><input type="checkbox" checked={form.nao_alterar_dados_web} onChange={(e) => setForm({ ...form, nao_alterar_dados_web: e.target.checked })} /> Não permitir alterar dados na Web</label>
-                      <label className="flex items-center gap-2"><input type="checkbox" checked={form.nao_inclusao_ponto_manual} onChange={(e) => setForm({ ...form, nao_inclusao_ponto_manual: e.target.checked })} /> Não permitir inclusão de ponto manual</label>
-                      <label className="flex items-center gap-2"><input type="checkbox" checked={form.bloquear_web} onChange={(e) => setForm({ ...form, bloquear_web: e.target.checked })} /> Bloquear funcionário na Web</label>
                       <div>
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Permitir controlar solicitações via Web</label>
-                        <select value={form.controlar_solicitacoes} onChange={(e) => setForm({ ...form, controlar_solicitacoes: e.target.value as any })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                          <option value="">Nenhum</option>
-                          <option value="aceitar_local">Aceitar Solicitações (Somente Módulo Web Local)</option>
-                          <option value="marcar_vistos">Somente marcar vistos</option>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Departamento <span className="text-red-500">*</span></label>
+                        <select value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                          <option value="">Selecione</option>
+                          {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Admissão</label>
+                        <input type="date" value={form.admissao} onChange={(e) => setForm({ ...form, admissao: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Demissão</label>
+                        <input type="date" value={form.demissao} onChange={(e) => setForm({ ...form, demissao: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Motivo de Demissão</label>
+                        <select value={form.motivo_demissao_id} onChange={(e) => setForm({ ...form, motivo_demissao_id: e.target.value })} disabled={!form.demissao} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-50">
+                          <option value="">Selecione (habilitado quando Demissão preenchida)</option>
+                          {motivosDemissao.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Observações</label>
+                        <textarea value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Observações sobre o funcionário" />
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Acesso (e-mail e senha provisória - criação; na edição: definir senha provisória) */}
+                  <section>
+                    <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Acesso ao sistema</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">E-mail</label>
+                        <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="email@empresa.com" disabled={!!editingId} />
+                      </div>
+                      {!editingId && (
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Senha provisória <span className="text-red-500">*</span></label>
+                          <div className="relative">
+                            <input
+                              type={showPassword ? 'text' : 'password'}
+                              value={form.password}
+                              onChange={(e) => setForm({ ...form, password: e.target.value })}
+                              className="w-full pl-3 pr-10 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                              placeholder="Senha para o funcionário fazer o primeiro login (vazio = 123456)"
+                              autoComplete="new-password"
+                            />
+                            <button type="button" onClick={() => setShowPassword((p) => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}>{showPassword ? <Eye size={18} /> : <EyeOff size={18} />}</button>
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">O funcionário fará login com o e-mail acima e esta senha provisória. Se não informar, use 123456. Recomende que ele altere a senha em Configurações após o primeiro acesso.</p>
+                        </div>
+                      )}
+                      {editingId && form.email?.trim() && (
+                        <div className="sm:col-span-2 space-y-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3">
+                          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Senha provisória (login do funcionário)</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">Para o colaborador importado ou que nunca logou: defina a senha provisória 123456 para ele acessar com o e-mail acima.</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              disabled={settingPassword}
+                              onClick={async () => {
+                                setPasswordMessage(null);
+                                setSettingPassword(true);
+                                const result = await setEmployeePasswordInAuth(form.email.trim(), '123456');
+                                setSettingPassword(false);
+                                setPasswordMessage(result.success ? 'Senha provisória 123456 definida. O funcionário já pode fazer login.' : (result.error || 'Falha ao definir senha.'));
+                              }}
+                              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-medium"
+                            >
+                              {settingPassword ? 'Definindo...' : 'Definir senha provisória 123456'}
+                            </button>
+                          </div>
+                          {passwordMessage && (
+                            <p className={`text-xs ${passwordMessage.startsWith('Senha') ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                              {passwordMessage}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">CPF</label>
+                        <input type="text" value={form.cpf} onChange={(e) => setForm({ ...form, cpf: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="CPF" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Telefone</label>
+                        <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Telefone" />
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Dados Adicionais */}
+                  <section>
+                    <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Dados Adicionais</h4>
+                    <div className="grid grid-cols-1 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Assinatura Digital (senha para Lançamento de Eventos)</label>
+                        <input type="password" value={form.assinatura_digital} onChange={(e) => setForm({ ...form, assinatura_digital: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Senha para eventos (vales, transporte, etc.)" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Periféricos</label>
+                        <select value={form.perifericos} onChange={(e) => setForm({ ...form, perifericos: e.target.value as any })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                          <option value="padrao">Padrão (configuração do equipamento)</option>
+                          <option value="habilitado">Habilitado</option>
+                          <option value="desabilitado">Desabilitado</option>
                         </select>
                       </div>
                     </div>
-                  </div>
-                </section>
+                  </section>
 
-                {/* Afastamento */}
-                <section>
-                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Afastamento</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">Registrar afastamento para um dia ou período (ex.: férias).</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Período (início)</label>
-                      <input type="date" value={form.afastamento_inicio} onChange={(e) => setForm({ ...form, afastamento_inicio: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                  {/* Dados Módulo Web */}
+                  <section>
+                    <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Dados Módulo Web</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Senha Web</label>
+                        <div className="relative">
+                          <input
+                            type={showSenhaWeb ? 'text' : 'password'}
+                            value={form.senha_web}
+                            onChange={(e) => setForm({ ...form, senha_web: e.target.value })}
+                            className="w-full pl-3 pr-10 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                            placeholder="Senha de acesso no Módulo Web"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowSenhaWeb((p) => !p)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                            aria-label={showSenhaWeb ? 'Ocultar senha' : 'Mostrar senha'}
+                          >
+                            {showSenhaWeb ? <Eye size={18} /> : <EyeOff size={18} />}
+                          </button>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Salva em Supabase (employee_config). O login no app usa a senha do cadastro/importação (Supabase Auth), não esta Senha Web.</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Período encerrado</label>
+                        <input type="date" value={form.periodo_encerrado} onChange={(e) => setForm({ ...form, periodo_encerrado: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Data limite solicitações web" />
+                      </div>
+                      <div className="sm:col-span-2 space-y-2">
+                        <label className="flex items-center gap-2"><input type="checkbox" checked={form.nao_alterar_dados_web} onChange={(e) => setForm({ ...form, nao_alterar_dados_web: e.target.checked })} /> Não permitir alterar dados na Web</label>
+                        <label className="flex items-center gap-2"><input type="checkbox" checked={form.nao_inclusao_ponto_manual} onChange={(e) => setForm({ ...form, nao_inclusao_ponto_manual: e.target.checked })} /> Não permitir inclusão de ponto manual</label>
+                        <label className="flex items-center gap-2"><input type="checkbox" checked={form.bloquear_web} onChange={(e) => setForm({ ...form, bloquear_web: e.target.checked })} /> Bloquear funcionário na Web</label>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Permitir controlar solicitações via Web</label>
+                          <select value={form.controlar_solicitacoes} onChange={(e) => setForm({ ...form, controlar_solicitacoes: e.target.value as any })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                            <option value="">Nenhum</option>
+                            <option value="aceitar_local">Aceitar Solicitações (Somente Módulo Web Local)</option>
+                            <option value="marcar_vistos">Somente marcar vistos</option>
+                          </select>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Período (fim)</label>
-                      <input type="date" value={form.afastamento_fim} onChange={(e) => setForm({ ...form, afastamento_fim: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Justificativa</label>
-                      <input type="text" value={form.afastamento_justificativa} onChange={(e) => setForm({ ...form, afastamento_justificativa: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ex: Férias, Falta, Médico" />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Motivo</label>
-                      <input type="text" value={form.afastamento_motivo} onChange={(e) => setForm({ ...form, afastamento_motivo: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ex: Atestado devido a diagnóstico médico" />
-                    </div>
-                  </div>
-                </section>
-              </div>
+                  </section>
 
-              <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                <span className="inline-flex w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-900/40 items-center justify-center text-amber-600 dark:text-amber-400 font-bold">!</span>
-                Os campos em azul são utilizados para relatórios, arquivos e comprovantes exigidos pela Portaria 1510 do MTE.
-              </p>
-              <div className="flex gap-3 pt-2 border-t border-slate-200 dark:border-slate-700">
-                <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium">Cancelar</button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  {editingId ? 'Concluir' : 'Concluir'}
-                </button>
-              </div>
+                  {/* Afastamento */}
+                  <section>
+                    <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Afastamento</h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">Registrar afastamento para um dia ou período (ex.: férias).</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Período (início)</label>
+                        <input type="date" value={form.afastamento_inicio} onChange={(e) => setForm({ ...form, afastamento_inicio: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Período (fim)</label>
+                        <input type="date" value={form.afastamento_fim} onChange={(e) => setForm({ ...form, afastamento_fim: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Justificativa</label>
+                        <input type="text" value={form.afastamento_justificativa} onChange={(e) => setForm({ ...form, afastamento_justificativa: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ex: Férias, Falta, Médico" />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Motivo</label>
+                        <input type="text" value={form.afastamento_motivo} onChange={(e) => setForm({ ...form, afastamento_motivo: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ex: Atestado devido a diagnóstico médico" />
+                      </div>
+                    </div>
+                  </section>
+                </div>
+
+                <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                  <span className="inline-flex w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-900/40 items-center justify-center text-amber-600 dark:text-amber-400 font-bold">!</span>
+                  Os campos em azul são utilizados para relatórios, arquivos e comprovantes exigidos pela Portaria 1510 do MTE.
+                </p>
+                <div className="flex gap-3 pt-2 border-t border-slate-200 dark:border-slate-700">
+                  <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium">Cancelar</button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {editingId ? 'Concluir' : 'Concluir'}
+                  </button>
+                </div>
               </form>
             </div>
           </div>
