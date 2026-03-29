@@ -71,6 +71,7 @@ import { ToastProvider } from './src/components/ToastProvider';
 import { useLanguage } from './src/contexts/LanguageContext';
 import { i18n } from './lib/i18n';
 import { useSessionTimeout } from './src/hooks/useSessionTimeout';
+import { readCachedUser } from './src/hooks/useCurrentUser';
 import AdminLayout from './src/layouts/AdminLayout';
 import EmployeeLayout from './src/layouts/EmployeeLayout';
 import AdminDashboard from './src/pages/admin/Dashboard';
@@ -175,7 +176,7 @@ VITE_SUPABASE_ANON_KEY=sua-chave-anon`}
 }
 
 const AppMain: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => readCachedUser());
   const [activeTab, setActiveTab] = useState('dashboard');
   const [insights, setInsights] = useState<{ insight: string, score: number } | null>(null);
   const [punchType, setPunchType] = useState<LogType | null>(null);
@@ -184,7 +185,10 @@ const AppMain: React.FC = () => {
   const [selectedMethod, setSelectedMethod] = useState<PunchMethod | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(() => {
+    if (!isSupabaseConfigured) return false;
+    return readCachedUser() === null;
+  });
   const [company, setCompany] = useState<Company | null>(null);
 
   // Filtros do histórico

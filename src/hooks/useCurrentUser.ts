@@ -14,13 +14,18 @@ function getStoredUser(): User | null {
   }
 }
 
+/** Perfil em cache (localStorage) para estado inicial sem bloquear a UI. */
+export function readCachedUser(): User | null {
+  return getStoredUser();
+}
+
 /**
- * Perfil do usuário para páginas do portal: alinha com Supabase Auth + localStorage
- * (evita ficar preso em "Carregando..." quando só o cache local está vazio).
+ * Perfil do usuário para páginas do portal: alinha com Supabase Auth + localStorage.
+ * Com `current_user` em cache, não exibe spinner — hidrata em background.
  */
 export function useCurrentUser() {
   const [user, setUser] = useState<User | null>(() => getStoredUser());
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => getStoredUser() === null);
 
   useEffect(() => {
     let mounted = true;
@@ -54,7 +59,7 @@ export function useCurrentUser() {
 
     const fallbackTimeout = window.setTimeout(() => {
       if (mounted) setLoading(false);
-    }, 4000);
+    }, 8000);
 
     return () => {
       mounted = false;
