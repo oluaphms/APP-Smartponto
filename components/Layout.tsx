@@ -119,11 +119,11 @@ const Layout: React.FC<LayoutProps> = ({ user, children, activeTab, setActiveTab
           <main
             id="main-content"
             tabIndex={-1}
-            className="flex-1 overflow-y-auto custom-scrollbar focus:outline-none pb-24 lg:pb-24 print:overflow-visible print:h-auto print:pb-0"
+            className="flex-1 overflow-y-auto custom-scrollbar focus:outline-none pb-24 lg:pb-24 print:overflow-visible print:h-auto print:pb-0 bg-slate-50/30 dark:bg-slate-950/40 min-h-0"
             role="main"
             aria-label={i18n.t('layout.mainContent')}
           >
-            <div className="p-4 md:p-6 lg:p-10 max-w-7xl mx-auto w-full print:p-0 print:m-0 print:max-w-none">
+            <div className="p-4 md:p-6 lg:p-10 max-w-7xl mx-auto w-full print:p-0 print:m-0 print:max-w-none min-h-full">
               {children}
             </div>
           </main>

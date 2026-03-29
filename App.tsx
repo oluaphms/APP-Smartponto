@@ -67,6 +67,7 @@ import AcceptInvitePage from './src/pages/AcceptInvite';
 import RoleGuard from './src/components/auth/RoleGuard';
 import ProtectedRoute from './src/components/auth/ProtectedRoute';
 import { useSettings, SettingsProvider } from './src/contexts/SettingsContext';
+import { ToastProvider } from './src/components/ToastProvider';
 import { useLanguage } from './src/contexts/LanguageContext';
 import { i18n } from './lib/i18n';
 import { useSessionTimeout } from './src/hooks/useSessionTimeout';
@@ -1510,9 +1511,11 @@ const App: React.FC = () =>
   !isSupabaseConfigured ? (
     <ConfigSupabaseScreen />
   ) : (
-    <SettingsProvider>
-      <AppMain />
-    </SettingsProvider>
+    <ToastProvider>
+      <SettingsProvider>
+        <AppMain />
+      </SettingsProvider>
+    </ToastProvider>
   );
 
 export default App;

@@ -590,7 +590,7 @@ const EmployeeClockIn: React.FC = () => {
         </div>
       )}
 
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/40 p-4 md:p-5 space-y-3">
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-600 bg-white/90 dark:bg-slate-900 dark:shadow-lg dark:shadow-black/30 p-4 md:p-5 space-y-3">
         <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
           <Shield className="w-4 h-4 text-indigo-500 shrink-0" />
           <span>
@@ -636,7 +636,7 @@ const EmployeeClockIn: React.FC = () => {
         <p className="text-sm text-slate-600 dark:text-slate-400">
           Escolha como comprovar o registro (Entrada, Saída ou Intervalo). Câmera, captura facial (rosto), biometria do aparelho ou apenas localização.
         </p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 rounded-xl bg-slate-100 dark:bg-slate-800/50">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 rounded-xl bg-slate-100 dark:bg-slate-800 dark:border dark:border-slate-700">
           <button
             type="button"
             role="radio"

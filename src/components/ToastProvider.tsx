@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, useMemo, ReactNode } from 'react';
 
 type ToastType = 'success' | 'error' | 'info';
 
@@ -14,10 +14,22 @@ interface ToastContextValue {
 
 const ToastContext = createContext<ToastContextValue | undefined>(undefined);
 
-export const useToast = () => {
+export const useToast = (): ToastContextValue => {
   const ctx = useContext(ToastContext);
-  if (!ctx) throw new Error('useToast must be used within ToastProvider');
-  return ctx;
+  const fallback = useMemo(
+    () => ({
+      addToast: (type: ToastType, message: string) => {
+        const log = type === 'error' ? console.error : type === 'success' ? console.info : console.log;
+        log.call(console, `[Toast ${type}]`, message);
+      },
+    }),
+    []
+  );
+  if (ctx) return ctx;
+  if (import.meta.env?.DEV) {
+    console.warn('[useToast] Nenhum ToastProvider encontrado — mensagens vão para o console.');
+  }
+  return fallback;
 };
 
 interface ToastProviderProps {
