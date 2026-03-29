@@ -9,6 +9,7 @@ import {
   Clock,
   CheckCircle2,
   Shield,
+  Keyboard,
 } from 'lucide-react';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
@@ -40,8 +41,8 @@ import {
   registerPlatformPasskey,
   verifyPlatformPasskey,
 } from '../../services/webAuthnPunchService';
-/** Comprovação explícita: foto na câmera ou biometria no aparelho (GPS é obtido automaticamente ao confirmar). */
-type VerificationMode = 'photo' | 'digital';
+/** Comprovação explícita: foto, biometria ou registro manual (quando a política permitir). */
+type VerificationMode = 'photo' | 'digital' | 'manual';
 
 function waitForVideoReady(video: HTMLVideoElement): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -236,11 +237,24 @@ const EmployeeClockIn: React.FC = () => {
     };
   }, [proofModalOpen]);
 
+  /** Ponto manual sem foto/GPS quando global e preferências do colaborador permitem. */
+  const canUseManualPunch =
+    (globalSettings?.allow_manual_punch ?? true) && (user?.preferences?.allowManualPunch ?? true);
+
+  const manualBypassActive = canUseManualPunch && verificationMode === 'manual';
+
   const needsCameraPreview =
     proofModalOpen &&
+    !manualBypassActive &&
     (globalSettings?.photo_required === true ||
       verificationMode === 'photo' ||
       (verificationMode === 'digital' && digitalFallbackToPhoto));
+
+  useEffect(() => {
+    if (!canUseManualPunch && verificationMode === 'manual') {
+      setVerificationMode('photo');
+    }
+  }, [canUseManualPunch, verificationMode]);
 
   useEffect(() => {
     if (!needsCameraPreview) {
@@ -282,9 +296,11 @@ const EmployeeClockIn: React.FC = () => {
     type: LogType,
     geoPos: GeoPosition | null,
     localPhotoDataUrl: string | null,
-    biometricOk: boolean
+    biometricOk: boolean,
+    opts?: { manualBypass?: boolean }
   ) => {
     if (!user) return;
+    const manualBypass = opts?.manualBypass === true && canUseManualPunch;
     setSaving(true);
     setError(null);
     try {
@@ -300,7 +316,7 @@ const EmployeeClockIn: React.FC = () => {
         return;
       }
 
-      if (globalSettings?.gps_required) {
+      if (globalSettings?.gps_required && !manualBypass) {
         if (!geoPos?.latitude || !geoPos?.longitude) {
           setError('O registro de ponto exige localização. Ative o GPS e tente novamente.');
           toast.addToast('error', 'Ative o GPS para registrar o ponto.');
@@ -324,7 +340,7 @@ const EmployeeClockIn: React.FC = () => {
         }
       }
 
-      const method = resolveMethod(biometricOk, photoUrl, geoPos);
+      const method = manualBypass ? PunchMethod.MANUAL : resolveMethod(biometricOk, photoUrl, geoPos);
 
       let allowedLocations: AllowedLocation[] = [];
       let trustedDeviceIds: string[] = [];
@@ -438,19 +454,26 @@ const EmployeeClockIn: React.FC = () => {
 
   const handleConfirmProof = async () => {
     if (!user || pendingLogType == null) return;
-    if (globalSettings?.gps_required && (!geo?.latitude || !geo?.longitude)) {
+    const manualBypass = manualBypassActive;
+    if (globalSettings?.gps_required && (!geo?.latitude || !geo?.longitude) && !manualBypass) {
       toast.addToast('error', 'É necessário obter a localização antes de registrar.');
       return;
     }
-    if (globalSettings?.photo_required && !photoDataUrl) {
+    if (globalSettings?.photo_required && !photoDataUrl && !manualBypass) {
       toast.addToast('error', 'Capture a foto obrigatória antes de registrar.');
       return;
     }
-    if (verificationMode === 'digital' && !hadBiometric && !photoDataUrl && globalSettings?.photo_required) {
+    if (
+      verificationMode === 'digital' &&
+      !hadBiometric &&
+      !photoDataUrl &&
+      globalSettings?.photo_required &&
+      !manualBypass
+    ) {
       toast.addToast('error', 'Valide a biometria ou capture a foto obrigatória.');
       return;
     }
-    await executePunchRegistration(pendingLogType, geo, photoDataUrl, hadBiometric);
+    await executePunchRegistration(pendingLogType, geo, photoDataUrl, hadBiometric, { manualBypass });
   };
 
   const handleTryWebAuthnInModal = async () => {
@@ -615,9 +638,21 @@ const EmployeeClockIn: React.FC = () => {
 
       <div className="space-y-2">
         <p className="text-sm text-slate-600 dark:text-slate-400">
-          Comprovação: <strong>foto</strong> (câmera) ou <strong>digital</strong> (biometria no aparelho). A <strong>localização</strong> é obtida automaticamente ao abrir o comprovante e enviada junto com a batida, quando o navegador permitir.
+          Comprovação: <strong>foto</strong> (câmera), <strong>digital</strong> (biometria no aparelho)
+          {canUseManualPunch ? (
+            <>
+              {' '}
+              ou <strong>manual</strong> (sem foto/GPS obrigatórios, quando a política permitir)
+            </>
+          ) : null}
+          . A <strong>localização</strong> é obtida automaticamente ao abrir o comprovante e enviada com a batida quando o navegador permitir
+          {canUseManualPunch ? '; no modo manual isso não é exigido' : ''}.
         </p>
-        <div className="grid grid-cols-2 gap-2 p-3 rounded-xl bg-slate-100 dark:bg-slate-800 dark:border dark:border-slate-700 max-w-md">
+        <div
+          className={`grid gap-2 p-3 rounded-xl bg-slate-100 dark:bg-slate-800 dark:border dark:border-slate-700 max-w-md ${
+            canUseManualPunch ? 'grid-cols-3' : 'grid-cols-2'
+          }`}
+        >
           <button
             type="button"
             role="radio"
@@ -653,11 +688,32 @@ const EmployeeClockIn: React.FC = () => {
             <Fingerprint className="w-4 h-4 shrink-0" />
             <span>Digital</span>
           </button>
+          {canUseManualPunch && (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={verificationMode === 'manual'}
+              aria-label="Registrar ponto manual sem comprovação por foto ou biometria"
+              onClick={() => {
+                setVerificationMode('manual');
+                setDigitalFallbackToPhoto(false);
+              }}
+              onTouchEnd={(e) => e.currentTarget.blur()}
+              className={`flex flex-col items-center gap-1 px-2 py-2.5 min-h-[44px] rounded-xl text-sm font-medium border-2 touch-manipulation cursor-pointer select-none transition-colors ${
+                verificationMode === 'manual'
+                  ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-400/40 ring-offset-1 dark:ring-offset-slate-900'
+                  : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+              }`}
+            >
+              <Keyboard className="w-4 h-4 shrink-0" />
+              <span>Manual</span>
+            </button>
+          )}
         </div>
         <p className="text-xs text-slate-500 dark:text-slate-500">
-          {globalSettings?.photo_required
-            ? 'A empresa exige imagem: use Foto ou Digital com “Usar foto” no comprovante.'
-            : 'Digital usa Face ID / Windows Hello neste aparelho (HTTPS). O GPS não é um modo à parte — é registrado automaticamente.'}
+          {globalSettings?.photo_required && !manualBypassActive
+            ? 'A empresa exige imagem: use Foto ou Digital com “Usar foto” no comprovante — ou Manual, se disponível.'
+            : 'Digital usa Face ID / Windows Hello neste aparelho (HTTPS). No modo Manual, o ponto é registrado sem foto nem GPS obrigatórios (conforme política).'}
         </p>
       </div>
 
@@ -712,8 +768,18 @@ const EmployeeClockIn: React.FC = () => {
 
       <p className="text-sm text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-2">
         <MapPin className="w-4 h-4 shrink-0" />
-        Localização enviada automaticamente no registro. Comprovação escolhida:{' '}
-        <strong>{verificationMode === 'photo' ? 'foto' : 'digital (WebAuthn)'}</strong>.
+        {verificationMode === 'manual' && manualBypassActive
+          ? 'Modo manual: registro sem GPS nem foto obrigatórios (conforme política).'
+          : 'Localização enviada automaticamente no registro quando obtida.'}{' '}
+        Comprovação escolhida:{' '}
+        <strong>
+          {verificationMode === 'photo'
+            ? 'foto'
+            : verificationMode === 'digital'
+              ? 'digital (WebAuthn)'
+              : 'manual'}
+        </strong>
+        .
       </p>
 
       {proofModalOpen && pendingLogType != null && (
@@ -766,6 +832,18 @@ const EmployeeClockIn: React.FC = () => {
               </button>
             </div>
 
+            {verificationMode === 'manual' && manualBypassActive && (
+              <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-900/20 p-4 space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-amber-900 dark:text-amber-200">
+                  <Keyboard className="w-4 h-4 shrink-0" />
+                  Registro manual
+                </div>
+                <p className="text-xs text-amber-800 dark:text-amber-300">
+                  Confirme abaixo para registrar o ponto sem foto, biometria ou localização obrigatórios. O método será marcado como manual para auditoria.
+                </p>
+              </div>
+            )}
+
             {verificationMode === 'digital' && (
               <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-200">
@@ -775,7 +853,7 @@ const EmployeeClockIn: React.FC = () => {
                 <p className="text-xs text-slate-600 dark:text-slate-400">
                   Na primeira vez, cadastre a biometria neste aparelho; depois, valide com Face ID, Windows Hello ou sensor. Se falhar, use &quot;Usar foto&quot;. Requer HTTPS (exceto localhost).
                 </p>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 items-center">
                   <button
                     type="button"
                     disabled={saving || webAuthnBusy || hadBiometric}
@@ -792,6 +870,19 @@ const EmployeeClockIn: React.FC = () => {
                   >
                     Usar foto
                   </button>
+                  {canUseManualPunch && (
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => {
+                        setVerificationMode('manual');
+                        setDigitalFallbackToPhoto(false);
+                      }}
+                      className="px-4 py-2.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-900/30 text-amber-900 dark:text-amber-200 text-sm font-medium min-h-[44px]"
+                    >
+                      Registro manual
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -809,7 +900,7 @@ const EmployeeClockIn: React.FC = () => {
                 <div className="relative w-full aspect-[4/3] rounded-xl overflow-hidden bg-black">
                   <video ref={modalVideoRef} className="w-full h-full object-cover" playsInline muted autoPlay />
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 items-center">
                   <button
                     type="button"
                     disabled={saving}
@@ -818,6 +909,16 @@ const EmployeeClockIn: React.FC = () => {
                   >
                     Capturar foto
                   </button>
+                  {canUseManualPunch && !manualBypassActive && (
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => setVerificationMode('manual')}
+                      className="px-4 py-2.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-900/30 text-amber-900 dark:text-amber-200 text-sm font-medium min-h-[44px]"
+                    >
+                      Registro manual
+                    </button>
+                  )}
                   {photoDataUrl && !globalSettings?.photo_required && (
                     <button
                       type="button"
@@ -848,13 +949,16 @@ const EmployeeClockIn: React.FC = () => {
                 type="button"
                 disabled={
                   saving ||
-                  gpsLoading ||
-                  (globalSettings?.gps_required === true && (!geo?.latitude || !geo?.longitude)) ||
-                  (globalSettings?.photo_required === true && !photoDataUrl) ||
+                  (gpsLoading && !manualBypassActive) ||
+                  (globalSettings?.gps_required === true &&
+                    (!geo?.latitude || !geo?.longitude) &&
+                    !manualBypassActive) ||
+                  (globalSettings?.photo_required === true && !photoDataUrl && !manualBypassActive) ||
                   (verificationMode === 'digital' &&
                     !hadBiometric &&
                     !photoDataUrl &&
-                    globalSettings?.photo_required === true)
+                    globalSettings?.photo_required === true &&
+                    !manualBypassActive)
                 }
                 onClick={() => void handleConfirmProof()}
                 className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium disabled:opacity-50 min-h-[44px]"

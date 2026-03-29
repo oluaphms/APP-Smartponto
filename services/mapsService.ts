@@ -1,8 +1,15 @@
-
 import { GoogleGenAI } from "@google/genai";
+import { getGeminiApiKey } from "./geminiEnv";
 
 export const getGeoInsight = async (latitude: number, longitude: number) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    return {
+      text: "Inteligência geográfica indisponível: configure VITE_GEMINI_API_KEY no projeto.",
+      sources: [],
+    };
+  }
+  const ai = new GoogleGenAI({ apiKey });
   
   try {
     const response = await ai.models.generateContent({

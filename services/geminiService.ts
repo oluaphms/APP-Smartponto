@@ -1,10 +1,18 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { DailySummary } from "../types";
+import { getGeminiApiKey } from "./geminiEnv";
 
 // Analyze time tracking data to provide productivity and work-life balance insights
 export const getWorkInsights = async (summaries: DailySummary[]) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    return {
+      insight:
+        "Defina VITE_GEMINI_API_KEY no ambiente de build para insights por IA, ou continue registrando o ponto normalmente.",
+      score: 8,
+    };
+  }
+  const ai = new GoogleGenAI({ apiKey });
   
   const prompt = `Analise os seguintes registros de ponto dos últimos dias e forneça um insight curto (máximo 3 frases) sobre produtividade, pontualidade e equilíbrio vida-trabalho para o funcionário. Retorne em formato JSON.
   Dados: ${JSON.stringify(summaries)}`;
@@ -46,9 +54,9 @@ consultar o manual ou o administrador. Mantenha tom profissional e prestativo. R
 
 // Chat com IA para RH: envia mensagem e retorna resposta do modelo
 export const sendHRChatMessage = async (userMessage: string, history: { role: 'user' | 'model'; text: string }[] = []): Promise<string> => {
-  const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+  const apiKey = getGeminiApiKey();
   if (!apiKey) {
-    return "A API da IA não está configurada. Defina VITE_GEMINI_API_KEY no ambiente.";
+    return "A API da IA não está configurada. Defina VITE_GEMINI_API_KEY no ambiente de build (Vercel) e faça um novo deploy.";
   }
 
   const ai = new GoogleGenAI({ apiKey });
