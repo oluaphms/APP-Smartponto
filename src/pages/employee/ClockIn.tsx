@@ -9,7 +9,6 @@ import {
   Clock,
   CheckCircle2,
   Shield,
-  ScanFace,
 } from 'lucide-react';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
@@ -41,10 +40,8 @@ import {
   registerPlatformPasskey,
   verifyPlatformPasskey,
 } from '../../services/webAuthnPunchService';
-import { detectFaceInVideoFrame, isFaceDetectionAvailable } from '../../services/faceDetectionService';
-
-/** Modo de comprovação antes de registrar a batida */
-type VerificationMode = 'photo' | 'facial' | 'digital' | 'gps_only';
+/** Comprovação explícita: foto na câmera ou biometria no aparelho (GPS é obtido automaticamente ao confirmar). */
+type VerificationMode = 'photo' | 'digital';
 
 function waitForVideoReady(video: HTMLVideoElement): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -243,7 +240,6 @@ const EmployeeClockIn: React.FC = () => {
     proofModalOpen &&
     (globalSettings?.photo_required === true ||
       verificationMode === 'photo' ||
-      verificationMode === 'facial' ||
       (verificationMode === 'digital' && digitalFallbackToPhoto));
 
   useEffect(() => {
@@ -274,11 +270,9 @@ const EmployeeClockIn: React.FC = () => {
   const resolveMethod = (
     hadBiometric: boolean,
     photoUrl: string | null,
-    geo: { latitude: number; longitude: number; accuracy?: number } | null,
-    mode: VerificationMode
+    geo: { latitude: number; longitude: number; accuracy?: number } | null
   ): PunchMethod => {
     if (hadBiometric) return PunchMethod.BIOMETRIC;
-    if (photoUrl && mode === 'facial') return PunchMethod.FACIAL;
     if (photoUrl) return PunchMethod.PHOTO;
     if (geo?.latitude != null && geo?.longitude != null) return PunchMethod.GPS;
     return PunchMethod.MANUAL;
@@ -288,8 +282,7 @@ const EmployeeClockIn: React.FC = () => {
     type: LogType,
     geoPos: GeoPosition | null,
     localPhotoDataUrl: string | null,
-    biometricOk: boolean,
-    mode: VerificationMode
+    biometricOk: boolean
   ) => {
     if (!user) return;
     setSaving(true);
@@ -331,7 +324,7 @@ const EmployeeClockIn: React.FC = () => {
         }
       }
 
-      const method = resolveMethod(biometricOk, photoUrl, geoPos, mode);
+      const method = resolveMethod(biometricOk, photoUrl, geoPos);
 
       let allowedLocations: AllowedLocation[] = [];
       let trustedDeviceIds: string[] = [];
@@ -453,15 +446,11 @@ const EmployeeClockIn: React.FC = () => {
       toast.addToast('error', 'Capture a foto obrigatória antes de registrar.');
       return;
     }
-    if (verificationMode === 'facial' && !photoDataUrl) {
-      toast.addToast('error', 'Capture o rosto com a câmera antes de registrar.');
-      return;
-    }
     if (verificationMode === 'digital' && !hadBiometric && !photoDataUrl && globalSettings?.photo_required) {
       toast.addToast('error', 'Valide a biometria ou capture a foto obrigatória.');
       return;
     }
-    await executePunchRegistration(pendingLogType, geo, photoDataUrl, hadBiometric, verificationMode);
+    await executePunchRegistration(pendingLogType, geo, photoDataUrl, hadBiometric);
   };
 
   const handleTryWebAuthnInModal = async () => {
@@ -471,7 +460,7 @@ const EmployeeClockIn: React.FC = () => {
       if (!isWebAuthnSupported()) {
         toast.addToast(
           'error',
-          'Biometria digital requer HTTPS (ou localhost) e navegador compatível. Use foto ou GPS.'
+          'Biometria digital requer HTTPS (ou localhost) e navegador compatível. Use a foto.'
         );
         setDigitalFallbackToPhoto(true);
         return;
@@ -488,32 +477,24 @@ const EmployeeClockIn: React.FC = () => {
         );
       } else {
         setDigitalFallbackToPhoto(true);
-        toast.addToast('info', 'Não foi possível validar. Use a foto ou o GPS.');
+        toast.addToast('info', 'Não foi possível validar. Use a foto.');
       }
     } catch {
       setDigitalFallbackToPhoto(true);
-      toast.addToast('error', 'Operação cancelada ou indisponível. Use foto ou GPS.');
+      toast.addToast('error', 'Operação cancelada ou indisponível. Use a foto.');
     } finally {
       setWebAuthnBusy(false);
     }
   };
 
   const handleCapturePhotoClick = async () => {
-    const video = modalVideoRef.current;
-    if (verificationMode === 'facial' && video && streamRef.current) {
-      const face = await detectFaceInVideoFrame(video);
-      if (!face.ok) {
-        toast.addToast('error', face.reason);
-        return;
-      }
-    }
     const dataUrl = await captureFrameFromModal();
     if (!dataUrl) {
       toast.addToast('error', 'Não foi possível capturar a imagem. Aguarde a câmera iniciar e tente de novo.');
       return;
     }
     setPhotoDataUrl(dataUrl);
-    toast.addToast('success', verificationMode === 'facial' ? 'Rosto capturado.' : 'Foto capturada.');
+    toast.addToast('success', 'Foto capturada.');
   };
 
   const beginPunch = async (type: LogType) => {
@@ -574,7 +555,7 @@ const EmployeeClockIn: React.FC = () => {
     <div className="space-y-8 relative z-10">
       <PageHeader
         title="Registrar Ponto"
-        subtitle="Marcações com sequência válida, GPS, foto, captura facial ou biometria do aparelho (HTTPS)."
+        subtitle="Marcações com sequência válida, localização automática, foto ou biometria do aparelho (HTTPS)."
         icon={<Clock className="w-5 h-5" />}
       />
 
@@ -627,16 +608,16 @@ const EmployeeClockIn: React.FC = () => {
             </span>
           )}
           {globalSettings && !globalSettings.gps_required && !globalSettings.photo_required && (
-            <span className="text-slate-500">Comprovação opcional (foto ou digital conforme seleção abaixo).</span>
+            <span className="text-slate-500">Localização obtida automaticamente; comprovação opcional: foto ou digital.</span>
           )}
         </div>
       </div>
 
       <div className="space-y-2">
         <p className="text-sm text-slate-600 dark:text-slate-400">
-          Escolha como comprovar o registro (Entrada, Saída ou Intervalo). Câmera, captura facial (rosto), biometria do aparelho ou apenas localização.
+          Comprovação: <strong>foto</strong> (câmera) ou <strong>digital</strong> (biometria no aparelho). A <strong>localização</strong> é obtida automaticamente ao abrir o comprovante e enviada junto com a batida, quando o navegador permitir.
         </p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 rounded-xl bg-slate-100 dark:bg-slate-800 dark:border dark:border-slate-700">
+        <div className="grid grid-cols-2 gap-2 p-3 rounded-xl bg-slate-100 dark:bg-slate-800 dark:border dark:border-slate-700 max-w-md">
           <button
             type="button"
             role="radio"
@@ -659,25 +640,6 @@ const EmployeeClockIn: React.FC = () => {
           <button
             type="button"
             role="radio"
-            aria-checked={verificationMode === 'facial'}
-            aria-label="Comprovar com captura facial"
-            onClick={() => {
-              setVerificationMode('facial');
-              setDigitalFallbackToPhoto(false);
-            }}
-            onTouchEnd={(e) => e.currentTarget.blur()}
-            className={`flex flex-col items-center gap-1 px-3 py-2.5 min-h-[44px] rounded-xl text-sm font-medium border-2 touch-manipulation cursor-pointer select-none transition-colors ${
-              verificationMode === 'facial'
-                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-400/40 ring-offset-1 dark:ring-offset-slate-900'
-                : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-            }`}
-          >
-            <ScanFace className="w-4 h-4 shrink-0" />
-            <span>Facial</span>
-          </button>
-          <button
-            type="button"
-            role="radio"
             aria-checked={verificationMode === 'digital'}
             aria-label="Comprovar com biometria digital no dispositivo"
             onClick={() => setVerificationMode('digital')}
@@ -691,38 +653,11 @@ const EmployeeClockIn: React.FC = () => {
             <Fingerprint className="w-4 h-4 shrink-0" />
             <span>Digital</span>
           </button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={verificationMode === 'gps_only'}
-            aria-label="Registrar apenas com localização GPS"
-            disabled={!!globalSettings?.photo_required}
-            title={
-              globalSettings?.photo_required
-                ? 'Indisponível: a empresa exige foto ou captura facial.'
-                : 'Somente GPS (sem foto)'
-            }
-            onClick={() => {
-              setVerificationMode('gps_only');
-              setDigitalFallbackToPhoto(false);
-            }}
-            onTouchEnd={(e) => e.currentTarget.blur()}
-            className={`flex flex-col items-center gap-1 px-3 py-2.5 min-h-[44px] rounded-xl text-sm font-medium border-2 touch-manipulation select-none transition-colors ${
-              globalSettings?.photo_required
-                ? 'opacity-50 cursor-not-allowed border-slate-200 dark:border-slate-700'
-                : verificationMode === 'gps_only'
-                  ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-400/40 ring-offset-1 dark:ring-offset-slate-900 cursor-pointer'
-                  : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer'
-            }`}
-          >
-            <MapPin className="w-4 h-4 shrink-0" />
-            <span>Só GPS</span>
-          </button>
         </div>
         <p className="text-xs text-slate-500 dark:text-slate-500">
           {globalSettings?.photo_required
-            ? 'Política da empresa exige imagem: use Foto ou Facial, ou Digital com foto de apoio.'
-            : 'Digital usa Face ID / Windows Hello neste aparelho (HTTPS). Só GPS dispensa câmera se a política permitir.'}
+            ? 'A empresa exige imagem: use Foto ou Digital com “Usar foto” no comprovante.'
+            : 'Digital usa Face ID / Windows Hello neste aparelho (HTTPS). O GPS não é um modo à parte — é registrado automaticamente.'}
         </p>
       </div>
 
@@ -776,14 +711,9 @@ const EmployeeClockIn: React.FC = () => {
       </div>
 
       <p className="text-sm text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-2">
-        <MapPin className="w-4 h-4 shrink-0" /> GPS quando disponível; modo atual:{' '}
-        <strong>
-          {verificationMode === 'photo' && 'foto'}
-          {verificationMode === 'facial' && 'captura facial'}
-          {verificationMode === 'digital' && 'digital (WebAuthn)'}
-          {verificationMode === 'gps_only' && 'somente localização'}
-        </strong>
-        .
+        <MapPin className="w-4 h-4 shrink-0" />
+        Localização enviada automaticamente no registro. Comprovação escolhida:{' '}
+        <strong>{verificationMode === 'photo' ? 'foto' : 'digital (WebAuthn)'}</strong>.
       </p>
 
       {proofModalOpen && pendingLogType != null && (
@@ -807,8 +737,11 @@ const EmployeeClockIn: React.FC = () => {
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-4 space-y-2">
               <div className="flex items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-200">
                 <MapPin className="w-4 h-4 text-indigo-500 shrink-0" />
-                Localização (GPS)
+                Localização (automática)
               </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Ao confirmar, o sistema envia a posição junto com a batida (se obtida). Se falhar, use &quot;Tentar localização novamente&quot;.
+              </p>
               {typeof window !== 'undefined' && !window.isSecureContext && window.location.hostname !== 'localhost' && (
                 <p className="text-xs text-amber-700 dark:text-amber-300">
                   Em HTTP (sem HTTPS), o navegador pode bloquear GPS e câmera. Use HTTPS em produção ou teste em localhost.
@@ -866,24 +799,13 @@ const EmployeeClockIn: React.FC = () => {
             {needsCameraPreview && (
               <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-200">
-                  {verificationMode === 'facial' ? (
-                    <ScanFace className="w-4 h-4 text-sky-500 shrink-0" />
-                  ) : (
-                    <Camera className="w-4 h-4 text-sky-500 shrink-0" />
-                  )}
+                  <Camera className="w-4 h-4 text-sky-500 shrink-0" />
                   {globalSettings?.photo_required
                     ? 'Imagem obrigatória'
-                    : verificationMode === 'facial'
-                      ? 'Captura facial (rosto visível)'
-                      : verificationMode === 'photo'
-                        ? 'Foto (opcional)'
-                        : 'Foto de apoio'}
+                    : verificationMode === 'photo'
+                      ? 'Foto (opcional)'
+                      : 'Foto de apoio'}
                 </div>
-                {verificationMode === 'facial' && !isFaceDetectionAvailable() && (
-                  <p className="text-xs text-amber-700 dark:text-amber-300">
-                    Detecção automática de rosto: use Chrome ou Edge para validar o rosto no quadro. Sem isso, posicione-se de frente e capture.
-                  </p>
-                )}
                 <div className="relative w-full aspect-[4/3] rounded-xl overflow-hidden bg-black">
                   <video ref={modalVideoRef} className="w-full h-full object-cover" playsInline muted autoPlay />
                 </div>
@@ -894,7 +816,7 @@ const EmployeeClockIn: React.FC = () => {
                     onClick={() => void handleCapturePhotoClick()}
                     className="px-4 py-2.5 rounded-xl bg-sky-600 text-white text-sm font-medium min-h-[44px]"
                   >
-                    {verificationMode === 'facial' ? 'Capturar rosto' : 'Capturar foto'}
+                    Capturar foto
                   </button>
                   {photoDataUrl && !globalSettings?.photo_required && (
                     <button
@@ -908,9 +830,7 @@ const EmployeeClockIn: React.FC = () => {
                   )}
                 </div>
                 {photoDataUrl && (
-                  <p className="text-xs text-emerald-700 dark:text-emerald-300">
-                    {verificationMode === 'facial' ? 'Captura facial pronta para envio.' : 'Foto pronta para envio.'}
-                  </p>
+                  <p className="text-xs text-emerald-700 dark:text-emerald-300">Foto pronta para envio.</p>
                 )}
               </div>
             )}
@@ -931,7 +851,6 @@ const EmployeeClockIn: React.FC = () => {
                   gpsLoading ||
                   (globalSettings?.gps_required === true && (!geo?.latitude || !geo?.longitude)) ||
                   (globalSettings?.photo_required === true && !photoDataUrl) ||
-                  (verificationMode === 'facial' && !photoDataUrl) ||
                   (verificationMode === 'digital' &&
                     !hadBiometric &&
                     !photoDataUrl &&
