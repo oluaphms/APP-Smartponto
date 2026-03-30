@@ -6,6 +6,7 @@ import PageHeader from '../../components/PageHeader';
 import { LoadingState } from '../../../components/UI';
 import { FileDown, FileSpreadsheet, Pencil, Trash2, Lock } from 'lucide-react';
 import { closeTimesheet } from '../../services/timeProcessingService';
+import { buildDayMirrorSummary } from '../../utils/timesheetMirror';
 
 function formatLocation(loc: { lat?: number; lng?: number } | null | undefined): string {
   if (!loc || loc.lat == null || loc.lng == null) return '—';
@@ -14,10 +15,10 @@ function formatLocation(loc: { lat?: number; lng?: number } | null | undefined):
 
 type DaySummary = {
   date: string;
-  entrance: string;
-  exit: string;
-  breakStart?: string;
-  breakEnd?: string;
+  entradaInicio: string;
+  saidaIntervalo: string;
+  voltaIntervalo: string;
+  saidaFinal: string;
   workedHours: string;
   status: string;
   location?: string;
@@ -98,32 +99,22 @@ const AdminTimesheet: React.FC = () => {
       const datesSet = new Set<string>();
       data.recs.sort((a: any, b: any) => (a.created_at || '').localeCompare(b.created_at || ''));
       data.recs.forEach((r: any) => {
-        const d = (r.created_at || '').slice(0, 10);
-        datesSet.add(d);
-        const time = r.created_at ? new Date(r.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
-        const existing = byDate.get(d) || { date: d, entrance: '', exit: '', workedHours: '', status: 'OK' };
-        if (r.type === 'entrada') existing.entrance = time;
-        else if (r.type === 'saída') existing.exit = time;
-        else if (r.type === 'pausa') {
-          if (!existing.breakStart) existing.breakStart = time;
-          else existing.breakEnd = time;
-        }
-        if (r.location && existing.location == null) existing.location = formatLocation(r.location);
-        byDate.set(d, existing);
+        datesSet.add((r.created_at || '').slice(0, 10));
       });
-      byDate.forEach((sum, d) => {
-        if (sum.entrance && sum.exit) {
-          const a = new Date(`${d}T${sum.entrance}`);
-          const b = new Date(`${d}T${sum.exit}`);
-          let mins = (b.getTime() - a.getTime()) / 60000;
-          if (sum.breakStart && sum.breakEnd) {
-            const br = (new Date(`${d}T${sum.breakEnd}`).getTime() - new Date(`${d}T${sum.breakStart}`).getTime()) / 60000;
-            mins -= br;
-          }
-          const h = Math.floor(mins / 60);
-          const m = Math.round(mins % 60);
-          sum.workedHours = `${h}h ${m}m`;
-        }
+      datesSet.forEach((d) => {
+        const dayRecs = data.recs.filter((r: any) => (r.created_at || '').slice(0, 10) === d);
+        const mirror = buildDayMirrorSummary(dayRecs);
+        const locRow = dayRecs.find((r: any) => r.location);
+        byDate.set(d, {
+          date: d,
+          entradaInicio: mirror.entradaInicio,
+          saidaIntervalo: mirror.saidaIntervalo,
+          voltaIntervalo: mirror.voltaIntervalo,
+          saidaFinal: mirror.saidaFinal,
+          workedHours: mirror.workedHours,
+          status: mirror.status,
+          location: locRow?.location ? formatLocation(locRow.location) : undefined,
+        });
       });
       rows.push({
         userId,
@@ -141,12 +132,34 @@ const AdminTimesheet: React.FC = () => {
   };
 
   const handleExportExcel = () => {
-    const headers = ['Funcionário', 'Data', 'Entrada', 'Saída', 'Intervalo', 'Horas Trabalhadas', 'Localização', 'Status'];
+    const headers = [
+      'Funcionário',
+      'Data',
+      'Entrada (início)',
+      'Intervalo (pausa)',
+      'Retorno',
+      'Saída (final)',
+      'Horas trabalhadas',
+      'Localização',
+      'Status',
+    ];
     const lines = [headers.join('\t')];
     buildRows.forEach((row) => {
       row.dates.forEach((d) => {
-        const sum = row.byDate.get(d) || { entrance: '', exit: '', breakStart: '', breakEnd: '', workedHours: '', location: '', status: '' };
-        lines.push([row.userName, d, sum.entrance, sum.exit, sum.breakStart && sum.breakEnd ? `${sum.breakStart}-${sum.breakEnd}` : '', sum.workedHours, sum.location || '—', sum.status].join('\t'));
+        const sum = row.byDate.get(d);
+        lines.push(
+          [
+            row.userName,
+            d,
+            sum?.entradaInicio ?? '',
+            sum?.saidaIntervalo ?? '',
+            sum?.voltaIntervalo ?? '',
+            sum?.saidaFinal ?? '',
+            sum?.workedHours ?? '',
+            sum?.location || '—',
+            sum?.status ?? '',
+          ].join('\t'),
+        );
       });
     });
     const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
@@ -286,10 +299,11 @@ const AdminTimesheet: React.FC = () => {
               <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
                 <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Funcionário</th>
                 <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Data</th>
-                <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Entrada</th>
-                <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Saída</th>
-                <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Intervalo</th>
-                <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Horas Trabalhadas</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Entrada (início)</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Intervalo (pausa)</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Retorno</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Saída (final)</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Horas trabalhadas</th>
                 <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Localização</th>
                 <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Status</th>
                 <th className="text-right px-4 py-3 font-bold text-slate-500 dark:text-slate-400 print:hidden">Ações</th>
@@ -298,18 +312,22 @@ const AdminTimesheet: React.FC = () => {
             <tbody>
               {buildRows.flatMap((row) =>
                 row.dates.map((d) => {
-                  const sum = row.byDate.get(d) || {};
-                  const rec = filteredRecords.find((r: any) => r.user_id === row.userId && (r.created_at || '').slice(0, 10) === d);
+                  const sum = row.byDate.get(d);
+                  const dayRecs = filteredRecords.filter(
+                    (r: any) => r.user_id === row.userId && (r.created_at || '').slice(0, 10) === d,
+                  );
+                  const rec = dayRecs[0];
                   return (
                     <tr key={`${row.userId}-${d}`} className="border-b border-slate-100 dark:border-slate-800">
                       <td className="px-4 py-3 text-slate-900 dark:text-white">{row.userName}</td>
                       <td className="px-4 py-3">{d}</td>
-                      <td className="px-4 py-3 tabular-nums">{sum.entrance || '—'}</td>
-                      <td className="px-4 py-3 tabular-nums">{sum.exit || '—'}</td>
-                      <td className="px-4 py-3">{sum.breakStart && sum.breakEnd ? `${sum.breakStart} - ${sum.breakEnd}` : '—'}</td>
-                      <td className="px-4 py-3 tabular-nums">{sum.workedHours || '—'}</td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs font-mono">{sum.location ?? '—'}</td>
-                      <td className="px-4 py-3">{sum.status || 'OK'}</td>
+                      <td className="px-4 py-3 tabular-nums">{sum?.entradaInicio || '—'}</td>
+                      <td className="px-4 py-3 tabular-nums">{sum?.saidaIntervalo || '—'}</td>
+                      <td className="px-4 py-3 tabular-nums">{sum?.voltaIntervalo || '—'}</td>
+                      <td className="px-4 py-3 tabular-nums">{sum?.saidaFinal || '—'}</td>
+                      <td className="px-4 py-3 tabular-nums">{sum?.workedHours || '—'}</td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs font-mono">{sum?.location ?? '—'}</td>
+                      <td className="px-4 py-3">{sum?.status || 'OK'}</td>
                       <td className="px-4 py-3 text-right print:hidden">
                         {rec && (
                           rec.nsr != null ? (
