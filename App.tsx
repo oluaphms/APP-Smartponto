@@ -234,6 +234,15 @@ const AppMain: React.FC = () => {
   const { setLanguage } = useLanguage();
   const location = useLocation();
   const navigate = useNavigate();
+  const isRecoveryHash = typeof window !== 'undefined' && window.location.hash.includes('type=recovery');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!window.location.hash.includes('type=recovery')) return;
+    if (location.pathname === '/reset-password') return;
+
+    navigate(`/reset-password${window.location.hash}`, { replace: true });
+  }, [location.pathname, navigate]);
 
   // Aplicar idioma padrão das configurações quando não houver preferência no navegador
   useEffect(() => {
@@ -782,8 +791,11 @@ const AppMain: React.FC = () => {
     );
   }
 
+  if (location.pathname === '/reset-password' || isRecoveryHash) {
+    return <ResetPasswordPage />;
+  }
+
   if (!user) {
-    if (location.pathname === '/reset-password') return <ResetPasswordPage />;
     if (location.pathname === '/accept-invite') return <AcceptInvitePage />;
     return (
       <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50 dark:bg-slate-950 overflow-hidden relative font-sans transition-colors duration-300">
