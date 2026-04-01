@@ -92,8 +92,12 @@ export function getLocalDateString(d: Date = new Date()): string {
  */
 export async function getDayRecords(employeeId: string, dateStr: string): Promise<RawTimeRecord[]> {
   if (!isSupabaseConfigured) return [];
-  const start = `${dateStr}T00:00:00`;
-  const end = `${dateStr}T23:59:59.999`;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  // Converte início/fim do dia local para UTC, evitando "nenhuma batida" por fuso.
+  const localStart = new Date(y, (m ?? 1) - 1, d ?? 1, 0, 0, 0, 0);
+  const localEnd = new Date(y, (m ?? 1) - 1, d ?? 1, 23, 59, 59, 999);
+  const start = localStart.toISOString();
+  const end = localEnd.toISOString();
   const rows = await db.select(
     'time_records',
     [

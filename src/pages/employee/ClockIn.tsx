@@ -3,12 +3,8 @@ import { Navigate } from 'react-router-dom';
 import {
   Camera,
   MapPin,
-  LogIn,
-  LogOut,
-  Coffee,
   Fingerprint,
   Clock,
-  CheckCircle2,
   Shield,
   Keyboard,
 } from 'lucide-react';
@@ -87,6 +83,8 @@ const EmployeeClockIn: React.FC = () => {
   const [lastType, setLastType] = useState<string | null>(null);
   const [lastRecordAt, setLastRecordAt] = useState<string | null>(null);
   const [verificationMode, setVerificationMode] = useState<VerificationMode>('photo');
+  /** Qual card está expandido; `null` = nenhum (ações só após clicar no card). */
+  const [expandedMethod, setExpandedMethod] = useState<VerificationMode | null>(null);
   /** Modal de comprovação (GPS + câmera / digital) */
   const [proofModalOpen, setProofModalOpen] = useState(false);
   const [pendingLogType, setPendingLogType] = useState<LogType | null>(null);
@@ -335,9 +333,9 @@ const EmployeeClockIn: React.FC = () => {
       if (localPhotoDataUrl) {
         photoUrl = await uploadPhoto(localPhotoDataUrl);
         if (!photoUrl) {
-          setError('Não foi possível enviar a foto. Verifique o bucket de armazenamento ou tente novamente.');
-          toast.addToast('error', 'Falha ao enviar a foto.');
-          return;
+          // Fallback: mantém o registro com a evidência local para não bloquear a batida.
+          photoUrl = localPhotoDataUrl;
+          toast.addToast('info', 'Foto salva localmente para este registro (falha de upload no servidor).');
         }
       }
 
@@ -564,9 +562,6 @@ const EmployeeClockIn: React.FC = () => {
   if (loading) return <LoadingState message="Carregando..." />;
   if (!user) return <Navigate to="/" replace />;
 
-  const buttonBase =
-    'flex flex-col items-center justify-center gap-4 p-8 rounded-2xl border-2 min-h-[44px] touch-manipulation cursor-pointer select-none transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]';
-
   const lastLabel =
     lastType === 'entrada'
       ? 'Entrada'
@@ -640,82 +635,14 @@ const EmployeeClockIn: React.FC = () => {
 
       <div className="space-y-2">
         <p className="text-sm text-slate-600 dark:text-slate-400">
-          Comprovação: <strong>foto</strong> (câmera), <strong>digital</strong> (biometria no aparelho)
-          {canUseManualPunch ? (
-            <>
-              {' '}
-              ou <strong>manual</strong> (sem foto/GPS obrigatórios, quando a política permitir)
-            </>
-          ) : null}
-          . A <strong>localização</strong> é obtida automaticamente ao abrir o comprovante e enviada com a batida quando o navegador permitir
-          {canUseManualPunch ? '; no modo manual isso não é exigido' : ''}.
+          Toque em <strong>FOTO</strong>, <strong>DIGITAL</strong>
+          {canUseManualPunch ? <> ou <strong>MANUAL</strong></> : null} para ver as ações de registro. A{' '}
+          <strong>localização</strong> é obtida no comprovante; no modo manual, conforme política da empresa.
         </p>
-        <div
-          className={`grid gap-2 p-3 rounded-xl bg-slate-100 dark:bg-slate-800 dark:border dark:border-slate-700 max-w-md ${
-            canUseManualPunch ? 'grid-cols-3' : 'grid-cols-2'
-          }`}
-        >
-          <button
-            type="button"
-            role="radio"
-            aria-checked={verificationMode === 'photo'}
-            aria-label="Comprovar com foto"
-            onClick={() => {
-              setVerificationMode('photo');
-              setDigitalFallbackToPhoto(false);
-            }}
-            onTouchEnd={(e) => e.currentTarget.blur()}
-            className={`flex flex-col items-center gap-1 px-3 py-2.5 min-h-[44px] rounded-xl text-sm font-medium border-2 touch-manipulation cursor-pointer select-none transition-colors ${
-              verificationMode === 'photo'
-                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-400/40 ring-offset-1 dark:ring-offset-slate-900'
-                : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-            }`}
-          >
-            <Camera className="w-4 h-4 shrink-0" />
-            <span>Foto</span>
-          </button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={verificationMode === 'digital'}
-            aria-label="Comprovar com biometria digital no dispositivo"
-            onClick={() => setVerificationMode('digital')}
-            onTouchEnd={(e) => e.currentTarget.blur()}
-            className={`flex flex-col items-center gap-1 px-3 py-2.5 min-h-[44px] rounded-xl text-sm font-medium border-2 touch-manipulation cursor-pointer select-none transition-colors ${
-              verificationMode === 'digital'
-                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-400/40 ring-offset-1 dark:ring-offset-slate-900'
-                : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-            }`}
-          >
-            <Fingerprint className="w-4 h-4 shrink-0" />
-            <span>Digital</span>
-          </button>
-          {canUseManualPunch && (
-            <button
-              type="button"
-              role="radio"
-              aria-checked={verificationMode === 'manual'}
-              aria-label="Registrar ponto manual sem comprovação por foto ou biometria"
-              onClick={() => {
-                setVerificationMode('manual');
-                setDigitalFallbackToPhoto(false);
-              }}
-              onTouchEnd={(e) => e.currentTarget.blur()}
-              className={`flex flex-col items-center gap-1 px-2 py-2.5 min-h-[44px] rounded-xl text-sm font-medium border-2 touch-manipulation cursor-pointer select-none transition-colors ${
-                verificationMode === 'manual'
-                  ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-400/40 ring-offset-1 dark:ring-offset-slate-900'
-                  : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              <Keyboard className="w-4 h-4 shrink-0" />
-              <span>Manual</span>
-            </button>
-          )}
-        </div>
         <p className="text-xs text-slate-500 dark:text-slate-500">
           {globalSettings?.photo_required && !manualBypassActive
-            ? 'A empresa exige imagem: use Foto ou Digital com “Usar foto” no comprovante — ou Manual, se disponível.'
-            : 'Digital usa Face ID / Windows Hello neste aparelho (HTTPS). No modo Manual, o ponto é registrado sem foto nem GPS obrigatórios (conforme política).'}
+            ? 'A empresa pode exigir imagem: use FOTO ou DIGITAL com “Usar foto” no comprovante — ou MANUAL, se disponível.'
+            : 'DIGITAL usa Face ID / Windows Hello neste aparelho (HTTPS). MANUAL segue a política da empresa.'}
         </p>
       </div>
 
@@ -723,65 +650,111 @@ const EmployeeClockIn: React.FC = () => {
         <strong>Sequência do dia:</strong> Entrada → (opcional) Início do intervalo (pausa) → Entrada (retorno) → Saída. Após pausa, use <strong>Registrar Entrada</strong> para voltar ou o atalho &quot;Finalizar intervalo&quot; abaixo.
       </p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        <button
-          type="button"
-          disabled={saving || isIn}
-          title={isIn ? 'Você já está em jornada (última batida: entrada). Use Saída ou Intervalo.' : saving ? 'Registrando...' : 'Primeira entrada do dia ou retorno de intervalo'}
-          onClick={() => handlePunch(LogType.IN)}
-          className={`${buttonBase} border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30`}
-        >
-          <LogIn className="w-16 h-16 shrink-0" />
-          <span className="text-xl font-bold">Registrar Entrada</span>
-          {isBreak && <span className="text-xs font-normal text-emerald-600 dark:text-emerald-400">Retorno do intervalo</span>}
-        </button>
-        <button
-          type="button"
-          disabled={saving || !isIn}
-          title={!isIn ? 'Registre uma entrada antes' : saving ? 'Registrando...' : 'Encerrar a jornada'}
-          onClick={() => handlePunch(LogType.OUT)}
-          className={`${buttonBase} border-red-500 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30`}
-        >
-          <LogOut className="w-16 h-16 shrink-0" />
-          <span className="text-xl font-bold">Registrar Saída</span>
-        </button>
-        <button
-          type="button"
-          disabled={saving || !isIn || isBreak}
-          title={!isIn ? 'Registre uma entrada antes' : isBreak ? 'Você já está em intervalo' : saving ? 'Registrando...' : 'Início do intervalo (pausa)'}
-          onClick={() => handlePunch(LogType.BREAK)}
-          className={`${buttonBase} border-amber-500 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30`}
-        >
-          <Coffee className="w-16 h-16 shrink-0" />
-          <span className="text-xl font-bold">Iniciar Intervalo</span>
-        </button>
-        <button
-          type="button"
-          disabled={saving || !isBreak}
-          title={!isBreak ? 'Inicie um intervalo antes' : saving ? 'Registrando...' : 'Registra retorno (entrada) após o intervalo'}
-          onClick={() => handlePunch(LogType.IN)}
-          className={`${buttonBase} border-sky-500 bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/30`}
-        >
-          <CheckCircle2 className="w-16 h-16 shrink-0" />
-          <span className="text-xl font-bold">Finalizar intervalo</span>
-          <span className="text-xs font-normal text-sky-600 dark:text-sky-400 text-center px-2">Registra entrada (retorno)</span>
-        </button>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[
+          { mode: 'photo' as const, label: 'FOTO', icon: Camera },
+          { mode: 'digital' as const, label: 'DIGITAL', icon: Fingerprint },
+          ...(canUseManualPunch ? [{ mode: 'manual' as const, label: 'MANUAL', icon: Keyboard }] : []),
+        ].map((card) => {
+          const selected = expandedMethod === card.mode;
+          const Icon = card.icon;
+          return (
+            <div
+              key={card.mode}
+              className={`rounded-2xl border p-4 space-y-3 ${
+                selected
+                  ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-900/20'
+                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'
+              }`}
+            >
+              <button
+                type="button"
+                aria-expanded={selected}
+                aria-controls={`clock-actions-${card.mode}`}
+                id={`clock-card-${card.mode}`}
+                onClick={() => {
+                  setVerificationMode(card.mode);
+                  if (card.mode === 'photo' || card.mode === 'manual') setDigitalFallbackToPhoto(false);
+                  setExpandedMethod((prev) => (prev === card.mode ? null : card.mode));
+                }}
+                className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold"
+              >
+                <Icon className="w-4 h-4" />
+                {card.label}
+              </button>
+              {expandedMethod === card.mode && (
+                <div id={`clock-actions-${card.mode}`} className="grid grid-cols-2 gap-2" role="group" aria-labelledby={`clock-card-${card.mode}`}>
+                  <button
+                    type="button"
+                    disabled={saving || isIn}
+                    onClick={() => {
+                      setVerificationMode(card.mode);
+                      handlePunch(LogType.IN);
+                    }}
+                    className="rounded-xl py-2 text-xs font-semibold bg-emerald-100 text-emerald-800 disabled:opacity-50"
+                  >
+                    Registrar entrada
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving || !isIn || isBreak}
+                    onClick={() => {
+                      setVerificationMode(card.mode);
+                      handlePunch(LogType.BREAK);
+                    }}
+                    className="rounded-xl py-2 text-xs font-semibold bg-amber-100 text-amber-800 disabled:opacity-50"
+                  >
+                    Iniciar intervalo
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving || !isBreak}
+                    onClick={() => {
+                      setVerificationMode(card.mode);
+                      handlePunch(LogType.IN);
+                    }}
+                    className="rounded-xl py-2 text-xs font-semibold bg-sky-100 text-sky-800 disabled:opacity-50"
+                  >
+                    Finalizar intervalo
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving || !isIn}
+                    onClick={() => {
+                      setVerificationMode(card.mode);
+                      handlePunch(LogType.OUT);
+                    }}
+                    className="rounded-xl py-2 text-xs font-semibold bg-red-100 text-red-800 disabled:opacity-50"
+                  >
+                    Registrar saida
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <p className="text-sm text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-2">
         <MapPin className="w-4 h-4 shrink-0" />
-        {verificationMode === 'manual' && manualBypassActive
-          ? 'Modo manual: registro sem GPS nem foto obrigatórios (conforme política).'
-          : 'Localização enviada automaticamente no registro quando obtida.'}{' '}
-        Comprovação escolhida:{' '}
-        <strong>
-          {verificationMode === 'photo'
-            ? 'foto'
-            : verificationMode === 'digital'
-              ? 'digital (WebAuthn)'
-              : 'manual'}
-        </strong>
-        .
+        {expandedMethod == null ? (
+          <span>Abra um dos cards acima (FOTO, DIGITAL ou MANUAL) para escolher o modo antes de registrar.</span>
+        ) : (
+          <>
+            {verificationMode === 'manual' && manualBypassActive
+              ? 'Modo manual: registro sem GPS nem foto obrigatórios (conforme política).'
+              : 'Localização enviada automaticamente no registro quando obtida.'}{' '}
+            Comprovação escolhida:{' '}
+            <strong>
+              {verificationMode === 'photo'
+                ? 'foto'
+                : verificationMode === 'digital'
+                  ? 'digital (WebAuthn)'
+                  : 'manual'}
+            </strong>
+            .
+          </>
+        )}
       </p>
 
       {proofModalOpen && pendingLogType != null && (

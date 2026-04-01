@@ -580,6 +580,13 @@ const AppMain: React.FC = () => {
     setLoginError(null);
 
     try {
+      // Evita estado de sessão travada após logout em alguns navegadores/PWA.
+      try {
+        await clearLocalAuthSession();
+      } catch {
+        // segue para login mesmo se falhar a limpeza
+      }
+
       // Delega a resolução do identificador (email, nome, CPF) para o AuthService,
       // que já trata e normaliza o valor (incluindo fallback de domínio quando necessário).
       const loginPromise = authService.signInWithEmail(loginData.identifier, loginData.password);
