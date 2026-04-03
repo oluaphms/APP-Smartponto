@@ -283,12 +283,11 @@ const EmployeeClockIn: React.FC = () => {
 
   const manualBypassActive = canUseManualPunch && verificationMode === 'manual';
 
+  /** Câmera só no modo Foto ou quando, no Digital, o usuário escolheu “Usar foto”. Manual e Digital (só WebAuthn) não ligam a câmera. */
   const needsCameraPreview =
     proofModalOpen &&
     !manualBypassActive &&
-    (globalSettings?.photo_required === true ||
-      verificationMode === 'photo' ||
-      (verificationMode === 'digital' && digitalFallbackToPhoto));
+    (verificationMode === 'photo' || (verificationMode === 'digital' && digitalFallbackToPhoto));
 
   useEffect(() => {
     if (!canUseManualPunch && verificationMode === 'manual') {
@@ -524,19 +523,18 @@ const EmployeeClockIn: React.FC = () => {
       toast.addToast('error', 'É necessário obter a localização antes de registrar.');
       return;
     }
-    if (globalSettings?.photo_required && !photoDataUrl && !manualBypass) {
-      toast.addToast('error', 'Capture a foto obrigatória antes de registrar.');
-      return;
-    }
-    if (
-      verificationMode === 'digital' &&
-      !hadBiometric &&
-      !photoDataUrl &&
-      globalSettings?.photo_required &&
-      !manualBypass
-    ) {
-      toast.addToast('error', 'Valide a biometria ou capture a foto obrigatória.');
-      return;
+    if (globalSettings?.photo_required && !manualBypass) {
+      if (verificationMode === 'digital') {
+        if (!hadBiometric && !photoDataUrl) {
+          toast.addToast('error', 'Valide a biometria ou capture a foto obrigatória.');
+          return;
+        }
+      } else if (verificationMode === 'photo') {
+        if (!photoDataUrl) {
+          toast.addToast('error', 'Capture a foto obrigatória antes de registrar.');
+          return;
+        }
+      }
     }
     await executePunchRegistration(pendingLogType, geo, photoDataUrl, hadBiometric, { manualBypass });
   };
@@ -1001,12 +999,10 @@ const EmployeeClockIn: React.FC = () => {
                   (globalSettings?.gps_required === true &&
                     (!geo?.latitude || !geo?.longitude) &&
                     !manualBypassActive) ||
-                  (globalSettings?.photo_required === true && !photoDataUrl && !manualBypassActive) ||
-                  (verificationMode === 'digital' &&
-                    !hadBiometric &&
-                    !photoDataUrl &&
-                    globalSettings?.photo_required === true &&
-                    !manualBypassActive)
+                  (globalSettings?.photo_required === true &&
+                    !manualBypassActive &&
+                    ((verificationMode === 'digital' && !hadBiometric && !photoDataUrl) ||
+                      (verificationMode === 'photo' && !photoDataUrl)))
                 }
                 onClick={() => void handleConfirmProof()}
                 className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium disabled:opacity-50 min-h-[44px]"
