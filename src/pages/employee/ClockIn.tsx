@@ -87,7 +87,6 @@ const EmployeeClockIn: React.FC = () => {
   const [lastType, setLastType] = useState<string | null>(null);
   const [lastRecordAt, setLastRecordAt] = useState<string | null>(null);
   const [verificationMode, setVerificationMode] = useState<VerificationMode>('photo');
-  /** Após escolher FOTO/DIGITAL/MANUAL, painel com Entrada / Saída / intervalos. */
   const [showActionSheet, setShowActionSheet] = useState(false);
   /** Feedback de GPS para o usuário */
   const [geoLiveStatus, setGeoLiveStatus] = useState<'idle' | 'obtaining' | 'captured' | 'failed'>('idle');
@@ -666,154 +665,79 @@ const EmployeeClockIn: React.FC = () => {
 
       <div className="space-y-2">
         <p className="text-sm text-slate-600 dark:text-slate-400">
-          Escolha <strong>FOTO</strong>, <strong>DIGITAL</strong>
-          {canUseManualPunch ? <> ou <strong>MANUAL</strong></> : null} e, em seguida, o tipo de registro (entrada, saída ou intervalo). A{' '}
-          <strong>localização</strong> é obtida no comprovante; no modo manual, conforme política da empresa.
+          Escolha o <strong>método de comprovação</strong> (Foto, Digital ou Manual) e o tipo de registro. A localização é obtida automaticamente.
         </p>
         <p className="text-xs text-slate-500 dark:text-slate-500">
-          {globalSettings?.photo_required && !manualBypassActive
-            ? 'A empresa pode exigir imagem: use FOTO ou DIGITAL com “Usar foto” no comprovante — ou MANUAL, se disponível.'
-            : 'DIGITAL usa Face ID / Windows Hello neste aparelho (HTTPS). MANUAL segue a política da empresa.'}
+          {globalSettings?.photo_required
+            ? 'Foto ou Digital obrigatórios conforme política da empresa.'
+            : 'Localização automática + comprovação opcional.'}
         </p>
       </div>
 
-      <p className="text-sm text-slate-500 dark:text-slate-400">
-        <strong>Sequência do dia:</strong> Entrada → (opcional) Início do intervalo (pausa) → Entrada (retorno) → Saída. Após pausa, use <strong>Registrar entrada</strong> para voltar ou o atalho &quot;Finalizar intervalo&quot; abaixo.
-      </p>
+      <div className="max-w-4xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[
+            { mode: 'photo' as const, label: '📸 Foto', icon: Camera, color: 'sky' },
+            { mode: 'digital' as const, label: '🔐 Digital', icon: Fingerprint, color: 'indigo' },
+            ...(canUseManualPunch ? [{ mode: 'manual' as const, label: '⌨️ Manual', icon: Keyboard, color: 'amber' }] : []),
+          ].map((card) => {
+            const Icon = card.icon;
+            const isActive = verificationMode === card.mode;
+            return (
+              <div key={card.mode} className={`rounded-3xl border-2 ${isActive ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'} p-6 transition-all hover:shadow-md`}>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    setVerificationMode(card.mode);
+                    if (card.mode === 'photo' || card.mode === 'manual') setDigitalFallbackToPhoto(false);
+                  }}
+                  className="w-full flex flex-col items-center gap-4"
+                >
+                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${isActive ? 'bg-indigo-100 dark:bg-indigo-900' : 'bg-slate-100 dark:bg-slate-800'}`}>
+                    <Icon className={`w-8 h-8 ${isActive ? 'text-indigo-600' : 'text-slate-500 dark:text-slate-400'}`} />
+                  </div>
+                  <div>
+                    <div className="font-semibold text-xl text-slate-800 dark:text-slate-100">{card.label}</div>
+                    <div className="text-xs text-slate-500 mt-1">Comprovação</div>
+                  </div>
+                </button>
 
-      <div className="flex flex-wrap justify-center gap-4 max-w-2xl mx-auto">
-        {[
-          { mode: 'photo' as const, label: 'Foto', icon: Camera },
-          { mode: 'digital' as const, label: 'Digital', icon: Fingerprint },
-          ...(canUseManualPunch ? [{ mode: 'manual' as const, label: 'Manual', icon: Keyboard }] : []),
-        ].map((card) => {
-          const Icon = card.icon;
-          return (
-            <button
-              key={card.mode}
-              type="button"
-              disabled={saving}
-              onClick={() => {
-                setVerificationMode(card.mode);
-                if (card.mode === 'photo' || card.mode === 'manual') setDigitalFallbackToPhoto(false);
-                setShowActionSheet(true);
-              }}
-              className="min-w-[140px] flex flex-col items-center justify-center gap-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-6 py-5 shadow-sm hover:border-indigo-400 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/20 transition-colors disabled:opacity-50"
-            >
-              <Icon className="w-7 h-7 text-indigo-600 dark:text-indigo-400" />
-              <span className="font-semibold text-slate-800 dark:text-slate-100">{card.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <p className="text-sm text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-2 justify-center text-center">
-        <MapPin className="w-4 h-4 shrink-0" />
-        {!showActionSheet ? (
-          <span>Toque em um modo de comprovação acima para abrir as opções de registro.</span>
-        ) : (
-          <span>
-            Modo{' '}
-            <strong>
-              {verificationMode === 'photo'
-                ? 'foto'
-                : verificationMode === 'digital'
-                  ? 'digital (WebAuthn)'
-                  : 'manual'}
-            </strong>
-            : escolha entrada, saída ou intervalo no painel. A localização é obtida no comprovante (exceto manual conforme política).
-          </span>
-        )}
-      </p>
-
-      {showActionSheet && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-          <button
-            type="button"
-            aria-label="Fechar"
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => !saving && setShowActionSheet(false)}
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="action-sheet-title"
-            className="relative z-[91] w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-6 space-y-5"
-          >
-            <div className="text-center space-y-1">
-              <h2 id="action-sheet-title" className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                Tipo de registro
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Modo:{' '}
-                <strong>
-                  {verificationMode === 'photo'
-                    ? 'Foto'
-                    : verificationMode === 'digital'
-                      ? 'Digital'
-                      : 'Manual'}
-                </strong>
-              </p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-sm mx-auto">
-              <button
-                type="button"
-                disabled={saving || isIn}
-                onClick={() => {
-                  setShowActionSheet(false);
-                  handlePunch(LogType.IN);
-                }}
-                className="rounded-xl py-3 px-4 text-sm font-semibold bg-emerald-100 text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-100 disabled:opacity-50"
-              >
-                Entrada
-              </button>
-              <button
-                type="button"
-                disabled={saving || !isIn || isBreak}
-                onClick={() => {
-                  setShowActionSheet(false);
-                  handlePunch(LogType.BREAK);
-                }}
-                className="rounded-xl py-3 px-4 text-sm font-semibold bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100 disabled:opacity-50"
-              >
-                Iniciar intervalo
-              </button>
-              <button
-                type="button"
-                disabled={saving || !isBreak}
-                onClick={() => {
-                  setShowActionSheet(false);
-                  handlePunch(LogType.IN);
-                }}
-                className="rounded-xl py-3 px-4 text-sm font-semibold bg-sky-100 text-sky-900 dark:bg-sky-900/30 dark:text-sky-100 disabled:opacity-50"
-              >
-                Finalizar intervalo
-              </button>
-              <button
-                type="button"
-                disabled={saving || !isIn}
-                onClick={() => {
-                  setShowActionSheet(false);
-                  handlePunch(LogType.OUT);
-                }}
-                className="rounded-xl py-3 px-4 text-sm font-semibold bg-red-100 text-red-900 dark:bg-red-900/30 dark:text-red-100 disabled:opacity-50"
-              >
-                Saída
-              </button>
-            </div>
-            <div className="flex justify-center">
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => setShowActionSheet(false)}
-                className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:underline"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
+                <div className="mt-6 space-y-2">
+                  <button
+                    onClick={() => handlePunch(LogType.IN)}
+                    disabled={saving || (isIn && !isBreak && verificationMode !== 'manual')}
+                    className="w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium disabled:opacity-50 transition-colors"
+                  >
+                    Registrar Entrada
+                  </button>
+                  <button
+                    onClick={() => handlePunch(LogType.BREAK)}
+                    disabled={saving || !isIn || isBreak}
+                    className="w-full py-3 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium disabled:opacity-50 transition-colors"
+                  >
+                    Iniciar Intervalo
+                  </button>
+                  <button
+                    onClick={() => handlePunch(LogType.IN)}
+                    disabled={saving || !isBreak}
+                    className="w-full py-3 rounded-2xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium disabled:opacity-50 transition-colors"
+                  >
+                    Finalizar Intervalo
+                  </button>
+                  <button
+                    onClick={() => handlePunch(LogType.OUT)}
+                    disabled={saving || !isIn}
+                    className="w-full py-3 rounded-2xl bg-red-600 hover:bg-red-700 text-white text-sm font-medium disabled:opacity-50 transition-colors"
+                  >
+                    Registrar Saída
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
-      )}
+      </div>
 
       {proofModalOpen && pendingLogType != null && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">

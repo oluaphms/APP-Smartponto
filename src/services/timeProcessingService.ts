@@ -81,10 +81,11 @@ function normalizeType(type: string): PunchType {
 
 /** Data local YYYY-MM-DD; use no lugar de `toISOString().slice(0,10)` para filtros do dia civil. */
 export function getLocalDateString(d: Date = new Date()): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
+  // Garante data local correta mesmo com fuso horário (evita pulo de dia às 21h)
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return `${year}-${month}-${day}`;
 }
 
 /**

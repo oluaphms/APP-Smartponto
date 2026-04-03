@@ -15,8 +15,11 @@ function formatLocation(loc: { lat?: number; lng?: number } | null | undefined):
 const EmployeeTimesheet: React.FC = () => {
   const { user, loading } = useCurrentUser();
   const [records, setRecords] = useState<any[]>([]);
-  const [periodStart, setPeriodStart] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10));
-  const [periodEnd, setPeriodEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [periodStart, setPeriodStart] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  });
+  const [periodEnd, setPeriodEnd] = useState(() => new Date().toISOString().slice(0, 10));
   const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
@@ -24,7 +27,19 @@ const EmployeeTimesheet: React.FC = () => {
     const load = async () => {
       setLoadingData(true);
       try {
-        const rows = (await db.select('time_records', [{ column: 'user_id', operator: 'eq', value: user.id }], { column: 'created_at', ascending: false }, 500)) as any[];
+        // Usa filtro de data no banco para reduzir carga e evitar dados de dias errados
+        const startDate = periodStart;
+        const endDate = periodEnd;
+        const rows = (await db.select(
+          'time_records',
+          [
+            { column: 'user_id', operator: 'eq', value: user.id },
+            { column: 'created_at', operator: 'gte', value: `${startDate}T00:00:00` },
+            { column: 'created_at', operator: 'lte', value: `${endDate}T23:59:59` },
+          ],
+          { column: 'created_at', ascending: false },
+          500
+        )) as any[];
         setRecords(rows ?? []);
       } catch (e) {
         console.error(e);
@@ -33,14 +48,9 @@ const EmployeeTimesheet: React.FC = () => {
       }
     };
     load();
-  }, [user?.id]);
+  }, [user?.id, periodStart, periodEnd]);
 
-  const filtered = useMemo(() => {
-    return records.filter((r: any) => {
-      const d = (r.created_at || '').slice(0, 10);
-      return d >= periodStart && d <= periodEnd;
-    });
-  }, [records, periodStart, periodEnd]);
+  // filtered removido - agora o filtro é feito diretamente na query do banco (mais rápido)
 
   const byDate = useMemo(() => {
     const map = new Map<
@@ -48,23 +58,23 @@ const EmployeeTimesheet: React.FC = () => {
       ReturnType<typeof buildDayMirrorSummary> & { location?: string }
     >();
     const byDay = new Map<string, any[]>();
-    filtered.forEach((r: any) => {
+    records.forEach((r: any) => {
       const d = (r.created_at || '').slice(0, 10);
       if (!byDay.has(d)) byDay.set(d, []);
       byDay.get(d)!.push(r);
     });
     byDay.forEach((arr, d) => {
       const mirror = buildDayMirrorSummary(arr);
-      const locRow = arr.find((x: any) => x.location);
+      const locRow = arr.find((x: any) => x.latitude || x.location);
       map.set(d, {
         ...mirror,
-        location: locRow?.location ? formatLocation(locRow.location) : undefined,
+        location: locRow ? formatLocation({ lat: locRow.latitude, lng: locRow.longitude }) : undefined,
       });
     });
     return map;
-  }, [filtered]);
+  }, [records]);
 
-  const dates = useMemo(() => [...new Set(filtered.map((r: any) => (r.created_at || '').slice(0, 10)))].sort().reverse(), [filtered]);
+  const dates = useMemo(() => [...new Set(records.map((r: any) => (r.created_at || '').slice(0, 10)))].sort().reverse(), [records]);
 
   const exportPDF = () => window.print();
 
