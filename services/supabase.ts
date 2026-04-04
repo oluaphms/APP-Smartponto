@@ -62,22 +62,34 @@ const SUPABASE_FETCH_TIMEOUT_MS = 15000;
 
 let authExpiredEventPending = false;
 
-// Wrapper de fetch com timeout + sinalização de JWT inválido (401 em REST).
+let client: SupabaseClient | null = null;
+
+// Wrapper de fetch com timeout. 401 em REST não desloga se a sessão ainda existir (evita logout por race no refresh/RLS).
 const fetchWithTimeout = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
   Promise.race([
     fetch(input, init).then((res) => {
       if (typeof window !== 'undefined' && res.status === 401 && !authExpiredEventPending) {
         const u = String(input);
-        if (u.includes('/rest/v1/') && !u.includes('/auth/v1/')) {
-          authExpiredEventPending = true;
-          try {
-            window.dispatchEvent(new CustomEvent('supabase:auth-expired'));
-          } catch {
-            // ignora
-          }
-          setTimeout(() => {
-            authExpiredEventPending = false;
-          }, 3000);
+        if (u.includes('/rest/v1/') && !u.includes('/auth/v1/') && client) {
+          void (async () => {
+            try {
+              const {
+                data: { session },
+              } = await client!.auth.getSession();
+              if (session) return;
+            } catch {
+              // segue: sessão inválida
+            }
+            authExpiredEventPending = true;
+            try {
+              window.dispatchEvent(new CustomEvent('supabase:auth-expired'));
+            } catch {
+              // ignora
+            }
+            setTimeout(() => {
+              authExpiredEventPending = false;
+            }, 3000);
+          })();
         }
       }
       return res;
@@ -86,8 +98,6 @@ const fetchWithTimeout = (input: RequestInfo | URL, init?: RequestInit): Promise
       setTimeout(() => reject(new Error('Supabase timeout')), SUPABASE_FETCH_TIMEOUT_MS),
     ),
   ]);
-
-let client: SupabaseClient | null = null;
 if (configured) {
   client = createClient(supabaseUrl!, supabaseAnonKey!, {
     auth: {

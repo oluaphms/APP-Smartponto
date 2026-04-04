@@ -16,16 +16,34 @@ export interface AuthResult {
   error: string | null;
 }
 
+/** Evita chamadas repetidas a auth.updateUser (causavam lentidão, refresh em loop e logout falso). */
+const TENANT_META_SYNC_KEY = 'sp_tenant_meta_sync';
+
 class AuthService {
-  /** Sincroniza tenant_id no user_metadata do Supabase Auth (visível no JWT após refresh). */
+  /** Sincroniza tenant_id no user_metadata do Supabase Auth (no máx. 1x por tenant por aba). */
   private async syncTenantUserMetadata(appUser: User): Promise<void> {
     if (!isSupabaseConfigured || !supabase) return;
     const tid = resolveTenantId(appUser);
     if (!tid) return;
+    if (typeof window !== 'undefined') {
+      try {
+        const done = window.sessionStorage.getItem(TENANT_META_SYNC_KEY);
+        if (done === tid) return;
+      } catch {
+        // ignora
+      }
+    }
     try {
       await supabase.auth.updateUser({
         data: { tenant_id: tid, company_id: tid },
       });
+      if (typeof window !== 'undefined') {
+        try {
+          window.sessionStorage.setItem(TENANT_META_SYNC_KEY, tid);
+        } catch {
+          // ignora
+        }
+      }
     } catch {
       // não bloquear login
     }
@@ -467,10 +485,10 @@ class AuthService {
         if (appUser) {
           try {
             await this.syncTenantUserMetadata(appUser);
-            await logTenantLoginSuccess(appUser);
           } catch {
             // ignore
           }
+          void logTenantLoginSuccess(appUser).catch(() => {});
           try {
             localStorage.setItem('current_user', JSON.stringify(appUser));
             window.dispatchEvent(new Event('current_user_changed'));
@@ -483,10 +501,10 @@ class AuthService {
         const minimalUser = await this.buildMinimalAppUserFromAuthUser(data.user);
         try {
           await this.syncTenantUserMetadata(minimalUser);
-          await logTenantLoginSuccess(minimalUser);
         } catch {
           // ignore
         }
+        void logTenantLoginSuccess(minimalUser).catch(() => {});
         try {
           localStorage.setItem('current_user', JSON.stringify(minimalUser));
           window.dispatchEvent(new Event('current_user_changed'));
@@ -639,6 +657,12 @@ class AuthService {
           // Perfil app
           window.localStorage.removeItem('current_user');
           window.dispatchEvent(new Event('current_user_changed'));
+
+          try {
+            window.sessionStorage.removeItem(TENANT_META_SYNC_KEY);
+          } catch {
+            // ignora
+          }
 
           // Tokens/artefatos do Supabase
           const clearSbKeys = (storage: Storage | undefined) => {
@@ -984,3 +1008,12 @@ class AuthService {
 }
 
 export const authService = new AuthService();
+
+/** Chame após trocar o tenant do usuário no mesmo fluxo (ex.: vínculo à empresa), se precisar forçar novo sync. */
+export function clearTenantMetadataSyncCache(): void {
+  try {
+    if (typeof window !== 'undefined') window.sessionStorage.removeItem(TENANT_META_SYNC_KEY);
+  } catch {
+    // ignora
+  }
+}

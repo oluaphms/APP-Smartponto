@@ -7,6 +7,7 @@ import { LoadingState } from '../../../components/UI';
 import { Building2, User, MapPin, FileCheck, Cloud } from 'lucide-react';
 import { PontoService } from '../../../services/pontoService';
 import { firestoreService } from '../../../services/firestoreService';
+import { clearTenantMetadataSyncCache } from '../../../services/authService';
 import type { Company } from '../../../types';
 
 /** Campos obrigatórios pela Portaria 1510 */
@@ -333,6 +334,7 @@ const AdminCompany: React.FC = () => {
               localStorage.setItem('current_user', JSON.stringify(parsed));
             }
           } catch {}
+          clearTenantMetadataSyncCache();
         }
       }
       setMessage({ type: 'success', text: 'Dados da empresa salvos com sucesso.' });
