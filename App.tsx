@@ -285,13 +285,8 @@ const AppMain: React.FC = () => {
           // Não loga falha aqui para não poluir o console; login mostrará erro se precisar.
         });
 
-        // Tentar obter usuário do Supabase Auth com timeout
-        const userPromise = authService.getCurrentUser();
-        const timeoutPromise = new Promise<User | null>((resolve) => {
-          setTimeout(() => resolve(null), 3000);
-        });
-
-        const currentUser = await Promise.race([userPromise, timeoutPromise]).catch((error) => {
+        // Hidratar sessão: não usar timeout curto aqui — cortava o perfil em rede lenta e gerava oscilação.
+        const currentUser = await authService.getCurrentUser().catch((error) => {
           console.error('Error getting current user:', error);
           return null;
         });
@@ -347,15 +342,6 @@ const AppMain: React.FC = () => {
             setCompany(null);
           }
         });
-        // Sincronizar uma vez com a sessão atual (evita perder sessão após HMR ou reload)
-        authService.getCurrentUser().then((current) => {
-          if (isMounted && current) {
-            setUser(current);
-            PontoService.getCompany(current.companyId).then(comp => {
-              if (isMounted && comp) setCompany(comp);
-            }).catch(() => {});
-          }
-        }).catch(() => {});
       } catch (error) {
         console.error('Error setting up auth state listener:', error);
       }

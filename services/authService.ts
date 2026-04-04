@@ -20,11 +20,26 @@ export interface AuthResult {
 const TENANT_META_SYNC_KEY = 'sp_tenant_meta_sync';
 
 class AuthService {
-  /** Sincroniza tenant_id no user_metadata do Supabase Auth (no máx. 1x por tenant por aba). */
-  private async syncTenantUserMetadata(appUser: User): Promise<void> {
+  /**
+   * Sincroniza tenant_id no user_metadata (JWT) — só chama API se ainda não estiver no token/cache.
+   * Evita updateUser repetido (principal causa de lentidão/instabilidade no login).
+   */
+  private async syncTenantUserMetadata(
+    appUser: User,
+    authUser?: { user_metadata?: Record<string, unknown> } | null,
+  ): Promise<void> {
     if (!isSupabaseConfigured || !supabase) return;
     const tid = resolveTenantId(appUser);
     if (!tid) return;
+    const meta = authUser?.user_metadata as { tenant_id?: string; company_id?: string } | undefined;
+    if (meta?.tenant_id === tid && (!meta.company_id || meta.company_id === tid)) {
+      try {
+        if (typeof window !== 'undefined') window.sessionStorage.setItem(TENANT_META_SYNC_KEY, tid);
+      } catch {
+        // ignora
+      }
+      return;
+    }
     if (typeof window !== 'undefined') {
       try {
         const done = window.sessionStorage.getItem(TENANT_META_SYNC_KEY);
@@ -46,6 +61,23 @@ class AuthService {
       }
     } catch {
       // não bloquear login
+    }
+  }
+
+  /** Após login: sync de metadata sem bloquear a UI (idle / próximo tick). */
+  private enqueuePostLoginSideEffects(appUser: User, authUser: { user_metadata?: Record<string, unknown> } | null): void {
+    const run = () => {
+      void this.syncTenantUserMetadata(appUser, authUser).catch(() => {});
+      void logTenantLoginSuccess(appUser).catch(() => {});
+    };
+    if (typeof window === 'undefined') {
+      void run();
+      return;
+    }
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(() => run(), { timeout: 3000 });
+    } else {
+      window.setTimeout(run, 0);
     }
   }
 
@@ -484,33 +516,23 @@ class AuthService {
         ]);
         if (appUser) {
           try {
-            await this.syncTenantUserMetadata(appUser);
-          } catch {
-            // ignore
-          }
-          void logTenantLoginSuccess(appUser).catch(() => {});
-          try {
             localStorage.setItem('current_user', JSON.stringify(appUser));
             window.dispatchEvent(new Event('current_user_changed'));
           } catch {
             // ignore
           }
+          this.enqueuePostLoginSideEffects(appUser, data.user);
           return { user: appUser, error: null };
         }
         // Fallback: perfil não carregou a tempo (timeout) — mesmo fluxo que onAuthStateChanged (não deslogar)
         const minimalUser = await this.buildMinimalAppUserFromAuthUser(data.user);
-        try {
-          await this.syncTenantUserMetadata(minimalUser);
-        } catch {
-          // ignore
-        }
-        void logTenantLoginSuccess(minimalUser).catch(() => {});
         try {
           localStorage.setItem('current_user', JSON.stringify(minimalUser));
           window.dispatchEvent(new Event('current_user_changed'));
         } catch {
           // ignore
         }
+        this.enqueuePostLoginSideEffects(minimalUser, data.user);
         return { user: minimalUser, error: null };
       }
 
@@ -877,11 +899,6 @@ class AuthService {
       const appUser = await this.supabaseUserToAppUser(supabaseUser);
       if (appUser) {
         try {
-          await this.syncTenantUserMetadata(appUser);
-        } catch {
-          // ignora
-        }
-        try {
           if (typeof window !== 'undefined') {
             window.localStorage.setItem('current_user', JSON.stringify(appUser));
             window.dispatchEvent(new Event('current_user_changed'));
@@ -905,11 +922,6 @@ class AuthService {
 
     const minimal = await this.buildMinimalAppUserFromAuthUser(supabaseUser);
     try {
-      await this.syncTenantUserMetadata(minimal);
-    } catch {
-      // ignora
-    }
-    try {
       if (typeof window !== 'undefined') {
         window.localStorage.setItem('current_user', JSON.stringify(minimal));
         window.dispatchEvent(new Event('current_user_changed'));
@@ -928,6 +940,24 @@ class AuthService {
     return auth.onAuthStateChange(async (event, session) => {
       try {
         if (session?.user) {
+          // Refresh de token: não recarrega public.users (evita lentidão e “piscar” estado).
+          if (event === 'TOKEN_REFRESHED') {
+            try {
+              const raw =
+                typeof window !== 'undefined' ? window.localStorage.getItem('current_user') : null;
+              if (raw) {
+                const cached = JSON.parse(raw) as User;
+                if (cached?.id === session.user.id) {
+                  callback(cached);
+                  return;
+                }
+              }
+            } catch {
+              // segue com carga normal
+            }
+            return;
+          }
+
           let appUser: User | null = null;
           try {
             appUser = await this.supabaseUserToAppUser(session.user);
@@ -936,11 +966,6 @@ class AuthService {
           }
           if (!appUser) {
             appUser = await this.buildMinimalAppUserFromAuthUser(session.user);
-          }
-          try {
-            if (appUser) await this.syncTenantUserMetadata(appUser);
-          } catch {
-            // ignora
           }
           try {
             if (typeof window !== 'undefined') {
@@ -966,11 +991,6 @@ class AuthService {
         if (session?.user) {
           try {
             const appUser = await this.buildMinimalAppUserFromAuthUser(session.user);
-            try {
-              await this.syncTenantUserMetadata(appUser);
-            } catch {
-              // ignora
-            }
             try {
               if (typeof window !== 'undefined') {
                 window.localStorage.setItem('current_user', JSON.stringify(appUser));
