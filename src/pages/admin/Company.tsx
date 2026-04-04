@@ -4,7 +4,7 @@ import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
 import { db, supabase, isSupabaseConfigured } from '../../services/supabaseClient';
 import { LoadingState } from '../../../components/UI';
-import { Building2, User, MapPin, FileCheck, Cloud } from 'lucide-react';
+import { Building2, User, MapPin, FileCheck, Cloud, Loader2 } from 'lucide-react';
 import { PontoService } from '../../../services/pontoService';
 import { firestoreService } from '../../../services/firestoreService';
 import { clearTenantMetadataSyncCache } from '../../../services/authService';
@@ -683,9 +683,21 @@ const AdminCompany: React.FC = () => {
               type="button"
               onClick={handleSave}
               disabled={saving}
-              className="w-full py-3 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50"
+              aria-busy={saving}
+              className="group relative w-full py-3 rounded-xl bg-indigo-600 text-white font-medium shadow-md shadow-indigo-600/20 transition-all duration-200 ease-out hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-600/25 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-70 disabled:active:scale-100"
             >
-              Salvar
+              <span
+                className={`inline-flex w-full items-center justify-center gap-2 ${saving ? 'animate-in fade-in duration-200' : ''}`}
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
+                    <span>Salvando…</span>
+                  </>
+                ) : (
+                  <span className="transition-transform duration-150 group-active:scale-95">Salvar</span>
+                )}
+              </span>
             </button>
           </div>
         )}
