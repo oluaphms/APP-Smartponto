@@ -73,7 +73,6 @@ const TimeClockPage: React.FC = () => {
         companyId: user.companyId,
         type: type as string,
         method: PunchMethod.GPS,
-        recordId: crypto.randomUUID(),
         location: {
           lat: position.coords.latitude,
           lng: position.coords.longitude,

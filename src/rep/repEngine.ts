@@ -61,6 +61,15 @@ export interface IntegrityResult {
 
 const RPC_NAME = 'rep_register_punch';
 const MAX_NSR = 999999999;
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function ensureUuidLike(value: string, fieldName: string): void {
+  const normalized = String(value ?? '').trim();
+  if (!UUID_REGEX.test(normalized)) {
+    throw new Error(`${fieldName} inválido: esperado UUID válido.`);
+  }
+}
 
 /** Mensagem amigável para erros de RPC / RLS no registro de ponto. */
 export function normalizePunchRegistrationError(err: unknown): Error {
@@ -100,6 +109,9 @@ export async function registerPunch(params: RegisterPunchParams): Promise<Regist
     photoUrl,
     source = 'web',
   } = params;
+
+  ensureUuidLike(userId, 'user_id');
+  ensureUuidLike(companyId, 'company_id');
 
   const RPC_TIMEOUT_MS = 15000;
   const { data, error } = await withTimeout(
@@ -151,6 +163,9 @@ export async function registerPunchSecure(params: RegisterPunchSecureParams): Pr
     fraudScore,
     fraudFlags,
   } = params;
+
+  ensureUuidLike(userId, 'user_id');
+  ensureUuidLike(companyId, 'company_id');
 
   const RPC_TIMEOUT_MS = 15000;
   const { data, error } = await withTimeout(

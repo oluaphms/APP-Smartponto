@@ -446,17 +446,11 @@ const EmployeeClockIn: React.FC = () => {
         behaviorAnomaly: anomaly.behaviorAnomaly,
       });
 
-      const recordId =
-        typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? crypto.randomUUID()
-          : `rec-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-
       const punchPayload = {
         userId: user.id,
         companyId: user.companyId,
         type: typeStr,
         method,
-        recordId,
         hasLocation: !!(geoPos?.latitude != null && geoPos?.longitude != null),
         hasPhoto: !!photoUrl,
         manualBypass,
@@ -470,7 +464,6 @@ const EmployeeClockIn: React.FC = () => {
         companyId: user.companyId,
         type: typeStr,
         method,
-        recordId,
         location: geoPos ? { lat: geoPos.latitude, lng: geoPos.longitude, accuracy: geoPos.accuracy } : undefined,
         photoUrl: photoUrl || undefined,
         source: 'web',
@@ -509,6 +502,7 @@ const EmployeeClockIn: React.FC = () => {
       toast.addToast('success', `${label} registrada com sucesso.`);
       closeProofModal();
     } catch (e: unknown) {
+      console.error('Erro ao registrar ponto:', e);
       const err = normalizePunchRegistrationError(e);
       const msg = err.message || 'Erro ao registrar ponto';
       if (import.meta.env?.DEV && typeof console !== 'undefined') {
