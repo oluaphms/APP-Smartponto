@@ -6,6 +6,7 @@ import { getNavigationForRole } from '../../config/navigation';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { i18n } from '../../../lib/i18n';
 import type { User } from '../../../types';
+import { BrandLogo } from '../../../components/BrandLogo';
 
 const DOCK_WIDTH_COLLAPSED = 72;
 const DOCK_WIDTH_EXPANDED = 240;
@@ -42,9 +43,7 @@ const SidebarDock: React.FC<SidebarDockProps> = ({ user, onLogout }) => {
             expanded ? 'px-2' : 'justify-center px-0'
           }`}
         >
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shrink-0">
-            <span className="text-lg font-bold">S</span>
-          </div>
+          <BrandLogo size="sm" className="shadow-lg" />
           <AnimatePresence>
             {expanded && (
               <motion.div

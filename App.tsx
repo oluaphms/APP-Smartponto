@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { User, LogType, DailySummary, PunchMethod, Company } from './types';
 import Layout from './components/Layout';
+import { BrandLogo } from './components/BrandLogo';
 import Clock from './components/Clock';
 import PunchModal from './components/PunchModal';
 import Onboarding from './components/Onboarding';
@@ -828,13 +829,15 @@ const AppMain: React.FC = () => {
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-600/5 dark:bg-blue-600/10 rounded-full blur-[120px]"></div>
 
         <div className="w-full max-w-md relative z-10">
-          <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-indigo-600 rounded-3xl text-white shadow-2xl shadow-indigo-500/40 mb-6 animate-in zoom-in duration-700">
-              <ScanLine size={40} />
+          <header className="text-center mb-10">
+            <div className="inline-flex justify-center animate-in zoom-in duration-700">
+              <BrandLogo
+                size="hero"
+                className="shadow-2xl shadow-indigo-500/30"
+                alt={`${i18n.t('app.name')} — ${i18n.t('login.slogan')}`}
+              />
             </div>
-            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight transition-colors">Chrono<span className="text-indigo-600 dark:text-indigo-500">Digital</span></h1>
-            <p className="text-slate-600 dark:text-slate-500 text-sm mt-2 font-medium transition-colors">{i18n.t('login.slogan')}</p>
-          </div>
+          </header>
 
           <div className="bg-white dark:bg-slate-900/50 backdrop-blur-3xl p-2 rounded-[2.5rem] border border-slate-200 dark:border-slate-800/50 shadow-2xl overflow-hidden transition-colors">
             {loginStep === 'choice' ? (

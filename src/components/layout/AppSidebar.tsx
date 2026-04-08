@@ -5,6 +5,7 @@ import { getMenuItemsForUser, getMenuItemName, type MenuItemConfig } from '../..
 import { i18n } from '../../../lib/i18n';
 import { useLanguage } from '../../contexts/LanguageContext';
 import type { User } from '../../../types';
+import { BrandLogo } from '../../../components/BrandLogo';
 
 const SIDEBAR_WIDTH_EXPANDED = 240;
 const SIDEBAR_WIDTH_COLLAPSED = 72;
@@ -99,9 +100,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ user, onLogout, onCollapsedChan
     >
       <div className="flex flex-col flex-1 min-h-0 p-3">
         <div className={`flex items-center gap-3 ${collapsed ? 'justify-center px-0' : 'px-2'} pb-4 border-b border-slate-100 dark:border-slate-800`}>
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 shrink-0">
-            <span className="material-icons text-2xl">fingerprint</span>
-          </div>
+          <BrandLogo size="sm" className="shadow-lg shadow-indigo-500/20" />
           {!collapsed && (
             <div className="min-w-0">
               <span className="text-lg font-bold text-slate-900 dark:text-white tracking-tight block truncate">ChronoDigital</span>

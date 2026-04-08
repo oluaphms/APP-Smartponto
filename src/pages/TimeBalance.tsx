@@ -6,7 +6,7 @@ import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
 import { Input, LoadingState } from '../../components/UI';
 import { db, isSupabaseConfigured } from '../services/supabaseClient';
-import { calculateMonthlyBalance, WorkSchedule } from '../utils/timeCalculations';
+import { calculateMonthlyBalance, formatDateForTablePtBr, WorkSchedule } from '../utils/timeCalculations';
 import { TimeRecord, LogType, PunchMethod } from '../../types';
 
 interface TimeBalanceRow {
@@ -222,7 +222,7 @@ const TimeBalancePage: React.FC = () => {
                   <tbody>
                     {bankMovements.slice(0, 40).map((m, i) => (
                       <tr key={`${m.date}-${i}`} className="border-b border-slate-100 dark:border-slate-800">
-                        <td className="px-3 py-2 tabular-nums">{m.date ? new Date(m.date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+                        <td className="px-3 py-2 tabular-nums">{m.date ? formatDateForTablePtBr(m.date) : '—'}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-emerald-600">{m.hours_added > 0 ? `+${m.hours_added.toFixed(2)}` : '—'}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-red-600">{m.hours_removed > 0 ? `−${m.hours_removed.toFixed(2)}` : '—'}</td>
                         <td className="px-3 py-2 text-right font-medium tabular-nums">

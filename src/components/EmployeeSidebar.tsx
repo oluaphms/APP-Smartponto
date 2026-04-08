@@ -13,6 +13,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import type { User } from '../../types';
+import { BrandLogo } from '../../components/BrandLogo';
 
 const SIDEBAR_WIDTH_EXPANDED = 240;
 const SIDEBAR_WIDTH_COLLAPSED = 72;
@@ -59,9 +60,7 @@ const EmployeeSidebar: React.FC<EmployeeSidebarProps> = ({ user, onLogout, onCol
         <div
           className={`flex items-center gap-3 ${collapsed ? 'justify-center px-0' : 'px-2'} pb-4 border-b border-slate-100 dark:border-slate-800`}
         >
-          <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white shadow-lg shrink-0">
-            <Clock className="w-5 h-5" />
-          </div>
+          <BrandLogo size="sm" className="shadow-lg ring-2 ring-emerald-500/30" />
           {!collapsed && (
             <div className="min-w-0">
               <span className="text-lg font-bold text-slate-900 dark:text-white tracking-tight block truncate">

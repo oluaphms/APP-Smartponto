@@ -5,6 +5,7 @@ import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
 import { db, isSupabaseConfigured } from '../../services/supabaseClient';
 import { LoadingState, Input } from '../../../components/UI';
+import { formatDateForTablePtBr } from '../../utils/timeCalculations';
 import RoleGuard from '../../components/auth/RoleGuard';
 
 interface BankHoursRow {
@@ -122,7 +123,7 @@ const AdminBankHours: React.FC = () => {
           </div>
           <div className="min-w-[140px]">
             <Input
-              label="Mês (time_balance)"
+              label="Mês (resumo mensal)"
               type="month"
               value={monthFilter}
               onChange={(e) => setMonthFilter(e.target.value)}
@@ -140,7 +141,7 @@ const AdminBankHours: React.FC = () => {
           <div className="space-y-6">
             {timeBalanceRows.length > 0 && (
               <div className="glass-card rounded-[2.25rem] p-6">
-                <h3 className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-4">Resumo mensal (time_balance)</h3>
+                <h3 className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-4">Resumo mensal (fechamento)</h3>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -169,7 +170,7 @@ const AdminBankHours: React.FC = () => {
             )}
 
             <div className="glass-card rounded-[2.25rem] p-6">
-              <h3 className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-4">Movimentação (bank_hours)</h3>
+              <h3 className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-4">Movimentação do banco</h3>
               {rows.length === 0 ? (
                 <p className="text-slate-500 dark:text-slate-400 text-sm">Nenhuma movimentação no período.</p>
               ) : (
@@ -188,7 +189,7 @@ const AdminBankHours: React.FC = () => {
                     <tbody>
                       {rows.slice(0, 200).map((r) => (
                         <tr key={r.id} className="border-b border-slate-100 dark:border-slate-800">
-                          <td className="py-2 px-2">{r.date}</td>
+                          <td className="py-2 px-2">{formatDateForTablePtBr(r.date)}</td>
                           <td className="py-2 px-2">{employeeName(r.employee_id)}</td>
                           <td className="text-right py-2 px-2 text-emerald-600">
                             {(r.hours_added ?? 0) > 0 ? `+${Number(r.hours_added).toFixed(2)}h` : '—'}

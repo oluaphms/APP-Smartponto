@@ -13,7 +13,9 @@ const STATIC_ASSETS = [
   '/index.html',
   '/manifest.json',
   '/favicon.ico',
-  '/favicon.svg'
+  '/favicon.svg',
+  '/1024.png',
+  '/play_store_512.png',
 ];
 
 // Instalação do Service Worker

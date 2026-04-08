@@ -33,6 +33,30 @@ export interface WorkSchedule {
 const MS_IN_HOUR = 1000 * 60 * 60;
 const MS_IN_MINUTE = 1000 * 60;
 
+const TABLE_DATE_PT_BR: Intl.DateTimeFormatOptions = {
+  weekday: 'short',
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+};
+
+/** Rótulo de dia para tabelas (pt-BR), evitando `toDateString()` em inglês. */
+function formatDayLabelPtBr(d: Date): string {
+  return new Intl.DateTimeFormat('pt-BR', TABLE_DATE_PT_BR).format(d);
+}
+
+/** Formata data vinda do banco (ISO ou `YYYY-MM-DD`) para exibição em pt-BR. */
+export function formatDateForTablePtBr(isoOrDate: string | Date): string {
+  const d =
+    typeof isoOrDate === 'string'
+      ? new Date(isoOrDate.includes('T') ? isoOrDate : `${isoOrDate.slice(0, 10)}T12:00:00`)
+      : isoOrDate;
+  if (Number.isNaN(d.getTime())) {
+    return typeof isoOrDate === 'string' ? isoOrDate : '—';
+  }
+  return new Intl.DateTimeFormat('pt-BR', TABLE_DATE_PT_BR).format(d);
+}
+
 function parseTimeToMinutes(time: string): number {
   const [h, m] = time.split(':').map(Number);
   return h * 60 + m;
@@ -115,7 +139,7 @@ export function calculateDailyBalance(
   const missingMinutes = balanceMinutes < 0 ? Math.abs(balanceMinutes) : 0;
 
   return {
-    date: targetDateStr,
+    date: formatDayLabelPtBr(date),
     workedHours,
     expectedHours,
     balanceHours,
