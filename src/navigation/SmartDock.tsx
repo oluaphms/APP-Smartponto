@@ -2,6 +2,7 @@ import React, { memo, useCallback, useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Loader2 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { i18n } from '../../lib/i18n';
 import { useSmartNavigation } from './useSmartNavigation';
@@ -19,6 +20,7 @@ const SmartDock: React.FC = () => {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const segmentRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [cardStyle, setCardStyle] = useState<{ left: number; bottom: number; width: number } | null>(null);
+  const [logoutBusy, setLogoutBusy] = useState(false);
 
   const dockEntries = Object.entries(groups);
   const openGroup = dockFloatingGroupKey ? groups[dockFloatingGroupKey] : null;
@@ -194,7 +196,7 @@ const SmartDock: React.FC = () => {
             />
             <motion.div
               key="dock-menu"
-              className="fixed z-[100] px-4 py-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl pointer-events-auto"
+              className="fixed z-[100] px-4 py-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl pointer-events-auto overflow-hidden"
               style={{ left: cardStyle.left, bottom: cardStyle.bottom, width: cardStyle.width }}
               initial={{ opacity: 0, y: 8, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -203,10 +205,30 @@ const SmartDock: React.FC = () => {
               role="menu"
               aria-label={i18n.t(openGroup.labelKey)}
             >
+              <AnimatePresence>
+                {logoutBusy && (
+                  <motion.div
+                    key="logout-overlay"
+                    role="status"
+                    aria-live="polite"
+                    aria-busy="true"
+                    className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm px-4"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <Loader2 className="h-9 w-9 text-indigo-600 dark:text-indigo-400 animate-spin" aria-hidden />
+                    <p className="text-sm font-semibold text-center text-slate-700 dark:text-slate-200">
+                      {i18n.t('layout.loggingOut')}
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
               <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-2 pb-2 border-b border-slate-100 dark:border-slate-800 mb-2">
                 {i18n.t(openGroup.labelKey)}
               </p>
-              <div className="flex flex-col gap-0.5 max-h-[min(60vh,320px)] overflow-y-auto">
+              <div className={`flex flex-col gap-0.5 max-h-[min(60vh,320px)] overflow-y-auto ${logoutBusy ? 'pointer-events-none opacity-60' : ''}`}>
                 {openGroup.items.map((item) => {
                   const isActive = location.pathname === item.path;
                   return (
@@ -214,9 +236,11 @@ const SmartDock: React.FC = () => {
                       key={item.path}
                       type="button"
                       onClick={() => handleItemClick(item.path)}
+                      disabled={logoutBusy}
                       className={`
                         flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors
                         ${isActive ? 'bg-indigo-600 text-white' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'}
+                        disabled:opacity-50 disabled:cursor-not-allowed
                       `}
                       role="menuitem"
                     >
@@ -225,17 +249,26 @@ const SmartDock: React.FC = () => {
                   );
                 })}
                 {dockFloatingGroupKey === 'smart' && onLogout && (
-                  <button
+                  <motion.button
                     type="button"
-                    onClick={() => {
-                      openDockGroup(null);
-                      onLogout();
+                    disabled={logoutBusy}
+                    onClick={async () => {
+                      if (logoutBusy) return;
+                      setLogoutBusy(true);
+                      try {
+                        await Promise.resolve(onLogout());
+                      } catch (e) {
+                        console.error(e);
+                        setLogoutBusy(false);
+                      }
                     }}
-                    className="flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-left text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors border-t border-slate-100 dark:border-slate-800 mt-2 pt-2"
+                    className="flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-left text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors border-t border-slate-100 dark:border-slate-800 mt-2 pt-2 disabled:opacity-70 disabled:cursor-wait"
                     role="menuitem"
+                    whileTap={logoutBusy ? undefined : { scale: 0.98 }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 28 }}
                   >
                     {i18n.t('layout.logout')}
-                  </button>
+                  </motion.button>
                 )}
               </div>
             </motion.div>

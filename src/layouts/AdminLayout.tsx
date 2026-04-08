@@ -7,7 +7,7 @@ export interface AdminLayoutProps {
   children: React.ReactNode;
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
 }
 
 const AdminLayout: React.FC<AdminLayoutProps> = (props) => (

@@ -2,6 +2,7 @@ import React, { memo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { LucideIcon } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import {
   getBottomNavPrimaryItems,
   getMoreMenuItems,
@@ -33,7 +34,7 @@ const SvgLogOut = ({ size = 20 }: { size?: number }) => (
 
 export interface BottomNavProps {
   user: User;
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
 }
 
 /** Renderiza ícone do item ou fallback com a inicial do label. */
@@ -65,6 +66,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ user, onLogout }) => {
   const navigate = useNavigate();
   useLanguage(); // re-render quando idioma mudar
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [logoutBusy, setLogoutBusy] = useState(false);
   const primaryItems = getBottomNavPrimaryItems(user?.role ?? 'employee', location.pathname);
   const moreItems = getMoreMenuItems(user?.role ?? 'employee', location.pathname);
 
@@ -125,25 +127,46 @@ const BottomNav: React.FC<BottomNavProps> = ({ user, onLogout }) => {
               aria-hidden
             />
             <motion.aside
-              className="fixed bottom-0 left-0 right-0 z-50 lg:hidden rounded-t-2xl bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-2xl max-h-[70vh] flex flex-col"
+              className="fixed bottom-0 left-0 right-0 z-50 lg:hidden rounded-t-2xl bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-2xl max-h-[70vh] flex flex-col overflow-hidden"
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'tween', duration: 0.25, ease: 'easeOut' }}
               aria-label={i18n.t('nav.menuMore')}
             >
+              <AnimatePresence>
+                {logoutBusy && (
+                  <motion.div
+                    key="logout-overlay"
+                    role="status"
+                    aria-live="polite"
+                    aria-busy="true"
+                    className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm px-6 rounded-t-2xl"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <Loader2 className="h-10 w-10 text-indigo-600 dark:text-indigo-400 animate-spin" aria-hidden />
+                    <p className="text-sm font-semibold text-center text-slate-700 dark:text-slate-200">
+                      {i18n.t('layout.loggingOut')}
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
               <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
                 <h2 className="text-lg font-bold text-slate-900 dark:text-white">{i18n.t('nav.more')}</h2>
                 <button
                   type="button"
-                  onClick={() => setDrawerOpen(false)}
-                  className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                  onClick={() => !logoutBusy && setDrawerOpen(false)}
+                  disabled={logoutBusy}
+                  className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors disabled:opacity-50"
                   aria-label={i18n.t('nav.close')}
                 >
                   <SvgX size={20} />
                 </button>
               </div>
-              <div className="overflow-y-auto flex-1 p-4 flex flex-col gap-1">
+              <div className={`overflow-y-auto flex-1 p-4 flex flex-col gap-1 ${logoutBusy ? 'pointer-events-none opacity-60' : ''}`}>
                 {moreItems.map((item) => {
                   const isActive = location.pathname === item.path;
                   const label = i18n.t(item.nameKey);
@@ -151,6 +174,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ user, onLogout }) => {
                     <button
                       key={item.path}
                       type="button"
+                      disabled={logoutBusy}
                       onClick={() => {
                         navigate(item.path);
                         setDrawerOpen(false);
@@ -173,11 +197,18 @@ const BottomNav: React.FC<BottomNavProps> = ({ user, onLogout }) => {
               <div className="p-4 pt-0 mt-auto border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => {
-                    setDrawerOpen(false);
-                    onLogout();
+                  disabled={logoutBusy}
+                  onClick={async () => {
+                    if (logoutBusy) return;
+                    setLogoutBusy(true);
+                    try {
+                      await Promise.resolve(onLogout());
+                    } catch (e) {
+                      console.error(e);
+                      setLogoutBusy(false);
+                    }
                   }}
-                  className="flex items-center gap-3 w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                  className="flex items-center gap-3 w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors disabled:opacity-70 disabled:cursor-wait"
                   aria-label={i18n.t('nav.logoutSystem')}
                 >
                   <SvgLogOut size={20} />

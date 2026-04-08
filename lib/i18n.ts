@@ -78,6 +78,7 @@ const translations: Record<Language, Record<string, string>> = {
     // Layout
     'layout.searchPlaceholder': 'Pesquisar ponto ou colaborador...',
     'layout.logout': 'Sair',
+    'layout.loggingOut': 'A sair…',
     'layout.logoutApp': 'Sair do Aplicativo',
     'layout.expandMenu': 'Expandir menu',
     'layout.collapseMenu': 'Recolher menu',
@@ -345,6 +346,7 @@ const translations: Record<Language, Record<string, string>> = {
     // Layout
     'layout.searchPlaceholder': 'Search time or employee...',
     'layout.logout': 'Logout',
+    'layout.loggingOut': 'Signing out…',
     'layout.logoutApp': 'Logout',
     'layout.expandMenu': 'Expand menu',
     'layout.collapseMenu': 'Collapse menu',

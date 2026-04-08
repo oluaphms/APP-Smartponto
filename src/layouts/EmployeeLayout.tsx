@@ -7,7 +7,7 @@ export interface EmployeeLayoutProps {
   children: React.ReactNode;
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
 }
 
 const EmployeeLayout: React.FC<EmployeeLayoutProps> = (props) => (

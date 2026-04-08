@@ -20,7 +20,7 @@ interface LayoutProps {
   children: React.ReactNode;
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
   layoutVariant?: LayoutVariant;
 }
 

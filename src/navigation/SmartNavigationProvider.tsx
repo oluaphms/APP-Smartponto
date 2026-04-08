@@ -18,7 +18,7 @@ export interface SmartNavigationContextValue extends SmartNavigationState {
   setCommandPaletteOpen: (open: boolean) => void;
   openDockGroup: (groupKey: string | null) => void;
   toggleCommandPalette: () => void;
-  onLogout?: () => void;
+  onLogout?: () => void | Promise<void>;
   /** Grupos filtrados pelo role do usuário */
   groups: Record<string, NavigationGroupSchema>;
   /** Lista plana de itens para command palette */
@@ -29,7 +29,7 @@ const SmartNavigationContext = createContext<SmartNavigationContextValue | null>
 
 export interface SmartNavigationProviderProps {
   user: User | null;
-  onLogout?: () => void;
+  onLogout?: () => void | Promise<void>;
   children: React.ReactNode;
 }
 
