@@ -7,8 +7,10 @@
 import { getAppBaseUrl } from './appUrl';
 import {
   auth,
+  clearCurrentUserFromAllStorages,
   clearLocalAuthSession,
   db,
+  getUserProfileStorage,
   isSupabaseConfigured,
   supabase,
   DB_SELECT_TIMEOUT_MS,
@@ -28,6 +30,25 @@ const TENANT_META_SYNC_KEY = 'sp_tenant_meta_sync';
 
 /** Carregar perfil pode fazer 2× `db.select` em sequência; deve ser > 2× timeout do select para não abortar antes. */
 const GET_CURRENT_USER_TIMEOUT_MS = DB_SELECT_TIMEOUT_MS * 2 + 8000;
+
+function persistCurrentUserToProfileStore(u: User): void {
+  if (typeof window === 'undefined') return;
+  try {
+    getUserProfileStorage().setItem('current_user', JSON.stringify(u));
+    window.dispatchEvent(new Event('current_user_changed'));
+  } catch {
+    // ignore
+  }
+}
+
+function readCurrentUserFromProfileStore(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return getUserProfileStorage().getItem('current_user');
+  } catch {
+    return null;
+  }
+}
 
 class AuthService {
   /**
@@ -540,23 +561,13 @@ class AuthService {
           ),
         ]);
         if (appUser) {
-          try {
-            localStorage.setItem('current_user', JSON.stringify(appUser));
-            window.dispatchEvent(new Event('current_user_changed'));
-          } catch {
-            // ignore
-          }
+          persistCurrentUserToProfileStore(appUser);
           this.enqueuePostLoginSideEffects(appUser, data.user);
           return { user: appUser, error: null };
         }
         // Fallback: perfil não carregou a tempo (timeout) — mesmo fluxo que onAuthStateChanged (não deslogar)
         const minimalUser = await this.buildMinimalAppUserFromAuthUser(data.user);
-        try {
-          localStorage.setItem('current_user', JSON.stringify(minimalUser));
-          window.dispatchEvent(new Event('current_user_changed'));
-        } catch {
-          // ignore
-        }
+        persistCurrentUserToProfileStore(minimalUser);
         this.enqueuePostLoginSideEffects(minimalUser, data.user);
         return { user: minimalUser, error: null };
       }
@@ -638,8 +649,7 @@ class AuthService {
           created_at: new Date().toISOString()
         });
 
-        localStorage.setItem('current_user', JSON.stringify(newUser));
-        window.dispatchEvent(new Event('current_user_changed'));
+        persistCurrentUserToProfileStore(newUser);
         return { user: newUser, error: null };
       }
 
@@ -701,8 +711,7 @@ class AuthService {
     } finally {
       try {
         if (typeof window !== 'undefined') {
-          // Perfil app
-          window.localStorage.removeItem('current_user');
+          clearCurrentUserFromAllStorages();
           window.dispatchEvent(new Event('current_user_changed'));
 
           try {
@@ -866,14 +875,12 @@ class AuthService {
         errMsg.includes('Lock broken')
       ) {
         try {
-          if (typeof window !== 'undefined') {
-            const stored = window.localStorage.getItem('current_user');
-            if (stored) {
-              if (import.meta.env?.DEV && typeof console !== 'undefined') {
-                console.warn('[Auth] getCurrentUser: timeout ou lock de sessão — usando perfil em cache');
-              }
-              return JSON.parse(stored) as User;
+          const stored = readCurrentUserFromProfileStore();
+          if (stored) {
+            if (import.meta.env?.DEV && typeof console !== 'undefined') {
+              console.warn('[Auth] getCurrentUser: timeout ou lock de sessão — usando perfil em cache');
             }
+            return JSON.parse(stored) as User;
           }
         } catch {
           // ignora
@@ -898,11 +905,9 @@ class AuthService {
     if (!isSupabaseConfigured) {
       console.warn('Supabase not configured - returning null user');
       try {
-        if (typeof window !== 'undefined') {
-          const stored = window.localStorage.getItem('current_user');
-          if (stored) {
-            return JSON.parse(stored) as User;
-          }
+        const stored = readCurrentUserFromProfileStore();
+        if (stored) {
+          return JSON.parse(stored) as User;
         }
       } catch {
         // ignora erro de leitura
@@ -913,10 +918,8 @@ class AuthService {
     const session = await auth.getSession();
     if (!session?.user) {
       try {
-        if (typeof window !== 'undefined') {
-          window.localStorage.removeItem('current_user');
-          window.dispatchEvent(new Event('current_user_changed'));
-        }
+        clearCurrentUserFromAllStorages();
+        window.dispatchEvent(new Event('current_user_changed'));
       } catch {
         // ignora
       }
@@ -928,14 +931,7 @@ class AuthService {
     try {
       const appUser = await this.supabaseUserToAppUser(supabaseUser);
       if (appUser) {
-        try {
-          if (typeof window !== 'undefined') {
-            window.localStorage.setItem('current_user', JSON.stringify(appUser));
-            window.dispatchEvent(new Event('current_user_changed'));
-          }
-        } catch {
-          // ignora
-        }
+        persistCurrentUserToProfileStore(appUser);
         return appUser;
       }
     } catch (error: any) {
@@ -951,14 +947,7 @@ class AuthService {
     }
 
     const minimal = await this.buildMinimalAppUserFromAuthUser(supabaseUser);
-    try {
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem('current_user', JSON.stringify(minimal));
-        window.dispatchEvent(new Event('current_user_changed'));
-      }
-    } catch {
-      // ignora
-    }
+    persistCurrentUserToProfileStore(minimal);
     return minimal;
   }
 
@@ -973,8 +962,7 @@ class AuthService {
           // Refresh de token: não recarrega public.users (evita lentidão e “piscar” estado).
           if (event === 'TOKEN_REFRESHED') {
             try {
-              const raw =
-                typeof window !== 'undefined' ? window.localStorage.getItem('current_user') : null;
+              const raw = readCurrentUserFromProfileStore();
               if (raw) {
                 const cached = JSON.parse(raw) as User;
                 if (cached?.id === session.user.id) {
@@ -997,21 +985,12 @@ class AuthService {
           if (!appUser) {
             appUser = await this.buildMinimalAppUserFromAuthUser(session.user);
           }
-          try {
-            if (typeof window !== 'undefined') {
-              window.localStorage.setItem('current_user', JSON.stringify(appUser));
-              window.dispatchEvent(new Event('current_user_changed'));
-            }
-          } catch {
-            // ignora
-          }
+          persistCurrentUserToProfileStore(appUser!);
           callback(appUser);
         } else {
           try {
-            if (typeof window !== 'undefined') {
-              window.localStorage.removeItem('current_user');
-              window.dispatchEvent(new Event('current_user_changed'));
-            }
+            clearCurrentUserFromAllStorages();
+            window.dispatchEvent(new Event('current_user_changed'));
           } catch {
             // ignora
           }
@@ -1021,21 +1000,12 @@ class AuthService {
         if (session?.user) {
           try {
             const appUser = await this.buildMinimalAppUserFromAuthUser(session.user);
-            try {
-              if (typeof window !== 'undefined') {
-                window.localStorage.setItem('current_user', JSON.stringify(appUser));
-                window.dispatchEvent(new Event('current_user_changed'));
-              }
-            } catch {
-              // ignora
-            }
+            persistCurrentUserToProfileStore(appUser);
             callback(appUser);
           } catch {
             try {
-              if (typeof window !== 'undefined') {
-                window.localStorage.removeItem('current_user');
-                window.dispatchEvent(new Event('current_user_changed'));
-              }
+              clearCurrentUserFromAllStorages();
+              window.dispatchEvent(new Event('current_user_changed'));
             } catch {
               // ignora
             }
@@ -1043,10 +1013,8 @@ class AuthService {
           }
         } else {
           try {
-            if (typeof window !== 'undefined') {
-              window.localStorage.removeItem('current_user');
-              window.dispatchEvent(new Event('current_user_changed'));
-            }
+            clearCurrentUserFromAllStorages();
+            window.dispatchEvent(new Event('current_user_changed'));
           } catch {
             // ignora
           }

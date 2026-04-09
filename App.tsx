@@ -11,7 +11,13 @@ import { getWorkInsights } from './services/geminiService';
 import { PontoService } from './services/pontoService';
 import { useRecords } from './src/hooks/useRecords';
 import { authService } from './services/authService';
-import { isSupabaseConfigured, testSupabaseConnection, resetSession, clearLocalAuthSession } from './services/supabase';
+import {
+  isSupabaseConfigured,
+  testSupabaseConnection,
+  resetSession,
+  clearLocalAuthSession,
+  clearCurrentUserFromAllStorages,
+} from './services/supabase';
 import { checkSupabaseConnection } from './src/services/checkSupabaseConnection';
 import { logSupabaseError } from './src/services/errorLogger';
 import { validateLogin } from './lib/validationSchemas';
@@ -370,7 +376,7 @@ const AppMain: React.FC = () => {
           // ignora
         }
         try {
-          localStorage.removeItem('current_user');
+          clearCurrentUserFromAllStorages();
         } catch {
           // ignora
         }

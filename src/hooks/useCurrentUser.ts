@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { User } from '../../types';
 import { authService } from '../../services/authService';
-import { isSupabaseConfigured } from '../../services/supabase';
+import { getUserProfileStorage, isSupabaseConfigured } from '../../services/supabase';
 
 /** Alinhado ao tempo de SELECT no Supabase (rede lenta); evita spinner eterno se getCurrentUser demorar. */
 const HYDRATE_TIMEOUT_MS = 32000;
@@ -9,7 +9,7 @@ const HYDRATE_TIMEOUT_MS = 32000;
 function getStoredUser(): User | null {
   try {
     if (typeof window === 'undefined') return null;
-    const raw = window.localStorage.getItem('current_user');
+    const raw = getUserProfileStorage().getItem('current_user');
     if (!raw) return null;
     return JSON.parse(raw) as User;
   } catch {
@@ -17,13 +17,13 @@ function getStoredUser(): User | null {
   }
 }
 
-/** Perfil em cache (localStorage) para estado inicial sem bloquear a UI. */
+/** Perfil em cache (mesmo storage da sessão) para estado inicial sem bloquear a UI. */
 export function readCachedUser(): User | null {
   return getStoredUser();
 }
 
 /**
- * Perfil do usuário para páginas do portal: alinha com Supabase Auth + localStorage.
+ * Perfil do usuário para páginas do portal: alinha com Supabase Auth + cache do perfil.
  * Com `current_user` em cache, não exibe spinner — hidrata em background.
  */
 export function useCurrentUser() {

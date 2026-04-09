@@ -41,14 +41,32 @@ function notConfigured(): never {
 }
 
 /**
- * Onde o Supabase guarda o JWT (sessão).
- * - localStorage (padrão): ao reabrir o site dias depois, o usuário continua logado — é o comportamento usual de “manter sessão”.
- * - sessionStorage: ao fechar a aba/janela, a sessão some; ao abrir de novo o link, pede login (melhor em PC compartilhado).
- * Defina VITE_SUPABASE_AUTH_STORAGE=session no build (ex.: Vercel) se quiser esse modo.
+ * Onde o Supabase guarda o JWT (sessão) e onde espelhamos `current_user`.
+ * - sessionStorage (padrão): cada aba/janela tem sessão própria — novo link em nova aba não herda login de outra aba (PC compartilhado).
+ * - localStorage: sessão compartilhada entre abas; ao reabrir o navegador dias depois continua logado.
+ * Para “manter logado” no estilo clássico: defina VITE_SUPABASE_AUTH_STORAGE=local no build (ex.: Vercel).
  */
-const useSessionStorageForAuth =
-  typeof import.meta !== 'undefined' &&
-  String(import.meta.env?.VITE_SUPABASE_AUTH_STORAGE || '').toLowerCase() === 'session';
+const authStorageEnv = String(import.meta.env?.VITE_SUPABASE_AUTH_STORAGE || '').toLowerCase();
+export const useSessionStorageForAuth = authStorageEnv !== 'local';
+
+/** Cache do perfil app — sempre o mesmo storage que o JWT (`useSessionStorageForAuth`). */
+export function getUserProfileStorage(): Storage {
+  if (typeof window === 'undefined') {
+    throw new Error('getUserProfileStorage: apenas no navegador');
+  }
+  return useSessionStorageForAuth ? window.sessionStorage : window.localStorage;
+}
+
+/** Logout / migração: remove `current_user` dos dois storages para não deixar fantasma do modo antigo. */
+export function clearCurrentUserFromAllStorages(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem('current_user');
+    window.sessionStorage.removeItem('current_user');
+  } catch {
+    // ignora
+  }
+}
 
 const authStorage =
   typeof window !== 'undefined'
@@ -194,6 +212,15 @@ if (configured) {
     }
     return inFlightUser;
   };
+
+  // Evita perfil fantasma de builds antigos (current_user só em localStorage) quando o JWT passou a ser por aba.
+  if (typeof window !== 'undefined' && useSessionStorageForAuth) {
+    try {
+      window.localStorage.removeItem('current_user');
+    } catch {
+      // ignora
+    }
+  }
 
   if (typeof import.meta !== 'undefined' && import.meta.env?.DEV && typeof console !== 'undefined') {
     const u = (supabaseUrl || '').trim();
@@ -542,19 +569,24 @@ const RESET_SESSION_SIGNOUT_TIMEOUT_MS = 4000;
  * Limpa apenas a sessão local (storage). Não chama o servidor — instantâneo.
  * Use após timeout de login para que o próximo "Entrar" funcione sem "Limpar sessão".
  */
+function clearSupabaseAuthKeysFromStorage(storage: Storage): void {
+  const keys: string[] = [];
+  for (let i = 0; i < storage.length; i++) {
+    const k = storage.key(i);
+    if (k && k.startsWith('sb-')) keys.push(k);
+  }
+  keys.forEach((k) => storage.removeItem(k));
+}
+
 export async function clearLocalAuthSession(): Promise<void> {
   try {
     if (client) await client.auth.signOut({ scope: 'local' });
   } catch {
-    // Ignorar; em seguida limpar chaves sb- do sessionStorage se existirem
+    // Ignorar; em seguida limpar chaves sb- (sessão ativa + tokens legados no outro storage)
     try {
-      if (typeof window !== 'undefined' && window.sessionStorage) {
-        const keys: string[] = [];
-        for (let i = 0; i < window.sessionStorage.length; i++) {
-          const k = window.sessionStorage.key(i);
-          if (k && k.startsWith('sb-')) keys.push(k);
-        }
-        keys.forEach((k) => window.sessionStorage.removeItem(k));
+      if (typeof window !== 'undefined') {
+        clearSupabaseAuthKeysFromStorage(window.sessionStorage);
+        clearSupabaseAuthKeysFromStorage(window.localStorage);
       }
     } catch {
       // ignora

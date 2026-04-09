@@ -8,6 +8,7 @@ import { Building2, User, MapPin, FileCheck, Cloud, Loader2 } from 'lucide-react
 import { PontoService } from '../../../services/pontoService';
 import { firestoreService } from '../../../services/firestoreService';
 import { clearTenantMetadataSyncCache } from '../../../services/authService';
+import { getUserProfileStorage } from '../../../services/supabase';
 import type { Company } from '../../../types';
 
 /** Campos obrigatórios pela Portaria 1510 */
@@ -326,12 +327,13 @@ const AdminCompany: React.FC = () => {
             console.error('Erro ao vincular usuário à empresa:', linkErr);
           }
           try {
-            const stored = localStorage.getItem('current_user');
+            const store = getUserProfileStorage();
+            const stored = store.getItem('current_user');
             if (stored) {
               const parsed = JSON.parse(stored);
               parsed.companyId = idToUse;
               parsed.tenantId = idToUse;
-              localStorage.setItem('current_user', JSON.stringify(parsed));
+              store.setItem('current_user', JSON.stringify(parsed));
             }
           } catch {}
           clearTenantMetadataSyncCache();

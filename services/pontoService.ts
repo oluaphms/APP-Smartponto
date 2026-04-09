@@ -3,6 +3,7 @@ import { TimeRecord, LogType, User, GeoLocation, EmployeeSummary, PunchMethod, C
 import { ValidationService } from './validationService';
 import { LoggingService } from './loggingService';
 import { firestoreService } from './firestoreService';
+import { getUserProfileStorage } from './supabase';
 
 // In-memory cache to reduce localStorage access (simulating database indexing and caching)
 const cache = {
@@ -87,14 +88,19 @@ export const PontoService = {
       await firestoreService.db.update('users', userId, updateData);
 
       // Atualizar cache local se existir
-      const stored = localStorage.getItem(`current_user`);
-      if (stored) {
-        const currentUser = JSON.parse(stored);
-        if (currentUser.id === userId) {
-          const updatedUser = { ...currentUser, ...data };
-          localStorage.setItem('current_user', JSON.stringify(updatedUser));
-          window.dispatchEvent(new Event('current_user_changed'));
+      try {
+        const store = getUserProfileStorage();
+        const stored = store.getItem('current_user');
+        if (stored) {
+          const currentUser = JSON.parse(stored);
+          if (currentUser.id === userId) {
+            const updatedUser = { ...currentUser, ...data };
+            store.setItem('current_user', JSON.stringify(updatedUser));
+            window.dispatchEvent(new Event('current_user_changed'));
+          }
         }
+      } catch {
+        // ignora
       }
     } catch (error) {
       console.error('Erro ao atualizar perfil:', error);
