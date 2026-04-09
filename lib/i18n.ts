@@ -275,6 +275,13 @@ const translations: Record<Language, Record<string, string>> = {
     'empSettings.aboutDesc': 'Versão e informações do aplicativo',
     'empSettings.version': 'Versão',
     'empSettings.appDescription': 'Sistema de controle de ponto eletrônico para empresas. Registro de entrada/saída, espelho de ponto, relatórios e conformidade com a legislação trabalhista.',
+    // Status de fluxo (solicitações, ajustes, férias — valores persistidos em inglês no banco)
+    'workflowStatus.pending': 'Pendente',
+    'workflowStatus.approved': 'Aprovado',
+    'workflowStatus.rejected': 'Rejeitado',
+    'requestType.adjustment': 'Ajuste de ponto',
+    'requestType.vacation': 'Férias',
+    'requestType.shift_change': 'Mudança de turno',
   },
   'en-US': {
     'app.name': 'ChronoDigital',
@@ -541,7 +548,29 @@ const translations: Record<Language, Record<string, string>> = {
     'empSettings.aboutDesc': 'Version and app information',
     'empSettings.version': 'Version',
     'empSettings.appDescription': 'Electronic time clock for companies. Clock in/out, time sheet, reports and labor law compliance.',
+    'workflowStatus.pending': 'Pending',
+    'workflowStatus.approved': 'Approved',
+    'workflowStatus.rejected': 'Rejected',
+    'requestType.adjustment': 'Time adjustment',
+    'requestType.vacation': 'Vacation',
+    'requestType.shift_change': 'Shift change',
   },
+};
+
+/** Valores gravados no banco (pending / approved / rejected) — exibição conforme idioma */
+const WORKFLOW_STATUS_I18N: Record<string, string> = {
+  pending: 'workflowStatus.pending',
+  pendente: 'workflowStatus.pending',
+  approved: 'workflowStatus.approved',
+  aprovado: 'workflowStatus.approved',
+  rejected: 'workflowStatus.rejected',
+  rejeitado: 'workflowStatus.rejected',
+};
+
+const REQUEST_TYPE_I18N: Record<string, string> = {
+  adjustment: 'requestType.adjustment',
+  vacation: 'requestType.vacation',
+  shift_change: 'requestType.shift_change',
 };
 
 let currentLanguage: Language = 'pt-BR';
@@ -572,6 +601,22 @@ export const i18n = {
     document.documentElement.lang = currentLanguage;
   },
 };
+
+/** Rotula status de aprovação (pending/approved/rejected) para a UI sem alterar o valor persistido. */
+export function formatWorkflowStatus(raw: string | null | undefined): string {
+  if (raw == null || raw === '') return '—';
+  const key = WORKFLOW_STATUS_I18N[String(raw).toLowerCase().trim()];
+  if (key) return i18n.t(key);
+  return String(raw);
+}
+
+/** Rotula tipo de solicitação (adjustment, vacation, …) para a UI. */
+export function formatRequestType(raw: string | null | undefined): string {
+  if (raw == null || raw === '') return '—';
+  const key = REQUEST_TYPE_I18N[String(raw).toLowerCase().trim()];
+  if (key) return i18n.t(key);
+  return String(raw);
+}
 
 // Initialize on load
 if (typeof window !== 'undefined') {

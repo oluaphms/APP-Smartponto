@@ -1,16 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { ClipboardList, PlusCircle } from 'lucide-react';
+import { ClipboardList, PlusCircle, Trash2 } from 'lucide-react';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
 import ModalForm from '../components/ModalForm';
 import { Button, LoadingState } from '../../components/UI';
+import { formatRequestType, formatWorkflowStatus } from '../../lib/i18n';
+import { useLanguage } from '../contexts/LanguageContext';
 import { db, isSupabaseConfigured } from '../services/supabaseClient';
 import { NotificationService } from '../../services/notificationService';
 import { LoggingService } from '../../services/loggingService';
 import { LogSeverity } from '../../types';
 import { useToast } from '../components/ToastProvider';
+import { ExpandableTextCell } from '../components/ClickableFullContent';
 
 interface RequestRow {
   id: string;
@@ -21,13 +24,8 @@ interface RequestRow {
   user_id: string;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  adjustment: 'Ajuste de ponto',
-  vacation: 'Férias',
-  shift_change: 'Mudança de turno',
-};
-
 const RequestsPage: React.FC = () => {
+  useLanguage();
   const { user, loading } = useCurrentUser();
   const toast = useToast();
   const [rows, setRows] = useState<RequestRow[]>([]);
@@ -200,6 +198,43 @@ const RequestsPage: React.FC = () => {
     }
   };
 
+  const handleDeleteRequest = async (row: RequestRow) => {
+    if (!user || !isSupabaseConfigured) return;
+    if (!window.confirm('Excluir esta solicitação permanentemente? Esta ação não pode ser desfeita.')) return;
+    try {
+      await db.delete('requests', row.id);
+      setRows((prev) => prev.filter((r) => r.id !== row.id));
+      toast.addToast('success', 'Solicitação excluída.');
+      try {
+        await LoggingService.log({
+          severity: LogSeverity.WARN,
+          action: isAdminView ? 'ADMIN_DELETE_REQUEST' : 'USER_DELETE_REQUEST',
+          userId: user.id,
+          userName: user.nome,
+          companyId: user.companyId,
+          details: { requestId: row.id },
+        });
+      } catch {
+        /* log opcional */
+      }
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === 'object' && 'message' in err
+          ? String((err as { message?: string }).message)
+          : 'Falha ao excluir.';
+      console.error('Erro ao excluir solicitação:', err);
+      toast.addToast(
+        'error',
+        msg.includes('row-level') || msg.includes('permission') || msg.includes('policy')
+          ? 'Permissão negada ao excluir. Aplique a migração requests_delete_policy no Supabase ou fale com o administrador.'
+          : msg,
+      );
+    }
+  };
+
+  const canDeleteRow = (row: RequestRow) =>
+    isAdminView || row.user_id === user?.id;
+
   if (loading) {
     return <LoadingState message="Carregando solicitações..." />;
   }
@@ -235,51 +270,75 @@ const RequestsPage: React.FC = () => {
             {
               key: 'type',
               header: 'Tipo',
-              render: (row) => TYPE_LABELS[row.type] ?? row.type,
+              render: (row) => (
+                <ExpandableTextCell label="Tipo" value={formatRequestType(row.type)} />
+              ),
             },
-            { key: 'status', header: 'Status' },
+            {
+              key: 'status',
+              header: 'Status',
+              render: (row) => (
+                <ExpandableTextCell label="Status" value={formatWorkflowStatus(row.status)} />
+              ),
+            },
             {
               key: 'reason',
               header: 'Motivo',
+              render: (row) => <ExpandableTextCell label="Motivo" value={row.reason} />,
             },
             {
               key: 'created_at',
               header: 'Criado em',
-              render: (row) =>
-                new Date(row.created_at).toLocaleString('pt-BR', {
-                  day: '2-digit',
-                  month: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                }),
+              render: (row) => (
+                <ExpandableTextCell
+                  label="Criado em"
+                  value={new Date(row.created_at).toLocaleString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                />
+              ),
             },
-            ...(isAdminView
-              ? [
-                  {
-                    key: 'actions',
-                    header: '',
-                    render: (row: RequestRow) =>
-                      row.status === 'pending' && (
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleStatusChange(row, 'approved')}
-                          >
-                            Aprovar
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleStatusChange(row, 'rejected')}
-                          >
-                            Rejeitar
-                          </Button>
-                        </div>
-                      ),
-                  },
-                ]
-              : []),
+            {
+              key: 'actions',
+              header: '',
+              render: (row: RequestRow) => (
+                <div className="flex justify-end flex-wrap gap-2">
+                  {isAdminView && row.status === 'pending' && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleStatusChange(row, 'approved')}
+                      >
+                        Aprovar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleStatusChange(row, 'rejected')}
+                      >
+                        Rejeitar
+                      </Button>
+                    </>
+                  )}
+                  {canDeleteRow(row) && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                      onClick={() => handleDeleteRequest(row)}
+                      title="Excluir solicitação"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              ),
+            },
           ]}
           data={rows}
         />

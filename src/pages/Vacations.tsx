@@ -6,6 +6,8 @@ import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
 import ModalForm from '../components/ModalForm';
 import { Button, Input, LoadingState } from '../../components/UI';
+import { formatWorkflowStatus } from '../../lib/i18n';
+import { useLanguage } from '../contexts/LanguageContext';
 import { db, isSupabaseConfigured } from '../services/supabaseClient';
 import { NotificationService } from '../../services/notificationService';
 import { LoggingService } from '../../services/loggingService';
@@ -21,6 +23,7 @@ interface VacationRow {
 }
 
 const VacationsPage: React.FC = () => {
+  useLanguage();
   const { user, loading } = useCurrentUser();
   const [rows, setRows] = useState<VacationRow[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -204,7 +207,11 @@ const VacationsPage: React.FC = () => {
               render: (row) =>
                 new Date(row.end_date).toLocaleDateString('pt-BR'),
             },
-            { key: 'status', header: 'Status' },
+            {
+              key: 'status',
+              header: 'Status',
+              render: (row) => formatWorkflowStatus(row.status),
+            },
             ...(isAdminView
               ? [
                   {

@@ -4,11 +4,11 @@ import { db, isSupabaseConfigured } from '../../services/supabaseClient';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
 import { LoadingState } from '../../../components/UI';
-import { FileDown, FileSpreadsheet, Pencil, Trash2, Lock } from 'lucide-react';
+import { FileDown, FileSpreadsheet, Lock } from 'lucide-react';
 import { closeTimesheet } from '../../services/timeProcessingService';
 import { buildDayMirrorSummary } from '../../utils/timesheetMirror';
 import { extractLatLng, reverseGeocode } from '../../utils/reverseGeocode';
-import { StreetAddress } from '../../components/StreetAddress';
+import { ExpandableStreetCell, ExpandableTextCell } from '../../components/ClickableFullContent';
 
 type DaySummary = {
   date: string;
@@ -29,7 +29,46 @@ type TimesheetRow = {
   dates: string[];
 };
 
-type EditingRecord = { id: string; type: string; created_at: string };
+/** Partículas comuns entre prenome e sobrenome (evita “Maria de” como nome). */
+const NAME_PARTICLES = new Set([
+  'de', 'da', 'do', 'das', 'dos', 'e', 'y', 'del', 'la', 'los', 'du', 'van', 'von',
+]);
+
+function normalizeParticle(w: string): string {
+  return w
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '');
+}
+
+/**
+ * Primeiro nome para a coluna, incluindo nome composto (ex.: Paulo Henrique Silva → Paulo Henrique).
+ * - 2 palavras: mostra as duas (Paulo Henrique ou Nome Sobrenome curto).
+ * - 3+ palavras: duas primeiras, exceto se a 2ª for partícula (Maria de Souza → Maria).
+ */
+function displayGivenNameForColumn(fullName: string): string {
+  const t = fullName.trim();
+  if (!t) return '—';
+  const parts = t.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0];
+  if (parts.length === 2) return `${parts[0]} ${parts[1]}`;
+  if (NAME_PARTICLES.has(normalizeParticle(parts[1]))) {
+    return parts[0];
+  }
+  return `${parts[0]} ${parts[1]}`;
+}
+
+/** Coordenadas da última batida do dia que tenha GPS (ordem por horário). */
+function lastPunchLocationCoords(dayRecs: any[]): { lat: number; lng: number } | undefined {
+  const sorted = [...dayRecs].sort(
+    (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime(),
+  );
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const ll = extractLatLng(sorted[i]);
+    if (ll) return ll;
+  }
+  return undefined;
+}
 
 const AdminTimesheet: React.FC = () => {
   const { user, loading } = useCurrentUser();
@@ -40,9 +79,6 @@ const AdminTimesheet: React.FC = () => {
   const [periodStart, setPeriodStart] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10));
   const [periodEnd, setPeriodEnd] = useState(() => new Date().toISOString().slice(0, 10));
   const [loadingData, setLoadingData] = useState(true);
-  const [editingRecord, setEditingRecord] = useState<EditingRecord | null>(null);
-  const [editForm, setEditForm] = useState({ type: 'entrada', created_at: '' });
-  const [savingEdit, setSavingEdit] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [closeMonth, setCloseMonth] = useState(() => {
     const n = new Date();
@@ -106,8 +142,7 @@ const AdminTimesheet: React.FC = () => {
       datesSet.forEach((d) => {
         const dayRecs = data.recs.filter((r: any) => (r.created_at || '').slice(0, 10) === d);
         const mirror = buildDayMirrorSummary(dayRecs);
-        const locRow = dayRecs.find((r: any) => extractLatLng(r));
-        const locationCoords = locRow ? extractLatLng(locRow) ?? undefined : undefined;
+        const locationCoords = lastPunchLocationCoords(dayRecs);
         byDate.set(d, {
           date: d,
           entradaInicio: mirror.entradaInicio,
@@ -136,7 +171,7 @@ const AdminTimesheet: React.FC = () => {
 
   const handleExportExcel = async () => {
     const headers = [
-      'Funcionário',
+      'Colaborador',
       'Data',
       'Entrada (início)',
       'Intervalo (pausa)',
@@ -144,17 +179,12 @@ const AdminTimesheet: React.FC = () => {
       'Saída (final)',
       'Horas trabalhadas',
       'Localização',
-      'Métodos (batidas do dia)',
       'Status',
     ];
     const lines = [headers.join('\t')];
     for (const row of buildRows) {
       for (const d of row.dates) {
         const sum = row.byDate.get(d);
-        const dayRecs = filteredRecords.filter(
-          (r: any) => r.user_id === row.userId && (r.created_at || '').slice(0, 10) === d,
-        );
-        const methods = [...new Set(dayRecs.map((r: any) => (r.method || '—').toString()).filter(Boolean))].join(', ');
         let locText = '—';
         if (sum?.locationCoords) {
           locText = await reverseGeocode(sum.locationCoords.lat, sum.locationCoords.lng);
@@ -169,7 +199,6 @@ const AdminTimesheet: React.FC = () => {
             sum?.saidaFinal ?? '',
             sum?.workedHours ?? '',
             locText,
-            methods || '—',
             sum?.status ?? '',
           ].join('\t'),
         );
@@ -184,52 +213,6 @@ const AdminTimesheet: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleEditRecord = (rec: any) => {
-    if (!rec?.id) return;
-    setEditingRecord({ id: rec.id, type: rec.type || 'entrada', created_at: rec.created_at || '' });
-    setEditForm({
-      type: rec.type || 'entrada',
-      created_at: rec.created_at ? rec.created_at.slice(0, 16) : new Date().toISOString().slice(0, 16),
-    });
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editingRecord || !isSupabaseConfigured) return;
-    setSavingEdit(true);
-    setMessage(null);
-    try {
-      await db.update('time_records', editingRecord.id, {
-        type: editForm.type,
-        created_at: new Date(editForm.created_at).toISOString(),
-      });
-      setRecords((prev) =>
-        prev.map((r: any) =>
-          r.id === editingRecord.id
-            ? { ...r, type: editForm.type, created_at: new Date(editForm.created_at).toISOString() }
-            : r
-        )
-      );
-      setEditingRecord(null);
-      setMessage({ type: 'success', text: 'Registro atualizado.' });
-    } catch (e: any) {
-      setMessage({ type: 'error', text: e?.message || 'Erro ao atualizar.' });
-    } finally {
-      setSavingEdit(false);
-    }
-  };
-
-  const handleDeleteRecord = async (recordId: string) => {
-    if (!confirm('Excluir este registro?')) return;
-    setMessage(null);
-    try {
-      await db.delete('time_records', recordId);
-      setRecords((prev) => prev.filter((r: any) => r.id !== recordId));
-      setMessage({ type: 'success', text: 'Registro excluído.' });
-    } catch (e: any) {
-      setMessage({ type: 'error', text: e?.message || 'Erro ao excluir.' });
-    }
-  };
-
   const handleCloseTimesheet = async () => {
     if (!user?.companyId || !confirm(`Fechar folha de ponto do mês ${closeMonth}? Isso calculará totais e marcará a folha como fechada.`)) return;
     setMessage(null);
@@ -240,7 +223,7 @@ const AdminTimesheet: React.FC = () => {
       if (errors.length > 0) {
         setMessage({ type: 'error', text: `Fechado: ${closed}. Erros: ${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '...' : ''}` });
       } else {
-        setMessage({ type: 'success', text: `Folha de ${closeMonth} fechada. ${closed} funcionário(s) processado(s).` });
+        setMessage({ type: 'success', text: `Folha de ${closeMonth} fechada. ${closed} colaborador(es) processado(s).` });
       }
     } catch (e: any) {
       setMessage({ type: 'error', text: e?.message || 'Erro ao fechar folha.' });
@@ -262,7 +245,7 @@ const AdminTimesheet: React.FC = () => {
       )}
       <div className="flex flex-wrap gap-4 items-end p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 print:hidden">
         <div>
-          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Funcionário</label>
+          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Colaborador</label>
           <select value={filterUserId} onChange={(e) => setFilterUserId(e.target.value)} className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white min-w-[180px]">
             <option value="">Todos</option>
             {employees.map((e) => (
@@ -308,10 +291,10 @@ const AdminTimesheet: React.FC = () => {
           <div className="p-12 text-center text-slate-500">Carregando...</div>
         ) : (
           <div className="overflow-x-auto overscroll-x-contain touch-pan-x rounded-xl border border-slate-100 dark:border-slate-800 md:border-0">
-          <table className="w-full text-xs sm:text-sm min-w-[1020px] md:min-w-0">
+          <table className="w-full text-xs sm:text-sm min-w-[860px] md:min-w-0">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
-                <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Funcionário</th>
+                <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Colaborador</th>
                 <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Data</th>
                 <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Entrada (início)</th>
                 <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Intervalo (pausa)</th>
@@ -319,9 +302,7 @@ const AdminTimesheet: React.FC = () => {
                 <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Saída (final)</th>
                 <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Horas trabalhadas</th>
                 <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Localização</th>
-                <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Método</th>
                 <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Status</th>
-                <th className="text-right px-4 py-3 font-bold text-slate-500 dark:text-slate-400 print:hidden">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -331,51 +312,58 @@ const AdminTimesheet: React.FC = () => {
                   const dayRecs = filteredRecords.filter(
                     (r: any) => r.user_id === row.userId && (r.created_at || '').slice(0, 10) === d,
                   );
-                  const rec = dayRecs[0];
-                  const methodSummary = [...new Set(dayRecs.map((r: any) => (r.method || '—').toString()).filter(Boolean))].join(', ') || '—';
                   const rowKey = `${row.userId}-${d}`;
                   const isExpanded = expandedRows[rowKey] === true;
                   return (
                     <React.Fragment key={rowKey}>
                     <tr className="border-b border-slate-100 dark:border-slate-800">
                       <td
-                        className="px-4 py-3 text-slate-900 dark:text-white cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-300"
-                        title={isExpanded ? 'Ocultar endereços das batidas' : 'Mostrar endereços das batidas'}
+                        className="px-4 py-3 text-slate-900 dark:text-white cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-300 max-w-[7rem] sm:max-w-[9rem] truncate"
+                        title={
+                          isExpanded
+                            ? `${row.userName} — Ocultar endereços das batidas`
+                            : `${row.userName} — Mostrar endereços das batidas`
+                        }
                         onClick={() => toggleExpandedRow(rowKey)}
                       >
-                        {row.userName}
+                        {displayGivenNameForColumn(row.userName)}
                       </td>
-                      <td className="px-4 py-3">{d}</td>
-                      <td className="px-4 py-3 tabular-nums">{sum?.entradaInicio || '—'}</td>
-                      <td className="px-4 py-3 tabular-nums">{sum?.saidaIntervalo || '—'}</td>
-                      <td className="px-4 py-3 tabular-nums">{sum?.voltaIntervalo || '—'}</td>
-                      <td className="px-4 py-3 tabular-nums">{sum?.saidaFinal || '—'}</td>
-                      <td className="px-4 py-3 tabular-nums">{sum?.workedHours || '—'}</td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs max-w-[220px]">
+                      <td className="px-4 py-3 align-top max-w-[110px]">
+                        <ExpandableTextCell label="Data" value={d} />
+                      </td>
+                      <td className="px-4 py-3 tabular-nums max-w-[100px] align-top">
+                        <ExpandableTextCell label="Entrada (início)" value={sum?.entradaInicio || ''} empty="—" />
+                      </td>
+                      <td className="px-4 py-3 tabular-nums max-w-[100px] align-top">
+                        <ExpandableTextCell label="Intervalo (pausa)" value={sum?.saidaIntervalo || ''} empty="—" />
+                      </td>
+                      <td className="px-4 py-3 tabular-nums max-w-[100px] align-top">
+                        <ExpandableTextCell label="Retorno" value={sum?.voltaIntervalo || ''} empty="—" />
+                      </td>
+                      <td className="px-4 py-3 tabular-nums max-w-[100px] align-top">
+                        <ExpandableTextCell label="Saída (final)" value={sum?.saidaFinal || ''} empty="—" />
+                      </td>
+                      <td className="px-4 py-3 tabular-nums max-w-[100px] align-top">
+                        <ExpandableTextCell label="Horas trabalhadas" value={sum?.workedHours || ''} empty="—" />
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs w-[min(100%,11rem)] max-w-[11rem] min-w-0 align-top">
                         {sum?.locationCoords ? (
-                          <StreetAddress lat={sum.locationCoords.lat} lng={sum.locationCoords.lng} />
+                          <ExpandableStreetCell
+                            lat={sum.locationCoords.lat}
+                            lng={sum.locationCoords.lng}
+                            previewMaxLength={32}
+                          />
                         ) : (
                           '—'
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400 max-w-[120px] truncate" title={methodSummary}>{methodSummary}</td>
-                      <td className="px-4 py-3">{sum?.status || 'OK'}</td>
-                      <td className="px-4 py-3 text-right print:hidden">
-                        {rec && (
-                          rec.nsr != null ? (
-                            <span className="text-xs text-slate-400 dark:text-slate-500" title="Registro REP-P (Portaria 671) - correções via Ajustes de Ponto">REP-P</span>
-                          ) : (
-                            <>
-                              <button type="button" onClick={() => handleEditRecord(rec)} className="p-1.5 text-slate-500 hover:text-indigo-600 rounded" title="Editar registro"><Pencil className="w-4 h-4 inline" /></button>
-                              <button type="button" onClick={() => handleDeleteRecord(rec.id)} className="p-1.5 text-slate-500 hover:text-red-600 rounded" title="Excluir registro"><Trash2 className="w-4 h-4 inline" /></button>
-                            </>
-                          )
-                        )}
+                      <td className="px-4 py-3 max-w-[180px] align-top">
+                        <ExpandableTextCell label="Status" value={sum?.status || 'OK'} />
                       </td>
                     </tr>
                     {isExpanded && (
                       <tr className="bg-slate-50/70 dark:bg-slate-800/30 border-b border-slate-100 dark:border-slate-800">
-                        <td colSpan={11} className="px-4 py-3">
+                        <td colSpan={9} className="px-4 py-3">
                           <div className="text-xs text-slate-600 dark:text-slate-300">
                             <p className="font-medium mb-2">Enderecos por batida do dia {d}:</p>
                             <div className="space-y-1">
@@ -395,7 +383,7 @@ const AdminTimesheet: React.FC = () => {
                                       </span>
                                       <span className="text-slate-500">-</span>
                                       {ll ? (
-                                        <StreetAddress lat={ll.lat} lng={ll.lng} />
+                                        <ExpandableStreetCell lat={ll.lat} lng={ll.lng} previewMaxLength={28} />
                                       ) : (
                                         <span className="text-slate-500">Batida sem GPS</span>
                                       )}
@@ -420,29 +408,6 @@ const AdminTimesheet: React.FC = () => {
         )}
       </div>
 
-      {editingRecord && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={() => !savingEdit && setEditingRecord(null)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Editar Registro</h3>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tipo</label>
-              <select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                <option value="entrada">Entrada</option>
-                <option value="saída">Saída</option>
-                <option value="pausa">Pausa</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data e hora</label>
-              <input type="datetime-local" value={editForm.created_at} onChange={(e) => setEditForm({ ...editForm, created_at: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
-            </div>
-            <div className="flex gap-3 pt-2">
-              <button type="button" onClick={() => setEditingRecord(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium">Cancelar</button>
-              <button type="button" onClick={handleSaveEdit} disabled={savingEdit} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50">Salvar</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

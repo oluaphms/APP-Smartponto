@@ -9,11 +9,15 @@ import StatCard from '../components/StatCard';
 import DataTable from '../components/DataTable';
 import { LoadingState, EmptyState } from '../../components/UI';
 import { calculateWorkedHours } from '../utils/timeCalculations';
+import { formatRequestType, formatWorkflowStatus } from '../../lib/i18n';
+import { useLanguage } from '../contexts/LanguageContext';
+import { ExpandableTextCell } from '../components/ClickableFullContent';
 
 interface RequestRow {
   id: string;
   type: string;
   status: string;
+  reason: string;
   created_at: string;
 }
 
@@ -28,6 +32,7 @@ interface TimeBalanceRow {
 }
 
 const DashboardPage: React.FC = () => {
+  useLanguage();
   const { user, loading } = useCurrentUser();
   const [records, setRecords] = useState<TimeRecord[]>([]);
   const [balance, setBalance] = useState<TimeBalanceRow | null>(null);
@@ -118,6 +123,7 @@ const DashboardPage: React.FC = () => {
             id: r.id,
             type: r.type,
             status: r.status,
+            reason: r.reason ?? '',
             created_at: r.created_at,
           })),
         );
@@ -205,18 +211,40 @@ const DashboardPage: React.FC = () => {
         ) : (
           <DataTable<RequestRow>
             columns={[
-              { key: 'type', header: 'Tipo' },
-              { key: 'status', header: 'Status' },
+              {
+                key: 'type',
+                header: 'Tipo',
+                render: (row) => (
+                  <ExpandableTextCell label="Tipo" value={formatRequestType(row.type)} />
+                ),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                render: (row) => (
+                  <ExpandableTextCell label="Status" value={formatWorkflowStatus(row.status)} />
+                ),
+              },
+              {
+                key: 'reason',
+                header: 'Motivo',
+                render: (row) => <ExpandableTextCell label="Motivo" value={row.reason} />,
+              },
               {
                 key: 'created_at',
                 header: 'Criado em',
-                render: (row) =>
-                  new Date(row.created_at).toLocaleString('pt-BR', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  }),
+                render: (row) => (
+                  <ExpandableTextCell
+                    label="Criado em"
+                    value={new Date(row.created_at).toLocaleString('pt-BR', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  />
+                ),
               },
             ]}
             data={pendingRequests}

@@ -2,6 +2,24 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { DailySummary } from "../types";
 import { getGeminiApiKey } from "./geminiEnv";
 
+/** Modelo alinhado ao restante do projeto (mapsService). */
+const GEMINI_MODEL_INSIGHTS = "gemini-2.5-flash";
+const GEMINI_MODEL_CHAT = "gemini-2.5-flash";
+
+function errorText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function isInvalidOrDeniedGeminiKey(error: unknown): boolean {
+  const t = errorText(error);
+  return /API_KEY_INVALID|API key not valid|invalid api key|PERMISSION_DENIED|403/i.test(t);
+}
+
 // Analyze time tracking data to provide productivity and work-life balance insights
 export const getWorkInsights = async (summaries: DailySummary[]) => {
   const apiKey = getGeminiApiKey();
@@ -19,7 +37,7 @@ export const getWorkInsights = async (summaries: DailySummary[]) => {
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: GEMINI_MODEL_INSIGHTS,
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -42,7 +60,21 @@ export const getWorkInsights = async (summaries: DailySummary[]) => {
     
     return JSON.parse(jsonStr);
   } catch (error) {
-    console.error("Erro ao obter insights da IA:", error);
+    if (isInvalidOrDeniedGeminiKey(error)) {
+      if (import.meta.env?.DEV) {
+        console.warn(
+          "[Gemini] Chave inválida ou sem permissão para o modelo. Gere uma chave em https://aistudio.google.com/apikey e defina VITE_GEMINI_API_KEY."
+        );
+      }
+      return {
+        insight:
+          "Insights por IA indisponíveis: a chave da API Gemini é inválida ou expirou. Configure uma chave válida em VITE_GEMINI_API_KEY (Google AI Studio) e reinicie o app.",
+        score: 8,
+      };
+    }
+    if (import.meta.env?.DEV) {
+      console.warn("[Gemini] Insights:", errorText(error));
+    }
     return { insight: "Continue mantendo o registro regular do seu ponto para análises futuras.", score: 8 };
   }
 };
@@ -69,14 +101,22 @@ export const sendHRChatMessage = async (userMessage: string, history: { role: 'u
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: GEMINI_MODEL_CHAT,
       contents: contents,
     });
 
     const text = response.text?.trim();
     return text || "Não foi possível obter uma resposta. Tente novamente.";
   } catch (error) {
-    console.error("Erro no chat com IA:", error);
+    if (isInvalidOrDeniedGeminiKey(error)) {
+      if (import.meta.env?.DEV) {
+        console.warn("[Gemini] Chat: chave inválida ou sem permissão. Verifique VITE_GEMINI_API_KEY.");
+      }
+      return "A chave da API Gemini é inválida ou expirou. Gere uma nova em Google AI Studio, defina VITE_GEMINI_API_KEY e reinicie o servidor.";
+    }
+    if (import.meta.env?.DEV) {
+      console.warn("[Gemini] Chat:", errorText(error));
+    }
     return "Ocorreu um erro ao processar sua mensagem. Verifique a conexão e a chave da API e tente novamente.";
   }
 };

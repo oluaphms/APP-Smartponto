@@ -6,6 +6,9 @@ import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
 import ModalForm from '../components/ModalForm';
 import { Button, Input, LoadingState } from '../../components/UI';
+import { formatWorkflowStatus } from '../../lib/i18n';
+import { ExpandableTextCell } from '../components/ClickableFullContent';
+import { useLanguage } from '../contexts/LanguageContext';
 import { db, isSupabaseConfigured } from '../services/supabaseClient';
 import { NotificationService } from '../../services/notificationService';
 import { LoggingService } from '../../services/loggingService';
@@ -22,6 +25,7 @@ interface AdjustmentRow {
 }
 
 const AdjustmentsPage: React.FC = () => {
+  useLanguage();
   const { user, loading } = useCurrentUser();
   const [rows, setRows] = useState<AdjustmentRow[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -201,19 +205,35 @@ const AdjustmentsPage: React.FC = () => {
             {
               key: 'requested_time',
               header: 'Horário solicitado',
+              render: (row) => <ExpandableTextCell label="Horário solicitado" value={row.requested_time} />,
             },
-            { key: 'status', header: 'Status' },
-            { key: 'reason', header: 'Motivo' },
+            {
+              key: 'status',
+              header: 'Status',
+              render: (row) => (
+                <ExpandableTextCell label="Status" value={formatWorkflowStatus(row.status)} />
+              ),
+            },
+            {
+              key: 'reason',
+              header: 'Motivo',
+              render: (row) => <ExpandableTextCell label="Motivo" value={row.reason} />,
+            },
             {
               key: 'created_at',
               header: 'Criado em',
-              render: (row) =>
-                new Date(row.created_at).toLocaleString('pt-BR', {
-                  day: '2-digit',
-                  month: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                }),
+              render: (row) => (
+                <ExpandableTextCell
+                  label="Criado em"
+                  value={new Date(row.created_at).toLocaleString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                />
+              ),
             },
             ...(isAdminView
               ? [
