@@ -113,7 +113,7 @@ export default defineConfig(({ mode }) => {
         'eventemitter3/index.mjs': path.resolve(projectRoot, 'src/shim/eventemitter3.js'),
         'eventemitter3-cjs-entry': path.resolve(projectRoot, 'node_modules/eventemitter3/index.js'),
       },
-      dedupe: ['react', 'react-dom'],
+      dedupe: ['react', 'react-dom', 'scheduler'],
     },
 
     optimizeDeps: {
@@ -123,6 +123,8 @@ export default defineConfig(({ mode }) => {
       include: [
         'react',
         'react-dom',
+        'react-router',
+        'react-router-dom',
         'eventemitter3',
         'use-sync-external-store/shim/with-selector',
         'use-sync-external-store/shim/with-selector.js',
@@ -134,7 +136,8 @@ export default defineConfig(({ mode }) => {
         'set-cookie-parser',
       ],
       // recharts precisa passar pelo pre-bundle para que deps CJS (ex.: eventemitter3) tenham interop ESM correto
-      exclude: ['lucide-react', 'framer-motion', 'react-router-dom'],
+      // react-router-dom incluído no pre-bundle para alinhar React com o restante do app (evita useState null)
+      exclude: ['lucide-react', 'framer-motion'],
       esbuildOptions: {
         mainFields: ['module', 'main'],
       },

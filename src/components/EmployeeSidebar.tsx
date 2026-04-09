@@ -5,6 +5,7 @@ import {
   Clock,
   CalendarDays,
   Scale,
+  Banknote,
   MapPin,
   User,
   Settings,
@@ -25,6 +26,7 @@ const EMPLOYEE_ITEMS = [
   { label: 'Espelho de Ponto', path: '/employee/timesheet', icon: CalendarDays },
   { label: 'Mapa em tempo real', path: '/employee/monitoring', icon: MapPin },
   { label: 'Banco de Horas', path: '/employee/time-balance', icon: Scale },
+  { label: 'Contracheque', path: '/employee/holerite', icon: Banknote },
   { label: 'Perfil', path: '/employee/profile', icon: User },
   { label: 'Configurações', path: '/employee/settings', icon: Settings },
 ];

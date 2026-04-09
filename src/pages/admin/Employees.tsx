@@ -103,8 +103,16 @@ import {
   type ColumnMapping,
   type NormalizedEmployeeRow,
 } from '../../services/universalImport';
+import { parseFlexibleDate } from '../../utils/dateFlexible';
 import { isValidCpf, isValidEmail, stripCpf } from '../../services/importEmployeesService';
 import { calcularScoreConfiabilidade, type ReliabilityInputs } from '../../ai/reliabilityScore';
+import {
+  TIPO_VINCULO_LABELS,
+  TIPO_VINCULO_VALUES,
+  normalizeTipoVinculo,
+  parseTipoVinculoImport,
+  type TipoVinculo,
+} from '../../constants/cadastroTrabalhista';
 
 /** Configuração adicional do funcionário (employee_config JSONB) */
 interface EmployeeConfig {
@@ -141,6 +149,7 @@ interface EmployeeRow {
   status: string;
   created_at: string;
   numero_folha?: string;
+  salario_base?: number | null;
   pis_pasep?: string;
   numero_identificador?: string;
   ctps?: string;
@@ -152,6 +161,15 @@ interface EmployeeRow {
   invisivel?: boolean;
   employee_config?: EmployeeConfig;
   company_name?: string;
+  tipo_vinculo?: TipoVinculo;
+  contrato_fim?: string;
+  data_nascimento?: string;
+  rg?: string;
+  rg_orgao?: string;
+  cidade_id?: string;
+  estado_civil_id?: string;
+  cidade_name?: string;
+  estado_civil_name?: string;
   // Score de confiabilidade simples (0–100) calculado a partir de atrasos/faltas/ajustes/inconsistências
   reliability_score?: number;
 }
@@ -190,26 +208,23 @@ function parseBooleanFromDb(value: unknown): boolean {
   return !!value;
 }
 
-/** Linha do CSV de importação (colunas: nome, email, senha, cargo, telefone, cpf, departamento, escala) */
-interface ImportRow {
-  nome: string;
-  email: string;
-  senha: string;
-  cargo: string;
-  telefone: string;
-  cpf: string;
-  departamento: string;
-  escala: string;
-}
-
 interface ImportResult {
   success: number;
   failed: { row: number; email: string; reason: string }[];
 }
 
-const CSV_TEMPLATE = `nome,email,senha,cargo,telefone,cpf,departamento,escala
-Carlos Souza,carlos@empresa.com,123456,Técnico,79998213456,12345678910,TI,09:00-18:00
-Fernanda Lima,fernanda@empresa.com,123456,Financeiro,79999441822,23456789011,Financeiro,08:00-17:00`;
+const CSV_TEMPLATE = `nome,email,senha,cargo,telefone,cpf,departamento,escala,tipo_vinculo,admissao,contrato_fim,data_nascimento,rg,rg_orgao,cidade,estado_civil
+Carlos Souza,carlos@empresa.com,123456,Técnico,79998213456,12345678910,TI,09:00-18:00,CLT,2024-01-15,,1990-05-20,1234567890,SSP/SP,São Paulo,Solteiro(a)
+Fernanda Lima,fernanda@empresa.com,123456,Financeiro,79999441822,23456789011,Financeiro,08:00-17:00,CLT,,,,,,,`;
+
+/** Chave para casar nomes de cidade / estado civil na importação (minúsculas, sem acento). */
+function normNameKey(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '');
+}
 
 const AdminEmployees: React.FC = () => {
   const { user, loading } = useCurrentUser();
@@ -263,6 +278,8 @@ const AdminEmployees: React.FC = () => {
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [estruturas, setEstruturas] = useState<{ id: string; codigo: string; descricao: string }[]>([]);
   const [motivosDemissao, setMotivosDemissao] = useState<{ id: string; name: string }[]>([]);
+  const [cidades, setCidades] = useState<{ id: string; name: string }[]>([]);
+  const [estadosCivis, setEstadosCivis] = useState<{ id: string; name: string }[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -286,6 +303,7 @@ const AdminEmployees: React.FC = () => {
   const [showInvisiveis, setShowInvisiveis] = useState(false);
   const [form, setForm] = useState({
     numero_folha: '',
+    salario_base: '',
     nome: '',
     cpf: '',
     email: '',
@@ -316,6 +334,14 @@ const AdminEmployees: React.FC = () => {
     afastamento_justificativa: '',
     afastamento_motivo: '',
     photo_preview: '' as string,
+    tipo_vinculo: 'clt' as TipoVinculo,
+    contrato_fim: '',
+    data_nascimento: '',
+    rg: '',
+    rg_orgao: '',
+    cidade_id: '',
+    estado_civil_id: '',
+    shift_id: '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -334,7 +360,7 @@ const AdminEmployees: React.FC = () => {
     }
     setLoadingData(true);
     try {
-      const [usersRows, legacyEmployeesRows, schedRows, shiftRows, deptRows, jobTitlesRows, motivosRows, estruturasRows] = await Promise.all([
+      const [usersRows, legacyEmployeesRows, schedRows, shiftRows, deptRows, jobTitlesRows, motivosRows, estruturasRows, cidadesRows, estadosCivisRows] = await Promise.all([
         db.select('users', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }], { column: 'created_at', ascending: false }) as Promise<any[]>,
         db.select('employees', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }]).catch(() => []) as Promise<any[]>,
         db.select('schedules', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }]) as Promise<any[]>,
@@ -343,12 +369,16 @@ const AdminEmployees: React.FC = () => {
         db.select('job_titles', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }]) as Promise<any[]>,
         db.select('motivo_demissao', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }]).catch(() => []) as Promise<any[]>,
         db.select('estruturas', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }]).catch(() => []) as Promise<any[]>,
+        db.select('cidades', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }]).catch(() => []) as Promise<any[]>,
+        db.select('estados_civis', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }]).catch(() => []) as Promise<any[]>,
       ]);
       const deptMap = new Map((deptRows ?? []).map((d: any) => [d.id, d.name]));
       const schedMap = new Map((schedRows ?? []).map((s: any) => [s.id, s.name]));
       const shiftMap = new Map((shiftRows ?? []).map((ws: any) => [ws.id, formatWorkShiftLabel(ws)]));
       const motivoMap = new Map((motivosRows ?? []).map((m: any) => [m.id, m.name]));
       const estruturaMap = new Map((estruturasRows ?? []).map((e: any) => [e.id, e.descricao || e.codigo]));
+      const cidadeMap = new Map((cidadesRows ?? []).map((c: any) => [c.id, c.name || '']));
+      const estadoCivilMap = new Map((estadosCivisRows ?? []).map((ec: any) => [ec.id, ec.name || '']));
       const listFromUsers: EmployeeRow[] = (usersRows ?? []).map((u: any) => {
         // TODO: substituir contagens estáticas por dados reais de atrasos, faltas, ajustes e inconsistências.
         const inputs: ReliabilityInputs = {
@@ -376,6 +406,7 @@ const AdminEmployees: React.FC = () => {
           status: u.status || 'active',
           created_at: u.created_at,
           numero_folha: u.numero_folha,
+          salario_base: u.salario_base != null ? Number(u.salario_base) : null,
           pis_pasep: u.pis_pasep,
           numero_identificador: u.numero_identificador,
           ctps: u.ctps,
@@ -387,6 +418,15 @@ const AdminEmployees: React.FC = () => {
           invisivel: parseBooleanFromDb(u.invisivel),
           employee_config: u.employee_config || {},
           reliability_score: score,
+          tipo_vinculo: normalizeTipoVinculo(u.tipo_vinculo),
+          contrato_fim: u.contrato_fim,
+          data_nascimento: u.data_nascimento,
+          rg: u.rg,
+          rg_orgao: u.rg_orgao,
+          cidade_id: u.cidade_id,
+          estado_civil_id: u.estado_civil_id,
+          cidade_name: u.cidade_id ? cidadeMap.get(u.cidade_id) : undefined,
+          estado_civil_name: u.estado_civil_id ? estadoCivilMap.get(u.estado_civil_id) : undefined,
         };
       });
 
@@ -429,6 +469,7 @@ const AdminEmployees: React.FC = () => {
             status: e.status || 'active',
             created_at: e.created_at || new Date().toISOString(),
             numero_folha: e.numero_folha || null,
+            salario_base: e.salario_base != null ? Number(e.salario_base) : null,
             pis_pasep: e.pis_pasep || null,
             numero_identificador: e.numero_identificador || null,
             ctps: e.ctps || null,
@@ -441,6 +482,15 @@ const AdminEmployees: React.FC = () => {
             employee_config: {} as EmployeeConfig,
             reliability_score: undefined,
             company_name: undefined,
+            tipo_vinculo: normalizeTipoVinculo(e.tipo_vinculo),
+            contrato_fim: e.contrato_fim || null,
+            data_nascimento: e.data_nascimento || null,
+            rg: e.rg || null,
+            rg_orgao: e.rg_orgao || null,
+            cidade_id: e.cidade_id || null,
+            estado_civil_id: e.estado_civil_id || null,
+            cidade_name: e.cidade_id ? cidadeMap.get(e.cidade_id) : undefined,
+            estado_civil_name: e.estado_civil_id ? estadoCivilMap.get(e.estado_civil_id) : undefined,
           };
         });
 
@@ -457,6 +507,8 @@ const AdminEmployees: React.FC = () => {
       setEstruturas((estruturasRows ?? []).map((e: any) => ({ id: e.id, codigo: e.codigo || '', descricao: e.descricao || e.codigo || '' })));
       setCargos((jobTitlesRows ?? []).map((j: any) => ({ id: j.id, name: j.name || '' })));
       setMotivosDemissao((motivosRows ?? []).map((m: any) => ({ id: m.id, name: m.name || '' })));
+      setCidades((cidadesRows ?? []).map((c: any) => ({ id: c.id, name: c.name || '' })).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
+      setEstadosCivis((estadosCivisRows ?? []).map((ec: any) => ({ id: ec.id, name: ec.name || '' })).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
     } catch (e) {
       console.error(e);
     } finally {
@@ -472,6 +524,7 @@ const AdminEmployees: React.FC = () => {
     const firstCargo = cargos[0]?.name || '';
     return {
       numero_folha: '',
+      salario_base: '',
       nome: '',
       cpf: '',
       email: '',
@@ -503,6 +556,13 @@ const AdminEmployees: React.FC = () => {
       afastamento_justificativa: '',
       afastamento_motivo: '',
       photo_preview: '',
+      tipo_vinculo: 'clt' as TipoVinculo,
+      contrato_fim: '',
+      data_nascimento: '',
+      rg: '',
+      rg_orgao: '',
+      cidade_id: '',
+      estado_civil_id: '',
     };
   };
 
@@ -523,6 +583,7 @@ const AdminEmployees: React.FC = () => {
     const web = cfg.dados_web || {};
     setForm({
       numero_folha: row.numero_folha || '',
+      salario_base: row.salario_base != null && !Number.isNaN(Number(row.salario_base)) ? String(row.salario_base) : '',
       nome: row.nome,
       cpf: row.cpf || '',
       email: row.email,
@@ -554,6 +615,13 @@ const AdminEmployees: React.FC = () => {
       afastamento_justificativa: cfg.afastamentos?.[0]?.justificativa || '',
       afastamento_motivo: cfg.afastamentos?.[0]?.motivo || '',
       photo_preview: cfg.photo_url || '',
+      tipo_vinculo: normalizeTipoVinculo(row.tipo_vinculo),
+      contrato_fim: row.contrato_fim || '',
+      data_nascimento: row.data_nascimento || '',
+      rg: row.rg || '',
+      rg_orgao: row.rg_orgao || '',
+      cidade_id: row.cidade_id || '',
+      estado_civil_id: row.estado_civil_id || '',
     });
     setModalOpen(true);
     setError(null);
@@ -615,6 +683,16 @@ const AdminEmployees: React.FC = () => {
       scrollModalTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
+    let salarioParsed: number | null = null;
+    if (form.salario_base?.trim()) {
+      const p = parseFloat(String(form.salario_base).replace(/\s/g, '').replace(',', '.'));
+      if (Number.isNaN(p) || p < 0) {
+        setError('Salário base inválido. Use apenas números (ex.: 3500 ou 3500,50).');
+        scrollModalTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+      salarioParsed = p;
+    }
     // PIS/PASEP opcional para não bloquear salvamento; recomendado para REP/relatórios
     const cargoFinal = form.cargo === OUTRO_CARGO_VALUE ? (form.cargoOutro.trim() || 'Colaborador') : form.cargo;
     setSaving(true);
@@ -631,6 +709,7 @@ const AdminEmployees: React.FC = () => {
         schedule_id: form.schedule_id || null,
         shift_id: form.shift_id || null,
         numero_folha: form.numero_folha?.trim() || null,
+        salario_base: salarioParsed,
         pis_pasep: form.pis_pasep?.trim() || null,
         numero_identificador: form.numero_identificador?.trim() || null,
         ctps: form.ctps?.trim() || null,
@@ -640,6 +719,13 @@ const AdminEmployees: React.FC = () => {
         observacoes: form.observacoes?.trim() || null,
         employee_config: buildEmployeeConfig(),
         updated_at: new Date().toISOString(),
+        tipo_vinculo: normalizeTipoVinculo(form.tipo_vinculo),
+        contrato_fim: form.contrato_fim?.trim() || null,
+        data_nascimento: form.data_nascimento?.trim() || null,
+        rg: form.rg?.trim() || null,
+        rg_orgao: form.rg_orgao?.trim() || null,
+        cidade_id: form.cidade_id || null,
+        estado_civil_id: form.estado_civil_id || null,
       };
       if (editingId) {
         const editingRow = rows.find((r) => r.id === editingId);
@@ -872,7 +958,11 @@ const AdminEmployees: React.FC = () => {
         (r.cpf && r.cpf.replace(/\D/g, '').includes(searchLower)) ||
         (r.pis_pasep && r.pis_pasep.replace(/\D/g, '').includes(searchLower)) ||
         (r.numero_folha && r.numero_folha.includes(searchLower)) ||
-        (r.numero_identificador && r.numero_identificador.includes(searchLower))
+        (r.numero_identificador && r.numero_identificador.includes(searchLower)) ||
+        (r.rg && r.rg.toLowerCase().includes(searchLower)) ||
+        TIPO_VINCULO_LABELS[normalizeTipoVinculo(r.tipo_vinculo)].toLowerCase().includes(searchLower) ||
+        (r.cidade_name && r.cidade_name.toLowerCase().includes(searchLower)) ||
+        (r.estado_civil_name && r.estado_civil_name.toLowerCase().includes(searchLower))
     )
     : visibleRows;
 
@@ -950,7 +1040,7 @@ const AdminEmployees: React.FC = () => {
     }
   };
 
-  const runBulkImport = async (toImport: ImportRow[]) => {
+  const runBulkImport = async (toImport: NormalizedEmployeeRow[]) => {
     if (!effectiveCompanyId) {
       throw new Error('Empresa do usuário não encontrada. Saia e entre novamente antes de importar funcionários.');
     }
@@ -958,6 +1048,8 @@ const AdminEmployees: React.FC = () => {
     let success = 0;
     const deptByName = new Map(departments.map((d) => [d.name.trim().toLowerCase(), d.id]));
     const schedByName = new Map(schedules.map((s) => [s.name.trim().toLowerCase(), s.id]));
+    const cidadeByName = new Map(cidades.map((c) => [normNameKey(c.name), c.id]));
+    const estadoCivilByName = new Map(estadosCivis.map((ec) => [normNameKey(ec.name), ec.id]));
     const stripCpf = (s: string) => (s || '').replace(/\D/g, '');
     const DELAY_BETWEEN_MS = 2500; // ~24 criações/min; Supabase free tier é restritivo
     const RETRY_AFTER_429_MS = 6000; // esperar 6s antes de retry ou antes de continuar
@@ -1016,6 +1108,13 @@ const AdminEmployees: React.FC = () => {
           userIdLocal = `import-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
         }
 
+        const tipoV = parseTipoVinculoImport(row.tipo_vinculo);
+        const adm = parseFlexibleDate(row.admissao);
+        const cf = parseFlexibleDate(row.contrato_fim);
+        const dn = parseFlexibleDate(row.data_nascimento);
+        const cidadeId = row.cidade?.trim() ? cidadeByName.get(normNameKey(row.cidade)) : undefined;
+        const estadoCivilId = row.estado_civil?.trim() ? estadoCivilByName.get(normNameKey(row.estado_civil)) : undefined;
+
         const payload: any = {
           id: userIdLocal,
           auth_user_id: authUserId,
@@ -1031,6 +1130,14 @@ const AdminEmployees: React.FC = () => {
           status: 'active',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
+          tipo_vinculo: tipoV,
+          admissao: adm,
+          contrato_fim: cf,
+          data_nascimento: dn,
+          rg: row.rg?.trim() || null,
+          rg_orgao: row.rg_orgao?.trim() || null,
+          cidade_id: cidadeId || null,
+          estado_civil_id: estadoCivilId || null,
         };
 
         await db.insert('users', payload);
@@ -1115,7 +1222,7 @@ const AdminEmployees: React.FC = () => {
       const normalized = normalizeAllRows(rawRows, mapping);
       if (!normalized || normalized.length === 0) {
         setImportParseError(
-          'Nenhuma linha válida encontrada. Verifique se o arquivo segue o modelo de cabeçalho (nome, email, senha, cargo, telefone, cpf, departamento, escala).'
+          'Nenhuma linha válida encontrada. Verifique o cabeçalho (nome, e-mail, etc.) e use o modelo CSV opcional com colunas extras de cadastro trabalhista.'
         );
         e.target.value = '';
         setImporting(false);
@@ -1155,7 +1262,7 @@ const AdminEmployees: React.FC = () => {
     setImporting(true);
     setImportError(null);
     try {
-      await runBulkImport(importPreview.valid as ImportRow[]);
+      await runBulkImport(importPreview.valid);
       setImportStep('result');
       setImportPreview(null);
       setImportParseError(null);
@@ -1210,7 +1317,10 @@ const AdminEmployees: React.FC = () => {
           </div>
         )}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <PageHeader title="Funcionários" />
+          <PageHeader
+            title="Funcionários"
+            subtitle="Cadastro trabalhista: tipo de vínculo, documentos e datas para conformidade, REP e exportação à folha."
+          />
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -1268,6 +1378,9 @@ const AdminEmployees: React.FC = () => {
                   <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
                     <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Nº Folha</th>
                     <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Nome</th>
+                    <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Vínculo</th>
+                    <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Cidade</th>
+                    <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Est. civil</th>
                     <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">PIS/PASEP</th>
                     <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Cargo</th>
                     <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Departamento</th>
@@ -1283,6 +1396,15 @@ const AdminEmployees: React.FC = () => {
                     <tr key={row.id} className={`border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 ${row.invisivel ? 'opacity-60' : ''}`}>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.numero_folha || '—'}</td>
                       <td className="px-4 py-3 text-slate-900 dark:text-white font-medium">{row.nome}</td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                        {TIPO_VINCULO_LABELS[normalizeTipoVinculo(row.tipo_vinculo)]}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-[140px] truncate" title={row.cidade_name || undefined}>
+                        {row.cidade_name || '—'}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-[120px] truncate" title={row.estado_civil_name || undefined}>
+                        {row.estado_civil_name || '—'}
+                      </td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.pis_pasep || '—'}</td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.cargo}</td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.department_name || '—'}</td>
@@ -1386,6 +1508,18 @@ const AdminEmployees: React.FC = () => {
                           <input type="text" value={form.numero_folha} onChange={(e) => setForm({ ...form, numero_folha: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ligação com folha de pagamento" />
                         </div>
                         <div>
+                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Salário base (R$)</label>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={form.salario_base}
+                            onChange={(e) => setForm({ ...form, salario_base: e.target.value })}
+                            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                            placeholder="Ex.: 3500 ou 3500,50"
+                          />
+                          <p className="text-[10px] text-slate-500 mt-1">Referência para a folha simplificada (admin → Folha de pagamento).</p>
+                        </div>
+                        <div>
                           <label className="block text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Nome <span className="text-red-500">*</span> <span className="text-xs font-normal text-blue-500">(Portaria 1510)</span></label>
                           <input type="text" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Nome completo (obrigatório, enviado ao REP)" />
                         </div>
@@ -1421,6 +1555,65 @@ const AdminEmployees: React.FC = () => {
                       <div>
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">CTPS</label>
                         <input type="text" value={form.ctps} onChange={(e) => setForm({ ...form, ctps: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Carteira de Trabalho" />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Tipo de vínculo</label>
+                        <select
+                          value={form.tipo_vinculo}
+                          onChange={(e) => setForm({ ...form, tipo_vinculo: normalizeTipoVinculo(e.target.value) })}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                        >
+                          {TIPO_VINCULO_VALUES.map((v) => (
+                            <option key={v} value={v}>
+                              {TIPO_VINCULO_LABELS[v]}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-slate-500 mt-1">Usado em relatórios e integração com folha; CLT é o padrão.</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Data de nascimento</label>
+                        <input type="date" value={form.data_nascimento} onChange={(e) => setForm({ ...form, data_nascimento: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">RG</label>
+                        <input type="text" value={form.rg} onChange={(e) => setForm({ ...form, rg: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Número do RG" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Órgão emissor / UF</label>
+                        <input type="text" value={form.rg_orgao} onChange={(e) => setForm({ ...form, rg_orgao: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ex.: SSP/SP" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Cidade (naturalidade)</label>
+                        <select
+                          value={form.cidade_id}
+                          onChange={(e) => setForm({ ...form, cidade_id: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                        >
+                          <option value="">Nenhuma</option>
+                          {cidades.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-slate-500 mt-1">Cadastro em Cadastros → Cidades.</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Estado civil</label>
+                        <select
+                          value={form.estado_civil_id}
+                          onChange={(e) => setForm({ ...form, estado_civil_id: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                        >
+                          <option value="">Nenhum</option>
+                          {estadosCivis.map((ec) => (
+                            <option key={ec.id} value={ec.id}>
+                              {ec.name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-slate-500 mt-1">Cadastro em Cadastros → Estados civis.</p>
                       </div>
                       <div className="sm:col-span-2">
                         <label className="block text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Empresa <span className="text-xs font-normal text-blue-500">(Portaria 1510)</span></label>
@@ -1471,6 +1664,11 @@ const AdminEmployees: React.FC = () => {
                       <div>
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Admissão</label>
                         <input type="date" value={form.admissao} onChange={(e) => setForm({ ...form, admissao: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Término do contrato / estágio</label>
+                        <input type="date" value={form.contrato_fim} onChange={(e) => setForm({ ...form, contrato_fim: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                        <p className="text-[10px] text-slate-500 mt-1">Prazo determinado, fim de estágio ou experiência (opcional).</p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Demissão</label>
@@ -1701,7 +1899,7 @@ const AdminEmployees: React.FC = () => {
                     Envie uma planilha em qualquer formato. O ChronoDigital detecta as colunas e importa automaticamente usando o modelo padrão.
                   </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Aceitos: CSV, TXT, Excel (XLSX/XLS), PDF, Word (DOC/DOCX). Use o modelo com cabeçalho: nome, email, senha, cargo, telefone, cpf, departamento, escala.
+                    Aceitos: CSV, TXT, Excel (XLSX/XLS), PDF, Word (DOC/DOCX). Cabeçalhos mínimos: nome, e-mail, cargo, etc. Colunas opcionais: tipo_vinculo, admissao, contrato_fim, data_nascimento, rg, rg_orgao, cidade e estado_civil (nomes iguais aos cadastros de Cidades e Estados civis). Datas: AAAA-MM-DD ou DD/MM/AAAA.
                   </p>
                   <button
                     type="button"

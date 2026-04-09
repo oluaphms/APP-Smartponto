@@ -51,7 +51,6 @@ import ForgotPasswordModal from './src/components/auth/ForgotPasswordModal';
 import RoleGuard from './src/components/auth/RoleGuard';
 import ProtectedRoute from './src/components/auth/ProtectedRoute';
 import { useSettings, SettingsProvider } from './src/contexts/SettingsContext';
-import { ToastProvider } from './src/components/ToastProvider';
 import { useLanguage } from './src/contexts/LanguageContext';
 import { i18n } from './lib/i18n';
 import { useSessionTimeout } from './src/hooks/useSessionTimeout';
@@ -75,6 +74,7 @@ import {
   AdminEstruturas,
   AdminEstadosCivis,
   AdminEventos,
+  AdminFolhaPagamento,
   AdminFeriados,
   AdminFiscalizacao,
   AdminImportRep,
@@ -96,6 +96,7 @@ import {
   DepartmentsPage,
   EmployeeClockIn,
   EmployeeDashboard,
+  EmployeeHolerite,
   EmployeeMonitoring,
   EmployeeProfile,
   EmployeeSettings,
@@ -1086,6 +1087,7 @@ const AppMain: React.FC = () => {
               <Route path="cartao-ponto" element={<AdminCartaoPonto />} />
               <Route path="cartao-ponto-leitura" element={<AdminCartaoPonto />} />
               <Route path="lancamento-eventos" element={<AdminLancamentoEventos />} />
+              <Route path="folha-pagamento" element={<AdminFolhaPagamento />} />
               <Route path="time-attendance" element={<TimeAttendancePage />} />
               <Route path="adjustments" element={<AdjustmentsPage />} />
               <Route path="absences" element={<AbsencesPage />} />
@@ -1138,6 +1140,7 @@ const AppMain: React.FC = () => {
               <Route path="profile" element={<EmployeeProfile />} />
               <Route path="settings" element={<EmployeeSettings />} />
               <Route path="time-balance" element={<TimeBalancePage />} />
+              <Route path="holerite" element={<EmployeeHolerite />} />
             </Route>
             {/* Atalhos legados (sidebar antiga / links salvos): enviam para a área correta */}
             <Route path="/time-balance" element={<Navigate to={isAdminOrHr ? '/admin/bank-hours' : '/employee/time-balance'} replace />} />
@@ -1577,11 +1580,9 @@ const App: React.FC = () =>
   !isSupabaseConfigured ? (
     <ConfigSupabaseScreen />
   ) : (
-    <ToastProvider>
-      <SettingsProvider>
-        <AppMain />
-      </SettingsProvider>
-    </ToastProvider>
+    <SettingsProvider>
+      <AppMain />
+    </SettingsProvider>
   );
 
 export default App;

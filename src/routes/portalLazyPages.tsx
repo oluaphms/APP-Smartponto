@@ -42,6 +42,7 @@ export const AdminMotivoDemissao = React.lazy(ROUTE_LOADERS['/admin/motivo-demis
 export const AdminFeriados = React.lazy(ROUTE_LOADERS['/admin/feriados']);
 export const AdminCartaoPonto = React.lazy(ROUTE_LOADERS['/admin/cartao-ponto']);
 export const AdminLancamentoEventos = React.lazy(ROUTE_LOADERS['/admin/lancamento-eventos']);
+export const AdminFolhaPagamento = React.lazy(ROUTE_LOADERS['/admin/folha-pagamento']);
 export const AdminJustificativas = React.lazy(ROUTE_LOADERS['/admin/justificativas']);
 export const AdminArquivarCalculos = React.lazy(ROUTE_LOADERS['/admin/arquivar-calculos']);
 export const AdminColunasMix = React.lazy(ROUTE_LOADERS['/admin/colunas-mix']);
@@ -65,6 +66,7 @@ export const EmployeeProfile = React.lazy(ROUTE_LOADERS['/employee/profile']);
 export const EmployeeSettings = React.lazy(ROUTE_LOADERS['/employee/settings']);
 export const MyWorkSchedule = React.lazy(ROUTE_LOADERS['/employee/work-schedule']);
 export const TimeBalancePage = React.lazy(ROUTE_LOADERS['/employee/time-balance']);
+export const EmployeeHolerite = React.lazy(ROUTE_LOADERS['/employee/holerite']);
 
 export const ProfileViewLazy = React.lazy(ROUTE_LOADERS['/profile']);
 

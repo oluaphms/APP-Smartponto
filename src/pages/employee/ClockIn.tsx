@@ -752,9 +752,8 @@ const EmployeeClockIn: React.FC = () => {
                   </div>
                   <div>
                     <div className="font-semibold text-xl text-slate-800 dark:text-slate-100">{card.label}</div>
-                    <div className="text-xs text-slate-500 mt-1">Comprovação</div>
                     {!isExpanded && (
-                      <div className="text-[11px] text-indigo-600 dark:text-indigo-400 mt-2 font-medium">Toque para ver as batidas</div>
+                      <div className="text-[11px] text-indigo-600 dark:text-indigo-400 mt-2 font-medium">Clique aqui</div>
                     )}
                   </div>
                 </button>

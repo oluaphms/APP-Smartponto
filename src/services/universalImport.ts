@@ -1,7 +1,6 @@
 /**
  * Importador universal de funcionários: mapeamento de colunas, normalização e validação.
- * Campos do sistema: nome, email, senha, cpf, telefone, cargo, departamento, escala.
- * Obrigatórios: nome e cpf (conforme especificação).
+ * Obrigatórios para linha válida: nome e/ou e-mail e/ou cpf (validação em Employees).
  */
 
 import type { ParsedRow } from './fileParser';
@@ -15,6 +14,14 @@ export const SYSTEM_FIELDS = [
   'cargo',
   'departamento',
   'escala',
+  'tipo_vinculo',
+  'admissao',
+  'contrato_fim',
+  'data_nascimento',
+  'rg',
+  'rg_orgao',
+  'cidade',
+  'estado_civil',
 ] as const;
 
 export type SystemField = (typeof SYSTEM_FIELDS)[number];
@@ -32,6 +39,14 @@ export interface NormalizedEmployeeRow {
   cargo: string;
   departamento: string;
   escala: string;
+  tipo_vinculo: string;
+  admissao: string;
+  contrato_fim: string;
+  data_nascimento: string;
+  rg: string;
+  rg_orgao: string;
+  cidade: string;
+  estado_civil: string;
 }
 
 /**
@@ -39,7 +54,7 @@ export interface NormalizedEmployeeRow {
  * Chave = campo do sistema; valor = possíveis nomes na planilha (lowercase).
  */
 export const columnAliases: Record<SystemField, string[]> = {
-  nome: ['nome', 'nome completo', 'funcionario', 'colaborador', 'nome_completo', 'nome completo', 'nome do funcionário', 'funcionário'],
+  nome: ['nome', 'nome completo', 'funcionario', 'colaborador', 'nome_completo', 'nome do funcionário', 'funcionário'],
   cpf: ['cpf', 'documento', 'cpf funcionario', 'cpf do funcionário', 'doc'],
   email: ['email', 'e-mail', 'e-mail do funcionário', 'mail'],
   telefone: ['telefone', 'celular', 'phone', 'fone', 'tel'],
@@ -47,6 +62,14 @@ export const columnAliases: Record<SystemField, string[]> = {
   cargo: ['cargo', 'funcao', 'função', 'função/cargo', 'position'],
   escala: ['horario', 'turno', 'escala', 'horário', 'jornada'],
   senha: ['senha', 'senha inicial', 'password'],
+  tipo_vinculo: ['tipo_vinculo', 'tipo de vínculo', 'tipo vinculo', 'vinculo', 'vínculo', 'regime'],
+  admissao: ['admissao', 'admissão', 'data admissao', 'data admissão', 'dt admissao'],
+  contrato_fim: ['contrato_fim', 'fim contrato', 'termino contrato', 'término contrato', 'fim estágio', 'fim estagio'],
+  data_nascimento: ['data_nascimento', 'nascimento', 'data nascimento', 'dt nascimento', 'dn'],
+  rg: ['rg', 'identidade'],
+  rg_orgao: ['rg_orgao', 'orgao emissor', 'órgão emissor', 'orgao rg', 'ssp'],
+  cidade: ['cidade', 'naturalidade', 'municipio', 'município'],
+  estado_civil: ['estado_civil', 'estado civil', 'civil'],
 };
 
 /**
@@ -69,10 +92,12 @@ export function suggestMapping(headers: string[]): ColumnMapping {
     if (!mapping[field]) {
       const aliasList = columnAliases[field];
       for (const [lower, original] of headerLower) {
-        if (aliasList.some((a) => {
-          const al = a.toLowerCase().trim();
-          return lower.includes(al) || al.includes(lower);
-        })) {
+        if (
+          aliasList.some((a) => {
+            const al = a.toLowerCase().trim();
+            return lower.includes(al) || al.includes(lower);
+          })
+        ) {
           mapping[field] = original;
           break;
         }
@@ -103,6 +128,14 @@ export function normalizeEmployee(row: ParsedRow, mapping: ColumnMapping): Norma
     cargo: get('cargo') || '',
     departamento: get('departamento') || '',
     escala: get('escala') || '',
+    tipo_vinculo: get('tipo_vinculo') || '',
+    admissao: get('admissao') || '',
+    contrato_fim: get('contrato_fim') || '',
+    data_nascimento: get('data_nascimento') || '',
+    rg: get('rg') || '',
+    rg_orgao: get('rg_orgao') || '',
+    cidade: get('cidade') || '',
+    estado_civil: get('estado_civil') || '',
   };
 }
 

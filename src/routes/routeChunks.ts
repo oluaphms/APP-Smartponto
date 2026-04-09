@@ -10,6 +10,7 @@ export const ROUTE_LOADERS = {
   '/admin/cartao-ponto': () => import('../pages/admin/CartaoPonto'),
   '/admin/cartao-ponto-leitura': () => import('../pages/admin/CartaoPonto'),
   '/admin/lancamento-eventos': () => import('../pages/admin/LancamentoEventos'),
+  '/admin/folha-pagamento': () => import('../pages/admin/FolhaPagamento'),
   '/admin/time-attendance': () => import('../pages/TimeAttendance'),
   '/admin/adjustments': () => import('../pages/Adjustments'),
   '/admin/absences': () => import('../pages/Absences'),
@@ -58,6 +59,7 @@ export const ROUTE_LOADERS = {
   '/employee/profile': () => import('../pages/employee/Profile'),
   '/employee/settings': () => import('../pages/employee/Settings'),
   '/employee/time-balance': () => import('../pages/TimeBalance'),
+  '/employee/holerite': () => import('../pages/employee/Holerite'),
 
   '/dashboard-admin': () => import('../pages/admin/Dashboard'),
   '/dashboard-employee': () => import('../pages/employee/Dashboard'),

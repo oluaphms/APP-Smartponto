@@ -60,6 +60,7 @@ export const navigationGroups: Record<string, NavigationGroupSchema> = {
       { name: 'Ajustes de Ponto', nameKey: 'menu.adjustments', path: '/admin/adjustments', roles: ['admin', 'hr'] },
       { name: 'Banco de Horas', nameKey: 'menu.timeBalance', path: '/admin/bank-hours', roles: ['admin', 'hr'] },
       { name: 'Banco de Horas', nameKey: 'menu.timeBalance', path: '/employee/time-balance', roles: ['employee'] },
+      { name: 'Contracheque', nameKey: 'menu.holerite', path: '/employee/holerite', roles: ['employee'] },
     ],
   },
 
@@ -75,6 +76,7 @@ export const navigationGroups: Record<string, NavigationGroupSchema> = {
       { name: 'Monitoramento', nameKey: 'menu.monitoramento', path: '/admin/monitoring', roles: ['admin', 'hr'] },
       { name: 'Mapa em tempo real', nameKey: 'menu.realTimeMap', path: '/employee/monitoring', roles: ['employee'] },
       { name: 'Relatórios', nameKey: 'menu.reports', path: '/admin/reports', roles: ['admin', 'hr'] },
+      { name: 'Folha de pagamento', nameKey: 'menu.folhaPagamento', path: '/admin/folha-pagamento', roles: ['admin', 'hr'] },
     ],
   },
 

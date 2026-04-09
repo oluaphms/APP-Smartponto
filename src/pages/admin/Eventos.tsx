@@ -7,10 +7,13 @@ import { db, isSupabaseConfigured } from '../../services/supabaseClient';
 import { LoadingState } from '../../../components/UI';
 import RoleGuard from '../../components/auth/RoleGuard';
 
+type NaturezaEvento = 'provento' | 'desconto' | 'informativo';
+
 interface EventoRow {
   id: string;
   codigo: string;
   descricao: string;
+  natureza: NaturezaEvento;
   incluir_automaticamente: boolean;
   dia_padrao: number | null;
   unitario_padrao: number | null;
@@ -31,6 +34,7 @@ const AdminEventos: React.FC = () => {
   const [diaPadrao, setDiaPadrao] = useState<string>('');
   const [unitarioPadrao, setUnitarioPadrao] = useState<string>('');
   const [usarDiasUteisQuantidade, setUsarDiasUteisQuantidade] = useState(false);
+  const [natureza, setNatureza] = useState<NaturezaEvento>('provento');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
@@ -47,6 +51,7 @@ const AdminEventos: React.FC = () => {
         id: r.id,
         codigo: r.codigo || '',
         descricao: r.descricao || '',
+        natureza: (r.natureza === 'desconto' || r.natureza === 'informativo' ? r.natureza : 'provento') as NaturezaEvento,
         incluir_automaticamente: !!r.incluir_automaticamente,
         dia_padrao: r.dia_padrao ?? null,
         unitario_padrao: r.unitario_padrao ?? null,
@@ -74,6 +79,7 @@ const AdminEventos: React.FC = () => {
     setDiaPadrao('');
     setUnitarioPadrao('');
     setUsarDiasUteisQuantidade(false);
+    setNatureza('provento');
     setModalOpen(true);
     setMessage(null);
     setModalError(null);
@@ -87,6 +93,7 @@ const AdminEventos: React.FC = () => {
     setDiaPadrao(row.dia_padrao != null ? String(row.dia_padrao) : '');
     setUnitarioPadrao(row.unitario_padrao != null ? String(row.unitario_padrao) : '');
     setUsarDiasUteisQuantidade(row.usar_dias_uteis_quantidade);
+    setNatureza(row.natureza || 'provento');
     setModalOpen(true);
     setMessage(null);
     setModalError(null);
@@ -116,6 +123,7 @@ const AdminEventos: React.FC = () => {
       const payload = {
         codigo: codigoTrim,
         descricao: descTrim,
+        natureza,
         incluir_automaticamente: incluirAutomaticamente,
         dia_padrao: diaPadrao === '' ? null : parseInt(diaPadrao, 10),
         unitario_padrao: unitarioPadrao === '' ? null : parseFloat(unitarioPadrao.replace(',', '.')),
@@ -198,6 +206,7 @@ const AdminEventos: React.FC = () => {
                   <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
                     <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Código</th>
                     <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Descrição</th>
+                    <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Natureza</th>
                     <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Auto</th>
                     <th className="text-right px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Ações</th>
                   </tr>
@@ -207,6 +216,9 @@ const AdminEventos: React.FC = () => {
                     <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
                       <td className="px-4 py-3 font-mono text-slate-700 dark:text-slate-300">{row.codigo}</td>
                       <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{row.descricao}</td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs">
+                        {row.natureza === 'desconto' ? 'Desconto' : row.natureza === 'informativo' ? 'Informativo' : 'Provento'}
+                      </td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{row.incluir_automaticamente ? 'Sim' : 'Não'}</td>
                       <td className="px-4 py-3 text-right">
                         <button type="button" onClick={() => openEdit(row)} className="p-2 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg" title="Editar">
@@ -255,6 +267,19 @@ const AdminEventos: React.FC = () => {
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                   placeholder="Ex: Vale Transporte, Adiantamento"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Natureza na folha</label>
+                <select
+                  value={natureza}
+                  onChange={(e) => setNatureza(e.target.value as NaturezaEvento)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                >
+                  <option value="provento">Provento (soma ao líquido além do salário base)</option>
+                  <option value="desconto">Desconto (subtrai do líquido)</option>
+                  <option value="informativo">Informativo (não altera o líquido)</option>
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1">Usada na consolidação em Folha de pagamento.</p>
               </div>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={incluirAutomaticamente} onChange={(e) => setIncluirAutomaticamente(e.target.checked)} className="rounded border-slate-300" />
