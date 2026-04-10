@@ -166,10 +166,10 @@ interface EmployeeRow {
   data_nascimento?: string;
   rg?: string;
   rg_orgao?: string;
-  cidade_id?: string;
-  estado_civil_id?: string;
-  cidade_name?: string;
-  estado_civil_name?: string;
+  /** Naturalidade / cidade (texto ou legado resolvido a partir de cidade_id). */
+  naturalidade?: string | null;
+  /** Estado civil (texto ou legado resolvido a partir de estado_civil_id). */
+  estado_civil_text?: string | null;
   // Score de confiabilidade simples (0–100) calculado a partir de atrasos/faltas/ajustes/inconsistências
   reliability_score?: number;
 }
@@ -201,6 +201,24 @@ function formatWorkShiftLabel(s: {
 
 const OUTRO_CARGO_VALUE = '__outro__';
 
+/** Opções fixas de estado civil (valor salvo em `estado_civil_text`). */
+const ESTADO_CIVIL_OPCOES = ['Solteiro(a)', 'Casado(a)', 'União estável'] as const;
+
+function isEstadoCivilOpcaoFixa(value: string): boolean {
+  return (ESTADO_CIVIL_OPCOES as readonly string[]).includes(value);
+}
+
+/** Importação em massa: reconhece variações comuns e alinha às opções do formulário. */
+function normalizeEstadoCivilImport(raw: string): string {
+  const t = raw.trim();
+  if (!t) return '';
+  const k = t.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+  if (k.includes('solteir')) return 'Solteiro(a)';
+  if (k.includes('casad')) return 'Casado(a)';
+  if (k.includes('uniao') || k.includes('estavel')) return 'União estável';
+  return t;
+}
+
 /** Normaliza valor vindo do banco (boolean ou string 'true'/'false') para boolean. Evita que funcionários com invisivel='false' (string) fiquem ocultos. */
 function parseBooleanFromDb(value: unknown): boolean {
   if (value === true || value === 'true' || value === 1) return true;
@@ -216,15 +234,6 @@ interface ImportResult {
 const CSV_TEMPLATE = `nome,email,senha,cargo,telefone,cpf,departamento,escala,tipo_vinculo,admissao,contrato_fim,data_nascimento,rg,rg_orgao,cidade,estado_civil
 Carlos Souza,carlos@empresa.com,123456,Técnico,79998213456,12345678910,TI,09:00-18:00,CLT,2024-01-15,,1990-05-20,1234567890,SSP/SP,São Paulo,Solteiro(a)
 Fernanda Lima,fernanda@empresa.com,123456,Financeiro,79999441822,23456789011,Financeiro,08:00-17:00,CLT,,,,,,,`;
-
-/** Chave para casar nomes de cidade / estado civil na importação (minúsculas, sem acento). */
-function normNameKey(s: string): string {
-  return s
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '');
-}
 
 function getDisplayShortName(fullName: string): string {
   const clean = String(fullName || '').trim();
@@ -286,8 +295,6 @@ const AdminEmployees: React.FC = () => {
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [estruturas, setEstruturas] = useState<{ id: string; codigo: string; descricao: string }[]>([]);
   const [motivosDemissao, setMotivosDemissao] = useState<{ id: string; name: string }[]>([]);
-  const [cidades, setCidades] = useState<{ id: string; name: string }[]>([]);
-  const [estadosCivis, setEstadosCivis] = useState<{ id: string; name: string }[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -339,8 +346,8 @@ const AdminEmployees: React.FC = () => {
     data_nascimento: '',
     rg: '',
     rg_orgao: '',
-    cidade_id: '',
-    estado_civil_id: '',
+    naturalidade: '',
+    estado_civil_text: '',
     shift_id: '',
   });
   const [saving, setSaving] = useState(false);
@@ -422,10 +429,14 @@ const AdminEmployees: React.FC = () => {
           data_nascimento: u.data_nascimento,
           rg: u.rg,
           rg_orgao: u.rg_orgao,
-          cidade_id: u.cidade_id,
-          estado_civil_id: u.estado_civil_id,
-          cidade_name: u.cidade_id ? cidadeMap.get(u.cidade_id) : undefined,
-          estado_civil_name: u.estado_civil_id ? estadoCivilMap.get(u.estado_civil_id) : undefined,
+          naturalidade:
+            (u.naturalidade != null && String(u.naturalidade).trim()) ||
+            (u.cidade_id ? cidadeMap.get(u.cidade_id) : undefined) ||
+            undefined,
+          estado_civil_text:
+            (u.estado_civil_text != null && String(u.estado_civil_text).trim()) ||
+            (u.estado_civil_id ? estadoCivilMap.get(u.estado_civil_id) : undefined) ||
+            undefined,
         };
       });
 
@@ -486,10 +497,14 @@ const AdminEmployees: React.FC = () => {
             data_nascimento: e.data_nascimento || null,
             rg: e.rg || null,
             rg_orgao: e.rg_orgao || null,
-            cidade_id: e.cidade_id || null,
-            estado_civil_id: e.estado_civil_id || null,
-            cidade_name: e.cidade_id ? cidadeMap.get(e.cidade_id) : undefined,
-            estado_civil_name: e.estado_civil_id ? estadoCivilMap.get(e.estado_civil_id) : undefined,
+            naturalidade:
+              (e.naturalidade != null && String(e.naturalidade).trim()) ||
+              (e.cidade_id ? cidadeMap.get(e.cidade_id) : undefined) ||
+              undefined,
+            estado_civil_text:
+              (e.estado_civil_text != null && String(e.estado_civil_text).trim()) ||
+              (e.estado_civil_id ? estadoCivilMap.get(e.estado_civil_id) : undefined) ||
+              undefined,
           };
         });
 
@@ -506,8 +521,6 @@ const AdminEmployees: React.FC = () => {
       setEstruturas((estruturasRows ?? []).map((e: any) => ({ id: e.id, codigo: e.codigo || '', descricao: e.descricao || e.codigo || '' })));
       setCargos((jobTitlesRows ?? []).map((j: any) => ({ id: j.id, name: j.name || '' })));
       setMotivosDemissao((motivosRows ?? []).map((m: any) => ({ id: m.id, name: m.name || '' })));
-      setCidades((cidadesRows ?? []).map((c: any) => ({ id: c.id, name: c.name || '' })).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
-      setEstadosCivis((estadosCivisRows ?? []).map((ec: any) => ({ id: ec.id, name: ec.name || '' })).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
     } catch (e) {
       console.error(e);
     } finally {
@@ -552,8 +565,8 @@ const AdminEmployees: React.FC = () => {
       data_nascimento: '',
       rg: '',
       rg_orgao: '',
-      cidade_id: '',
-      estado_civil_id: '',
+      naturalidade: '',
+      estado_civil_text: '',
     };
   };
 
@@ -602,8 +615,8 @@ const AdminEmployees: React.FC = () => {
       data_nascimento: row.data_nascimento || '',
       rg: row.rg || '',
       rg_orgao: row.rg_orgao || '',
-      cidade_id: row.cidade_id || '',
-      estado_civil_id: row.estado_civil_id || '',
+      naturalidade: row.naturalidade || '',
+      estado_civil_text: row.estado_civil_text || '',
     });
     setModalOpen(true);
     setError(null);
@@ -698,8 +711,10 @@ const AdminEmployees: React.FC = () => {
         data_nascimento: form.data_nascimento?.trim() || null,
         rg: form.rg?.trim() || null,
         rg_orgao: form.rg_orgao?.trim() || null,
-        cidade_id: form.cidade_id || null,
-        estado_civil_id: form.estado_civil_id || null,
+        naturalidade: form.naturalidade?.trim() || null,
+        estado_civil_text: form.estado_civil_text?.trim() || null,
+        cidade_id: null,
+        estado_civil_id: null,
       };
       if (editingId) {
         const editingRow = rows.find((r) => r.id === editingId);
@@ -935,8 +950,8 @@ const AdminEmployees: React.FC = () => {
         (r.numero_identificador && r.numero_identificador.includes(searchLower)) ||
         (r.rg && r.rg.toLowerCase().includes(searchLower)) ||
         TIPO_VINCULO_LABELS[normalizeTipoVinculo(r.tipo_vinculo)].toLowerCase().includes(searchLower) ||
-        (r.cidade_name && r.cidade_name.toLowerCase().includes(searchLower)) ||
-        (r.estado_civil_name && r.estado_civil_name.toLowerCase().includes(searchLower))
+        (r.naturalidade && r.naturalidade.toLowerCase().includes(searchLower)) ||
+        (r.estado_civil_text && r.estado_civil_text.toLowerCase().includes(searchLower))
     )
     : visibleRows;
 
@@ -1022,8 +1037,6 @@ const AdminEmployees: React.FC = () => {
     let success = 0;
     const deptByName = new Map(departments.map((d) => [d.name.trim().toLowerCase(), d.id]));
     const schedByName = new Map(schedules.map((s) => [s.name.trim().toLowerCase(), s.id]));
-    const cidadeByName = new Map(cidades.map((c) => [normNameKey(c.name), c.id]));
-    const estadoCivilByName = new Map(estadosCivis.map((ec) => [normNameKey(ec.name), ec.id]));
     const stripCpf = (s: string) => (s || '').replace(/\D/g, '');
     const DELAY_BETWEEN_MS = 2500; // ~24 criações/min; Supabase free tier é restritivo
     const RETRY_AFTER_429_MS = 6000; // esperar 6s antes de retry ou antes de continuar
@@ -1086,9 +1099,6 @@ const AdminEmployees: React.FC = () => {
         const adm = parseFlexibleDate(row.admissao);
         const cf = parseFlexibleDate(row.contrato_fim);
         const dn = parseFlexibleDate(row.data_nascimento);
-        const cidadeId = row.cidade?.trim() ? cidadeByName.get(normNameKey(row.cidade)) : undefined;
-        const estadoCivilId = row.estado_civil?.trim() ? estadoCivilByName.get(normNameKey(row.estado_civil)) : undefined;
-
         const payload: any = {
           id: userIdLocal,
           auth_user_id: authUserId,
@@ -1110,8 +1120,10 @@ const AdminEmployees: React.FC = () => {
           data_nascimento: dn,
           rg: row.rg?.trim() || null,
           rg_orgao: row.rg_orgao?.trim() || null,
-          cidade_id: cidadeId || null,
-          estado_civil_id: estadoCivilId || null,
+          naturalidade: row.cidade?.trim() || null,
+          estado_civil_text: normalizeEstadoCivilImport(row.estado_civil || '') || null,
+          cidade_id: null,
+          estado_civil_id: null,
         };
 
         await db.insert('users', payload);
@@ -1368,11 +1380,11 @@ const AdminEmployees: React.FC = () => {
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
                         {TIPO_VINCULO_LABELS[normalizeTipoVinculo(row.tipo_vinculo)]}
                       </td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-[140px] truncate" title={row.cidade_name || undefined}>
-                        {row.cidade_name || '—'}
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-[140px] truncate" title={row.naturalidade || undefined}>
+                        {row.naturalidade || '—'}
                       </td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-[120px] truncate" title={row.estado_civil_name || undefined}>
-                        {row.estado_civil_name || '—'}
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-[120px] truncate" title={row.estado_civil_text || undefined}>
+                        {row.estado_civil_text || '—'}
                       </td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap tabular-nums">{row.pis_pasep || '—'}</td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.cargo}</td>
@@ -1515,35 +1527,32 @@ const AdminEmployees: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Cidade (naturalidade)</label>
-                        <select
-                          value={form.cidade_id}
-                          onChange={(e) => setForm({ ...form, cidade_id: e.target.value })}
+                        <input
+                          type="text"
+                          value={form.naturalidade}
+                          onChange={(e) => setForm({ ...form, naturalidade: e.target.value })}
                           className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                        >
-                          <option value="">Nenhuma</option>
-                          {cidades.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                        <p className="text-[10px] text-slate-500 mt-1">Cadastro em Cadastros → Cidades.</p>
+                          placeholder="Ex.: São Paulo"
+                          autoComplete="address-level2"
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Estado civil</label>
                         <select
-                          value={form.estado_civil_id}
-                          onChange={(e) => setForm({ ...form, estado_civil_id: e.target.value })}
+                          value={form.estado_civil_text}
+                          onChange={(e) => setForm({ ...form, estado_civil_text: e.target.value })}
                           className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                         >
-                          <option value="">Nenhum</option>
-                          {estadosCivis.map((ec) => (
-                            <option key={ec.id} value={ec.id}>
-                              {ec.name}
+                          <option value="">Não informado</option>
+                          {form.estado_civil_text.trim() !== '' && !isEstadoCivilOpcaoFixa(form.estado_civil_text) && (
+                            <option value={form.estado_civil_text}>{form.estado_civil_text}</option>
+                          )}
+                          {ESTADO_CIVIL_OPCOES.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
                             </option>
                           ))}
                         </select>
-                        <p className="text-[10px] text-slate-500 mt-1">Cadastro em Cadastros → Estados civis.</p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Nº PIS/PASEP <span className="text-xs font-normal text-slate-500">(recomendado para REP/relatórios)</span></label>
@@ -1803,7 +1812,7 @@ const AdminEmployees: React.FC = () => {
                     Envie uma planilha em qualquer formato. O ChronoDigital detecta as colunas e importa automaticamente usando o modelo padrão.
                   </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Aceitos: CSV, TXT, Excel (XLSX/XLS), PDF, Word (DOC/DOCX). Cabeçalhos mínimos: nome, e-mail, cargo, etc. Colunas opcionais: tipo_vinculo, admissao, contrato_fim, data_nascimento, rg, rg_orgao, cidade e estado_civil (nomes iguais aos cadastros de Cidades e Estados civis). Datas: AAAA-MM-DD ou DD/MM/AAAA.
+                    Aceitos: CSV, TXT, Excel (XLSX/XLS), PDF, Word (DOC/DOCX). Cabeçalhos mínimos: nome, e-mail, cargo, etc. Colunas opcionais: tipo_vinculo, admissao, contrato_fim, data_nascimento, rg, rg_orgao, cidade (texto) e estado_civil (Solteiro(a), Casado(a), União estável ou variações reconhecidas na importação). Datas: AAAA-MM-DD ou DD/MM/AAAA.
                   </p>
                   <button
                     type="button"

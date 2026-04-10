@@ -16,7 +16,7 @@ import { LoadingState } from '../../../components/UI';
 import RoleGuard from '../../components/auth/RoleGuard';
 
 type EventoFolha = { id: string; codigo: string; descricao: string; unitario_padrao?: number | null };
-type Employee = { id: string; nome: string; numero_folha?: string; employee_config?: { assinatura_digital?: string } };
+type Employee = { id: string; nome: string; numero_folha?: string };
 type LancamentoRow = {
   id: string;
   user_id: string;
@@ -90,7 +90,6 @@ const AdminLancamentoEventos: React.FC = () => {
           id: u.id,
           nome: u.nome || u.email || '',
           numero_folha: u.numero_folha,
-          employee_config: u.employee_config ?? {},
         }))
       );
     } catch (e) {
@@ -569,7 +568,7 @@ const AdminLancamentoEventos: React.FC = () => {
 
         {/* Painel Incluir / formulário (canto inferior direito conceitual: botão Incluir abre modal) */}
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          OBS.: Caso o funcionário tenha cadastrada uma Assinatura Digital (Cadastro &gt; Funcionários), ela poderá ser solicitada no lançamento do evento.
+          Os lançamentos são feitos por usuário com perfil administrador/RH (sessão autenticada). Não é necessária senha adicional por colaborador nesta tela.
         </p>
 
         {/* Modal Incluir / Editar */}
