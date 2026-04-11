@@ -24,6 +24,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, onClose
       if (isSupabaseConfigured) {
         try {
           const all = await NotificationService.getAll(userId);
+          console.log('Notificações carregadas do Supabase:', all.length);
           setNotifications(all);
           const pending = all.filter((n) => n.status === 'pending').length;
           setUnreadCount(pending);
@@ -43,12 +44,15 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, onClose
           createdAt: new Date(n.createdAt),
           status: n.status ?? (n.read ? 'read' : 'pending'),
         }));
-        const filtered = parsed.filter((n: any) => n.userId === userId && n.status !== 'resolved');
+        // Não filtrar por status - mostrar todas as notificações que estão no localStorage
+        const filtered = parsed.filter((n: any) => n.userId === userId);
+        console.log('Notificações carregadas do localStorage:', filtered.length);
         setNotifications(filtered);
         const pending = filtered.filter((n: any) => n.status === 'pending').length;
         setUnreadCount(pending);
         onUnreadCountChange?.(pending);
       } else {
+        console.log('Nenhuma notificação no localStorage');
         setNotifications([]);
         setUnreadCount(0);
         onUnreadCountChange?.(0);

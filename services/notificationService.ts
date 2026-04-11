@@ -135,12 +135,10 @@ export const NotificationService = {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        const updated = parsed.map((n: any) =>
-          n.id === notificationId && n.userId === userId
-            ? { ...n, read: true, status: 'read' }
-            : n,
-        );
+        // REMOVER completamente a notificação, não apenas marcar como lida
+        const updated = parsed.filter((n: any) => n.id !== notificationId);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        console.log('Notificação removida do localStorage:', notificationId);
       }
     } catch (e) {
       console.error('localStorage update failed:', e);
@@ -202,12 +200,10 @@ export const NotificationService = {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        const updated = parsed.map((n: any) =>
-          n.id === notificationId && n.userId === userId
-            ? { ...n, read: true, status: 'resolved' }
-            : n,
-        );
+        // REMOVER completamente a notificação, não apenas marcar como resolvida
+        const updated = parsed.filter((n: any) => n.id !== notificationId);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        console.log('Notificação removida do localStorage:', notificationId);
       }
     } catch (e) {
       console.error('localStorage update failed:', e);
