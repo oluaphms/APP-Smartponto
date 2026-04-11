@@ -11,6 +11,7 @@ import { buildDayMirrorSummary } from '../../utils/timesheetMirror';
 import { extractLatLng, reverseGeocode } from '../../utils/reverseGeocode';
 import { ExpandableStreetCell, ExpandableTextCell } from '../../components/ClickableFullContent';
 import { AddTimeRecordModal } from '../../components/AddTimeRecordModal';
+import { ManualRecordModal } from '../../components/ManualRecordModal';
 import { LoggingService } from '../../../services/loggingService';
 import { LogSeverity } from '../../../types';
 
@@ -93,6 +94,7 @@ const AdminTimesheet: React.FC = () => {
   const [closing, setClosing] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [selectedManualRecord, setSelectedManualRecord] = useState<{ reason?: string; timestamp?: string; type?: string } | null>(null);
 
   const toggleExpandedRow = (key: string) => {
     setExpandedRows((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -260,6 +262,7 @@ const AdminTimesheet: React.FC = () => {
         p_method: 'admin',
         p_source: 'admin',
         p_timestamp: data.created_at,
+        p_manual_reason: 'Batida adicionada manualmente via Espelho de Ponto',
       });
 
       if (error) {
@@ -448,10 +451,33 @@ const AdminTimesheet: React.FC = () => {
                                   const when = r.created_at
                                     ? new Date(r.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
                                     : '--:--';
+                                  const isManual = r.is_manual === true;
                                   return (
-                                    <div key={r.id || `${rowKey}-${when}`} className="flex flex-wrap gap-2">
-                                      <span className="font-mono text-slate-500">{when}</span>
-                                      <span className="uppercase text-[11px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
+                                    <div 
+                                      key={r.id || `${rowKey}-${when}`} 
+                                      className={`flex flex-wrap gap-2 cursor-pointer p-2 rounded transition-colors ${
+                                        isManual 
+                                          ? 'bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30' 
+                                          : 'hover:bg-slate-100 dark:hover:bg-slate-700/30'
+                                      }`}
+                                      onClick={() => {
+                                        if (isManual) {
+                                          setSelectedManualRecord({
+                                            reason: r.manual_reason,
+                                            timestamp: r.created_at,
+                                            type: r.type,
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      <span className={`font-mono ${isManual ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-slate-500'}`}>
+                                        {when}{isManual ? ' ⚠' : ''}
+                                      </span>
+                                      <span className={`uppercase text-[11px] px-1.5 py-0.5 rounded ${
+                                        isManual
+                                          ? 'bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200'
+                                          : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
+                                      }`}>
                                         {(r.type || '—').toString()}
                                       </span>
                                       <span className="text-slate-500">-</span>
@@ -486,6 +512,14 @@ const AdminTimesheet: React.FC = () => {
         onClose={() => setIsAddModalOpen(false)}
         onSubmit={handleAddTimeRecord}
         employees={employees}
+      />
+
+      <ManualRecordModal
+        isOpen={selectedManualRecord !== null}
+        onClose={() => setSelectedManualRecord(null)}
+        reason={selectedManualRecord?.reason}
+        timestamp={selectedManualRecord?.timestamp}
+        type={selectedManualRecord?.type}
       />
     </div>
   );
