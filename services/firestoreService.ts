@@ -133,8 +133,6 @@ class SupabaseService {
         throw error;
       }
     }
-      }
-    }
   }
 
   /**
