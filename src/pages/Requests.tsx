@@ -200,6 +200,22 @@ const RequestsPage: React.FC = () => {
         prev.map((r) => (r.id === row.id ? { ...r, status } : r)),
       );
 
+      // Deletar notificação da solicitação para o admin/RH
+      try {
+        // Buscar todas as notificações do admin sobre esta solicitação
+        const allNotifications = await NotificationService.getAll(user.id, true);
+        const requestNotifications = allNotifications.filter(
+          (n) => n.metadata?.requestId === row.id
+        );
+        
+        // Deletar cada notificação
+        for (const notif of requestNotifications) {
+          await NotificationService.markAsRead(user.id, notif.id);
+        }
+      } catch (e) {
+        console.error('Erro ao deletar notificação do admin:', e);
+      }
+
       // Resolve notificações pendentes do colaborador referentes a esta solicitação
       await NotificationService.resolveByReference(row.user_id, row.id, 'request');
 
