@@ -140,7 +140,7 @@ const AbsencesPage: React.FC = () => {
     if (!user || !isSupabaseConfigured) return;
     setDeletingId(id);
     try {
-      await db.delete('absences', [{ column: 'id', operator: 'eq', value: id }]);
+      await db.delete('absences', id);
       setRows((prev) => prev.filter((r) => r.id !== id));
       
       await LoggingService.log({
