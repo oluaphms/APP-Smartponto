@@ -33,6 +33,8 @@ export interface DayMirrorSummary {
   saidaFinal: string;
   workedHours: string;
   status: string;
+  hasLateEntry?: boolean;
+  hasAbsence?: boolean;
 }
 
 type MirrorRecord = { type: string; created_at: string };
@@ -83,6 +85,21 @@ export function buildDayMirrorSummary(records: MirrorRecord[]): DayMirrorSummary
 
   const workedHours = computeWorkedHours(sorted, firstEntradaIdx, firstPausaIdx);
 
+  // Detectar falta (sem batida de entrada)
+  const hasAbsence = firstEntradaIdx < 0;
+
+  // Detectar batida fora do horário (entrada após 09:00 ou saída antes de 17:00)
+  let hasLateEntry = false;
+  if (firstEntradaIdx >= 0) {
+    const entradaTime = new Date(sorted[firstEntradaIdx].created_at);
+    const entradaHour = entradaTime.getHours();
+    const entradaMin = entradaTime.getMinutes();
+    // Considerar fora do horário se entrada após 09:00
+    if (entradaHour > 9 || (entradaHour === 9 && entradaMin > 0)) {
+      hasLateEntry = true;
+    }
+  }
+
   return {
     entradaInicio,
     saidaIntervalo,
@@ -90,6 +107,8 @@ export function buildDayMirrorSummary(records: MirrorRecord[]): DayMirrorSummary
     saidaFinal,
     workedHours,
     status: 'OK',
+    hasLateEntry,
+    hasAbsence,
   };
 }
 

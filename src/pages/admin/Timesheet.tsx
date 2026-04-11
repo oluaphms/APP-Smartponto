@@ -408,7 +408,12 @@ const AdminTimesheet: React.FC = () => {
                         <ExpandableTextCell label="Data" value={d} />
                       </td>
                       <td className="px-4 py-3 tabular-nums max-w-[100px] align-top">
-                        <ExpandableTextCell label="Entrada (início)" value={sum?.entradaInicio || ''} empty="—" />
+                        <ExpandableTextCell 
+                          label="Entrada (início)" 
+                          value={sum?.entradaInicio || ''} 
+                          empty={sum?.hasAbsence ? 'FALTA' : '—'}
+                          className={sum?.hasAbsence ? 'text-red-600 dark:text-red-400 font-bold' : (sum?.hasLateEntry ? 'text-red-600 dark:text-red-400' : '')}
+                        />
                       </td>
                       <td className="px-4 py-3 tabular-nums max-w-[100px] align-top">
                         <ExpandableTextCell label="Intervalo (pausa)" value={sum?.saidaIntervalo || ''} empty="—" />
@@ -452,6 +457,9 @@ const AdminTimesheet: React.FC = () => {
                                     ? new Date(r.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
                                     : '--:--';
                                   const isManual = r.is_manual === true;
+                                  if (isManual) {
+                                    console.log('Manual record found:', { id: r.id, is_manual: r.is_manual, manual_reason: r.manual_reason });
+                                  }
                                   return (
                                     <div 
                                       key={r.id || `${rowKey}-${when}`} 
