@@ -50,24 +50,14 @@ export const getWorkInsights = async (summaries: DailySummary[]) => {
   const ai = new GoogleGenAI({ apiKey });
   const model = getGeminiModelId();
 
-  const prompt = `Analise os seguintes registros de ponto dos últimos dias e forneça um insight curto (máximo 3 frases) sobre produtividade, pontualidade e equilíbrio vida-trabalho para o funcionário. Retorne em formato JSON.
+  const plainPrompt = `Analise os seguintes registros de ponto dos últimos dias e forneça um insight curto (máximo 3 frases) sobre produtividade, pontualidade e equilíbrio vida-trabalho para o funcionário. Retorne APENAS um objeto JSON válido neste formato exato: {"insight":"...","score":8} com score entre 0 e 10. Sem markdown, sem explicações adicionais.
   Dados: ${JSON.stringify(summaries)}`;
 
   try {
+    // Try without responseSchema first (more compatible)
     const response = await ai.models.generateContent({
       model,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            insight: { type: Type.STRING },
-            score: { type: Type.NUMBER, description: "Nota de 0 a 10 para o equilíbrio de horários" }
-          },
-          required: ["insight", "score"]
-        }
-      }
+      contents: plainPrompt,
     });
 
     const jsonStr = response.text?.trim();
@@ -80,31 +70,11 @@ export const getWorkInsights = async (summaries: DailySummary[]) => {
     } catch {
       const fallback = parseInsightJsonFromText(jsonStr);
       if (fallback) return fallback;
-      throw new Error("Invalid JSON in structured response");
+      throw new Error("Invalid JSON in response");
     }
-  } catch (firstError) {
-    // Retry sem schema JSON (algumas contas/modelos retornam 400 com responseSchema).
-    if (!isInvalidOrDeniedGeminiKey(firstError)) {
-      try {
-        const plainPrompt = `${prompt}\n\nResponda apenas um objeto JSON válido neste formato exato: {"insight":"...","score":8} com score entre 0 e 10. Sem markdown.`;
-        const response = await ai.models.generateContent({
-          model,
-          contents: plainPrompt,
-        });
-        const jsonStr = response.text?.trim();
-        if (jsonStr) {
-          try {
-            return JSON.parse(jsonStr);
-          } catch {
-            const fallback = parseInsightJsonFromText(jsonStr);
-            if (fallback) return fallback;
-          }
-        }
-      } catch {
-        // segue para handler abaixo
-      }
-    }
-    const error = firstError;
+  } catch (error) {
+    const errorMsg = errorText(error);
+    
     if (isInvalidOrDeniedGeminiKey(error)) {
       if (import.meta.env?.DEV) {
         console.warn(
@@ -117,14 +87,16 @@ export const getWorkInsights = async (summaries: DailySummary[]) => {
         score: 8,
       };
     }
-    if (isLikelyModelOrPayloadError(error) && import.meta.env?.DEV && typeof console !== 'undefined') {
+    
+    if (isLikelyModelOrPayloadError(error) && import.meta.env?.DEV) {
       console.warn(
         "[Gemini] Insights (400/modelo): verifique VITE_GEMINI_MODEL (ex.: gemini-2.0-flash ou gemini-2.5-flash) e a chave em Google AI Studio.",
-        errorText(error)
+        errorMsg
       );
     } else if (import.meta.env?.DEV) {
-      console.warn("[Gemini] Insights:", errorText(error));
+      console.warn("[Gemini] Insights:", errorMsg);
     }
+    
     return { insight: "Continue mantendo o registro regular do seu ponto para análises futuras.", score: 8 };
   }
 };

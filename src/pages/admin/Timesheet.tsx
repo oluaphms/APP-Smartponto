@@ -435,7 +435,7 @@ const AdminTimesheet: React.FC = () => {
                       >
                         {displayGivenNameForColumn(row.userName)}
                       </td>
-                      <td className="px-4 py-3 align-top max-w-[110px]">
+                      <td className="px-4 py-3 align-top whitespace-nowrap">
                         <ExpandableTextCell label="Data" value={d} />
                       </td>
                       <td className="px-4 py-3 tabular-nums max-w-[100px] align-top">

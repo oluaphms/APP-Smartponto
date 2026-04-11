@@ -37,6 +37,17 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, onClose
     await loadNotifications();
   };
 
+  const handleDeleteNotification = async (id: string) => {
+    // Delete the notification by marking it as resolved or removing it
+    // For now, we'll mark it as resolved which effectively removes it from view
+    try {
+      await NotificationService.markAsRead(userId, id);
+      await loadNotifications();
+    } catch (e) {
+      console.error('Error deleting notification:', e);
+    }
+  };
+
   const handleMarkAllAsRead = async () => {
     await NotificationService.markAllAsRead(userId);
     await loadNotifications();
@@ -78,7 +89,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, onClose
   };
 
   return (
-    <div className="glass-card rounded-2xl p-6 max-w-2xl w-full max-h-[80vh] flex flex-col" role="dialog" aria-label="Centro de notificações">
+    <div className="glass-card rounded-2xl p-6 max-w-2xl w-full max-h-[80vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg" role="dialog" aria-label="Centro de notificações">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <Bell className="w-6 h-6 text-indigo-600" />
@@ -150,16 +161,26 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, onClose
                         {new Date(notif.createdAt).toLocaleString('pt-BR')}
                       </p>
                     </div>
-                    {notif.status === 'pending' && (
+                    <div className="flex gap-1 shrink-0">
+                      {notif.status === 'pending' && (
+                        <button
+                          onClick={() => handleMarkAsRead(notif.id)}
+                          className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
+                          aria-label={`Marcar como lida: ${notif.title}`}
+                          title="Marcar como lida"
+                        >
+                          <Check className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                        </button>
+                      )}
                       <button
-                        onClick={() => handleMarkAsRead(notif.id)}
-                        className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors shrink-0"
-                        aria-label={`Marcar como lida: ${notif.title}`}
-                        title="Marcar como lida"
+                        onClick={() => handleDeleteNotification(notif.id)}
+                        className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
+                        aria-label={`Excluir notificação: ${notif.title}`}
+                        title="Excluir"
                       >
-                        <Check className="w-4 h-4 text-slate-400" />
+                        <X className="w-4 h-4 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400" />
                       </button>
-                    )}
+                    </div>
                   </div>
                   {notif.actionUrl && (
                     <a

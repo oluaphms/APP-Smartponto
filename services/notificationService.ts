@@ -3,7 +3,7 @@
  */
 
 import { InAppNotification, NotificationStatus } from '../types';
-import { db, isSupabaseConfigured } from './supabase';
+import { db, isSupabaseConfigured, supabase } from './supabase';
 
 const STORAGE_KEY = 'smartponto_notifications';
 const MAX_LOCAL = 100;
@@ -130,11 +130,21 @@ export const NotificationService = {
   },
 
   async markAsRead(userId: string, notificationId: string): Promise<void> {
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && supabase) {
       try {
-        await db.update('notifications', notificationId, { read: true, status: 'read' });
+        // Use Supabase client directly to avoid automatic updated_at addition
+        const { error } = await supabase
+          .from('notifications')
+          .update({ read: true })
+          .eq('id', notificationId)
+          .eq('user_id', userId);
+        
+        if (error) {
+          console.error('Mark read Supabase failed:', error);
+        }
       } catch (e) {
         console.error('Mark read Supabase failed:', e);
+        // Continue with local storage fallback
       }
     }
 
@@ -179,11 +189,21 @@ export const NotificationService = {
   },
 
   async markAsResolved(userId: string, notificationId: string): Promise<void> {
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && supabase) {
       try {
-        await db.update('notifications', notificationId, { read: true, status: 'resolved' });
+        // Use Supabase client directly to avoid automatic updated_at addition
+        const { error } = await supabase
+          .from('notifications')
+          .update({ read: true })
+          .eq('id', notificationId)
+          .eq('user_id', userId);
+        
+        if (error) {
+          console.error('Mark resolved Supabase failed:', error);
+        }
       } catch (e) {
         console.error('Mark resolved Supabase failed:', e);
+        // Continue with local storage fallback
       }
     }
 
