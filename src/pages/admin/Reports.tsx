@@ -59,7 +59,11 @@ const AdminReports: React.FC = () => {
     setLoadingData(true);
     setMessage(null);
     try {
-      const records = (await db.select('time_records', [{ column: 'company_id', operator: 'eq', value: user.companyId }], { column: 'created_at', ascending: false }, 5000)) as any[];
+      // Limitar a 1000 registros e adicionar filtro de data
+      const records = (await db.select('time_records', [
+        { column: 'company_id', operator: 'eq', value: user.companyId },
+        { column: 'created_at', operator: 'gte', value: periodStart }
+      ], { column: 'created_at', ascending: false }, 1000)) as any[];
       let list = records ?? [];
       if (filterUserId) list = list.filter((r: any) => r.user_id === filterUserId);
       if (filterDept) list = list.filter((r: any) => {

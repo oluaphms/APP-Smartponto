@@ -125,7 +125,7 @@ const AdminMonitoring: React.FC = () => {
             { column: 'created_at', operator: 'lte', value: end },
           ],
           { column: 'created_at', ascending: true },
-          2000
+          500
         ) as Promise<TimeRecordRow[]>,
       ]);
       const users = usersRows ?? [];

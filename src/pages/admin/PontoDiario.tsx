@@ -71,9 +71,17 @@ const AdminPontoDiario: React.FC = () => {
     const load = async () => {
       setLoadingData(true);
       try {
+        // Calcular data de 30 dias atrás
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const dateFilter = thirtyDaysAgo.toISOString().slice(0, 10);
+
         const [usersRows, recsRows, metasRows] = await Promise.all([
           db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
-          db.select('time_records', [{ column: 'company_id', operator: 'eq', value: user.companyId }], { column: 'created_at', ascending: true }, 5000) as Promise<any[]>,
+          db.select('time_records', [
+            { column: 'company_id', operator: 'eq', value: user.companyId },
+            { column: 'created_at', operator: 'gte', value: dateFilter }
+          ], { column: 'created_at', ascending: true }, 500) as Promise<any[]>,
           db.select('cartao_ponto_dia', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
         ]);
         setEmployees(

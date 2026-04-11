@@ -103,9 +103,17 @@ const AdminTimesheet: React.FC = () => {
     const load = async () => {
       setLoadingData(true);
       try {
+        // Calcular data de 30 dias atrás para limitar registros
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const dateFilter = thirtyDaysAgo.toISOString().slice(0, 10);
+
         const [usersRows, recordsRows, departmentsRows] = await Promise.all([
           db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
-          db.select('time_records', [{ column: 'company_id', operator: 'eq', value: user.companyId }], { column: 'created_at', ascending: false }, 2000) as Promise<any[]>,
+          db.select('time_records', [
+            { column: 'company_id', operator: 'eq', value: user.companyId },
+            { column: 'created_at', operator: 'gte', value: dateFilter }
+          ], { column: 'created_at', ascending: false }, 500) as Promise<any[]>,
           db.select('departments', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
         ]);
         setEmployees((usersRows ?? []).map((u: any) => ({ id: u.id, nome: u.nome || u.email, department_id: u.department_id })));
@@ -270,8 +278,15 @@ const AdminTimesheet: React.FC = () => {
         },
       });
 
-      // Recarregar dados
-      const recordsRows = (await db.select('time_records', [{ column: 'company_id', operator: 'eq', value: user.companyId }], { column: 'created_at', ascending: false }, 2000)) ?? [];
+      // Recarregar dados com filtro de data
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const dateFilter = thirtyDaysAgo.toISOString().slice(0, 10);
+
+      const recordsRows = (await db.select('time_records', [
+        { column: 'company_id', operator: 'eq', value: user.companyId },
+        { column: 'created_at', operator: 'gte', value: dateFilter }
+      ], { column: 'created_at', ascending: false }, 500)) ?? [];
       setRecords(recordsRows);
 
       toast.addToast('success', 'Batida adicionada com sucesso.');
