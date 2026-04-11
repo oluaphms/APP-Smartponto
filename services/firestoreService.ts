@@ -81,11 +81,49 @@ class SupabaseService {
 
     try {
       const supabaseData = timeRecordToSupabase(record);
-      await db.insert('time_records', supabaseData);
+      
+      // Tentar usar RPC se disponível (para admin/HR criando registros para outros usuários)
+      try {
+        const { data, error } = await supabase.rpc('insert_time_record_for_user', {
+          p_user_id: record.userId,
+          p_company_id: record.companyId,
+          p_type: record.type,
+          p_method: record.method,
+          p_location: supabaseData.location,
+          p_photo_url: supabaseData.photo_url,
+          p_source: supabaseData.source || 'admin',
+          p_timestamp: supabaseData.created_at,
+          p_latitude: supabaseData.latitude,
+          p_longitude: supabaseData.longitude,
+          p_accuracy: supabaseData.accuracy,
+          p_device_id: supabaseData.device_id,
+          p_device_type: supabaseData.device_type,
+          p_ip_address: supabaseData.ip_address,
+          p_fraud_score: supabaseData.fraud_score || 0,
+          p_fraud_flags: supabaseData.fraud_flags || [],
+        });
+
+        if (error) {
+          // Se RPC falhar com "function does not exist", tentar insert direto
+          if (error.code === '42883') {
+            await db.insert('time_records', supabaseData);
+          } else {
+            throw error;
+          }
+        }
+      } catch (rpcError: any) {
+        // Se RPC não existir ou falhar, tentar insert direto
+        if (rpcError?.code === '42883' || rpcError?.message?.includes('does not exist')) {
+          await db.insert('time_records', supabaseData);
+        } else {
+          throw rpcError;
+        }
+      }
     } catch (error) {
       console.error('Erro ao salvar registro no Supabase:', error);
       // Tentar atualizar se já existir
       try {
+        const supabaseData = timeRecordToSupabase(record);
         await db.update('time_records', record.id, supabaseData);
       } catch (updateError) {
         console.error('Erro ao atualizar registro:', updateError);
