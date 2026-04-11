@@ -7,6 +7,7 @@ import { db, isSupabaseConfigured } from '../../services/supabaseClient';
 import { LoadingState, Input } from '../../../components/UI';
 import { formatDateForTablePtBr } from '../../utils/timeCalculations';
 import RoleGuard from '../../components/auth/RoleGuard';
+import { queryCache, TTL } from '../../services/queryCache';
 
 interface BankHoursRow {
   id: string;
@@ -39,7 +40,11 @@ const AdminBankHours: React.FC = () => {
   useEffect(() => {
     if (!user?.companyId || !isSupabaseConfigured) return;
     const load = async () => {
-      const usersRows = (await db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }])) as any[];
+      const usersRows = await queryCache.getOrFetch(
+        `users:${user.companyId}`,
+        () => db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
+        TTL.NORMAL,
+      );
       setEmployees((usersRows ?? []).map((u: any) => ({ id: u.id, nome: u.nome || u.email })));
     };
     load();
@@ -56,22 +61,20 @@ const AdminBankHours: React.FC = () => {
         if (filterUserId) filters.push({ column: 'employee_id', operator: 'eq', value: filterUserId });
         const userIds = filterUserId ? [filterUserId] : (employees.map((e) => e.id));
         const bankRows = await db.select('bank_hours', filters, { column: 'date', ascending: false }, 500) as any[];
+
+        // Busca time_balance em uma única query filtrando pelo mês — elimina o N+1 anterior
         let balanceRows: any[] = [];
         if (userIds.length > 0) {
-          const all: any[] = [];
-          for (const uid of userIds.slice(0, 50)) {
-            const r = await db.select(
-              'time_balance',
-              [
-                { column: 'user_id', operator: 'eq', value: uid },
-                { column: 'month', operator: 'eq', value: monthFilter },
-              ],
-              undefined,
-              1
-            ) as any[];
-            if (r?.[0]) all.push(r[0]);
+          const balanceFilters: { column: string; operator: string; value: any }[] = [
+            { column: 'month', operator: 'eq', value: monthFilter },
+          ];
+          if (filterUserId) {
+            balanceFilters.push({ column: 'user_id', operator: 'eq', value: filterUserId });
+          } else {
+            balanceFilters.push({ column: 'company_id', operator: 'eq', value: user.companyId });
           }
-          balanceRows = all;
+          const allBalance = await db.select('time_balance', balanceFilters, undefined, 200) as any[];
+          balanceRows = allBalance ?? [];
         }
         setRows(bankRows ?? []);
         setTimeBalanceRows(balanceRows);

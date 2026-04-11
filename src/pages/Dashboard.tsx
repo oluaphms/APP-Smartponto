@@ -12,6 +12,7 @@ import { calculateWorkedHours } from '../utils/timeCalculations';
 import { formatRequestType, formatWorkflowStatus } from '../../lib/i18n';
 import { useLanguage } from '../contexts/LanguageContext';
 import { ExpandableTextCell } from '../components/ClickableFullContent';
+import { queryCache, TTL } from '../services/queryCache';
 
 interface RequestRow {
   id: string;
@@ -45,15 +46,51 @@ const DashboardPage: React.FC = () => {
     const load = async () => {
       setIsLoadingData(true);
       try {
-        // time_records do próprio usuário
-        const rows = await db.select(
-          'time_records',
-          [{ column: 'user_id', operator: 'eq', value: user.id }],
-          { column: 'created_at', ascending: false },
-          50,
-        );
+        const now = new Date();
+        const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+        // Todas as queries em paralelo com cache
+        const [rows, balanceRows, reqRows] = await Promise.all([
+          queryCache.getOrFetch(
+            `time_records:user:${user.id}:recent`,
+            () => db.select(
+              'time_records',
+              [{ column: 'user_id', operator: 'eq', value: user.id }],
+              { column: 'created_at', ascending: false },
+              50,
+            ) as Promise<any[]>,
+            TTL.REALTIME,
+          ),
+          queryCache.getOrFetch(
+            `time_balance:${user.id}:${monthKey}`,
+            () => db.select(
+              'time_balance',
+              [
+                { column: 'user_id', operator: 'eq', value: user.id },
+                { column: 'month', operator: 'eq', value: monthKey },
+              ],
+              { column: 'month', ascending: false },
+              1,
+            ) as Promise<any[]>,
+            TTL.NORMAL,
+          ).catch(() => []),
+          queryCache.getOrFetch(
+            `requests:pending:${user.id}`,
+            () => db.select(
+              'requests',
+              [
+                { column: 'user_id', operator: 'eq', value: user.id },
+                { column: 'status', operator: 'eq', value: 'pending' },
+              ],
+              { column: 'created_at', ascending: false },
+              10,
+            ) as Promise<any[]>,
+            TTL.REALTIME,
+          ),
+        ]);
+
         const mapped: TimeRecord[] =
-          rows?.map((r: any) => ({
+          (rows ?? []).map((r: any) => ({
             id: r.id,
             userId: r.user_id,
             companyId: r.company_id,
@@ -66,60 +103,24 @@ const DashboardPage: React.FC = () => {
             ipAddress: r.ip_address ?? '',
             deviceId: r.device_id ?? '',
             fraudFlags: r.fraud_flags ?? [],
-            deviceInfo: r.device_info ?? {
-              browser: '',
-              os: '',
-              isMobile: false,
-              userAgent: '',
-            },
+            deviceInfo: r.device_info ?? { browser: '', os: '', isMobile: false, userAgent: '' },
             adjustments: r.adjustments ?? [],
-          })) ?? [];
+          }));
         setRecords(mapped);
 
-        // time_balance do mês atual (requer tabela com coluna month; falha silenciosa se não existir)
-        try {
-          const now = new Date();
-          const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-          const balanceRows = await db.select(
-            'time_balance',
-            [
-              { column: 'user_id', operator: 'eq', value: user.id },
-              { column: 'month', operator: 'eq', value: monthKey },
-            ],
-            { column: 'month', ascending: false },
-            1,
-          );
-          if (balanceRows && balanceRows.length > 0) {
-            const b = balanceRows[0];
-            setBalance({
-              id: b.id,
-              month: b.month,
-              user_id: b.user_id,
-              total_hours: b.total_hours ?? 0,
-              extra_hours: b.extra_hours ?? 0,
-              debit_hours: b.debit_hours ?? 0,
-              final_balance: b.final_balance ?? 0,
-            });
-          } else {
-            setBalance(null);
-          }
-        } catch (_) {
-          setBalance(null);
-        }
+        const b = balanceRows?.[0];
+        setBalance(b ? {
+          id: b.id,
+          month: b.month,
+          user_id: b.user_id,
+          total_hours: b.total_hours ?? 0,
+          extra_hours: b.extra_hours ?? 0,
+          debit_hours: b.debit_hours ?? 0,
+          final_balance: b.final_balance ?? 0,
+        } : null);
 
-        // Requests pendentes do usuário
-        const reqRows =
-          (await db.select(
-            'requests',
-            [
-              { column: 'user_id', operator: 'eq', value: user.id },
-              { column: 'status', operator: 'eq', value: 'pending' },
-            ],
-            { column: 'created_at', ascending: false },
-            10,
-          )) ?? [];
         setPendingRequests(
-          reqRows.map((r: any) => ({
+          (reqRows ?? []).map((r: any) => ({
             id: r.id,
             type: r.type,
             status: r.status,

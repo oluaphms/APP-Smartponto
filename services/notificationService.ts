@@ -2,18 +2,38 @@
  * Serviço de notificações in-app
  */
 
-import { InAppNotification } from '../types';
+import { InAppNotification, NotificationStatus } from '../types';
 import { db, isSupabaseConfigured } from './supabase';
 
 const STORAGE_KEY = 'smartponto_notifications';
 const MAX_LOCAL = 100;
 
+function rowToNotif(r: any): InAppNotification {
+  const read: boolean = r.read ?? false;
+  const status: NotificationStatus = (r.status as NotificationStatus) ?? (read ? 'read' : 'pending');
+  return {
+    id: r.id,
+    userId: r.user_id,
+    type: r.type,
+    title: r.title,
+    message: r.message,
+    read,
+    status,
+    createdAt: new Date(r.created_at),
+    actionUrl: r.action_url,
+    metadata: r.metadata ?? {},
+  };
+}
+
 export const NotificationService = {
-  async create(notification: Omit<InAppNotification, 'id' | 'read' | 'createdAt'>): Promise<InAppNotification> {
+  async create(
+    notification: Omit<InAppNotification, 'id' | 'read' | 'status' | 'createdAt'>,
+  ): Promise<InAppNotification> {
     const notif: InAppNotification = {
       ...notification,
       id: crypto.randomUUID(),
       read: false,
+      status: 'pending',
       createdAt: new Date(),
     };
 
@@ -26,6 +46,7 @@ export const NotificationService = {
           title: notif.title,
           message: notif.message,
           read: notif.read,
+          status: notif.status,
           created_at: notif.createdAt.toISOString(),
           action_url: notif.actionUrl ?? null,
           metadata: notif.metadata ?? {},
@@ -50,35 +71,35 @@ export const NotificationService = {
     } catch (_) {}
   },
 
-  async getAll(userId: string): Promise<InAppNotification[]> {
+  /**
+   * Retorna notificações do usuário.
+   * Por padrão exclui as já resolvidas (status = 'resolved') para não poluir o sino.
+   */
+  async getAll(userId: string, includeResolved = false): Promise<InAppNotification[]> {
     if (isSupabaseConfigured) {
       try {
+        const filters: { column: string; operator: string; value: unknown }[] = [
+          { column: 'user_id', operator: 'eq', value: userId },
+        ];
+        if (!includeResolved) {
+          filters.push({ column: 'status', operator: 'neq', value: 'resolved' });
+        }
         const rows = await db.select(
           'notifications',
-          [{ column: 'user_id', operator: 'eq', value: userId }],
+          filters,
           { column: 'created_at', ascending: false },
-          100
+          100,
         );
-        return (rows ?? []).map((r: any) => ({
-          id: r.id,
-          userId: r.user_id,
-          type: r.type,
-          title: r.title,
-          message: r.message,
-          read: r.read,
-          createdAt: new Date(r.created_at),
-          actionUrl: r.action_url,
-          metadata: r.metadata ?? {},
-        }));
+        return (rows ?? []).map(rowToNotif);
       } catch (e: any) {
         const msg = String(e?.message ?? e ?? '');
         const isTimeout =
-          msg.includes('Tempo esgotado ao carregar dados') || msg.includes('Supabase timeout') || /timeout/i.test(msg);
+          msg.includes('Tempo esgotado ao carregar dados') ||
+          msg.includes('Supabase timeout') ||
+          /timeout/i.test(msg);
         if (e?.name !== 'AbortError' && !msg.includes('Lock broken') && !msg.includes('stole')) {
           if (isTimeout) {
-            if (typeof console !== 'undefined' && console.warn) {
-              console.warn('[notifications] Lista indisponível (rede lenta); usando notificações locais se houver.');
-            }
+            console.warn('[notifications] Lista indisponível (rede lenta); usando notificações locais se houver.');
           } else {
             console.error('Get notifications Supabase failed:', msg);
           }
@@ -89,8 +110,14 @@ export const NotificationService = {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return [];
-      const parsed = JSON.parse(raw).map((n: any) => ({ ...n, createdAt: new Date(n.createdAt) }));
-      return parsed.filter((n: InAppNotification) => n.userId === userId);
+      const parsed = JSON.parse(raw).map((n: any) => ({
+        ...n,
+        createdAt: new Date(n.createdAt),
+        status: n.status ?? (n.read ? 'read' : 'pending'),
+      })) as InAppNotification[];
+      return parsed.filter(
+        (n) => n.userId === userId && (includeResolved || n.status !== 'resolved'),
+      );
     } catch {
       return [];
     }
@@ -98,13 +125,14 @@ export const NotificationService = {
 
   async getUnreadCount(userId: string): Promise<number> {
     const all = await this.getAll(userId);
-    return all.filter((n) => !n.read).length;
+    // Conta apenas pending (não lidas e não resolvidas)
+    return all.filter((n) => n.status === 'pending').length;
   },
 
   async markAsRead(userId: string, notificationId: string): Promise<void> {
     if (isSupabaseConfigured) {
       try {
-        await db.update('notifications', notificationId, { read: true });
+        await db.update('notifications', notificationId, { read: true, status: 'read' });
       } catch (e) {
         console.error('Mark read Supabase failed:', e);
       }
@@ -115,7 +143,9 @@ export const NotificationService = {
       if (!raw) return;
       const parsed = JSON.parse(raw);
       const updated = parsed.map((n: any) =>
-        n.id === notificationId && n.userId === userId ? { ...n, read: true } : n
+        n.id === notificationId && n.userId === userId
+          ? { ...n, read: true, status: 'read' }
+          : n,
       );
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     } catch {}
@@ -124,7 +154,49 @@ export const NotificationService = {
   async markAllAsRead(userId: string): Promise<void> {
     const all = await this.getAll(userId);
     for (const n of all) {
-      if (!n.read) await this.markAsRead(userId, n.id);
+      if (n.status === 'pending') await this.markAsRead(userId, n.id);
     }
+  },
+
+  /**
+   * Marca notificações de um colaborador como resolvidas quando o admin responde.
+   * Filtra por metadata.requestId ou metadata.adjustmentId para precisão.
+   */
+  async resolveByReference(
+    userId: string,
+    referenceId: string,
+    referenceType: 'request' | 'adjustment',
+  ): Promise<void> {
+    const all = await this.getAll(userId, true);
+    const metaKey = referenceType === 'request' ? 'requestId' : 'adjustmentId';
+    const targets = all.filter(
+      (n) => n.metadata?.[metaKey] === referenceId && n.status !== 'resolved',
+    );
+
+    for (const n of targets) {
+      await this.markAsResolved(userId, n.id);
+    }
+  },
+
+  async markAsResolved(userId: string, notificationId: string): Promise<void> {
+    if (isSupabaseConfigured) {
+      try {
+        await db.update('notifications', notificationId, { read: true, status: 'resolved' });
+      } catch (e) {
+        console.error('Mark resolved Supabase failed:', e);
+      }
+    }
+
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      const updated = parsed.map((n: any) =>
+        n.id === notificationId && n.userId === userId
+          ? { ...n, read: true, status: 'resolved' }
+          : n,
+      );
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    } catch {}
   },
 };

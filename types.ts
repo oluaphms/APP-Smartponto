@@ -194,6 +194,8 @@ export interface User {
   };
 }
 
+export type NotificationStatus = 'pending' | 'read' | 'resolved';
+
 export interface InAppNotification {
   id: string;
   userId: string;
@@ -201,6 +203,7 @@ export interface InAppNotification {
   title: string;
   message: string;
   read: boolean;
+  status: NotificationStatus;
   createdAt: Date;
   actionUrl?: string;
   metadata?: Record<string, any>;

@@ -101,7 +101,11 @@ const Layout: React.FC<LayoutProps> = ({ user, children, activeTab, setActiveTab
                 </button>
                 {showNotifications && (
                   <div className="absolute right-0 top-full mt-2 z-50">
-                    <NotificationCenter userId={user.id} onClose={() => setShowNotifications(false)} />
+                    <NotificationCenter
+                      userId={user.id}
+                      onClose={() => setShowNotifications(false)}
+                      onUnreadCountChange={setUnreadCount}
+                    />
                   </div>
                 )}
               </div>

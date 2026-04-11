@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { InAppNotification } from '../types';
 import { NotificationService } from '../services/notificationService';
 import { Bell, Check, X, AlertCircle, Info, CheckCircle, AlertTriangle } from 'lucide-react';
@@ -7,26 +7,30 @@ import { Button } from './UI';
 interface NotificationCenterProps {
   userId: string;
   onClose?: () => void;
+  /** Chamado sempre que o contador de não lidas muda — permite atualizar o sino no header */
+  onUnreadCountChange?: (count: number) => void;
 }
 
-const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, onClose }) => {
+const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, onClose, onUnreadCountChange }) => {
   const [notifications, setNotifications] = useState<InAppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+
+  const loadNotifications = useCallback(async () => {
+    setIsLoading(true);
+    const all = await NotificationService.getAll(userId);
+    setNotifications(all);
+    const pending = all.filter((n) => n.status === 'pending').length;
+    setUnreadCount(pending);
+    onUnreadCountChange?.(pending);
+    setIsLoading(false);
+  }, [userId, onUnreadCountChange]);
 
   useEffect(() => {
     loadNotifications();
     const interval = setInterval(loadNotifications, 30000);
     return () => clearInterval(interval);
-  }, [userId]);
-
-  const loadNotifications = async () => {
-    setIsLoading(true);
-    const all = await NotificationService.getAll(userId);
-    setNotifications(all);
-    setUnreadCount(all.filter((n) => !n.read).length);
-    setIsLoading(false);
-  };
+  }, [loadNotifications]);
 
   const handleMarkAsRead = async (id: string) => {
     await NotificationService.markAsRead(userId, id);
@@ -49,6 +53,28 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, onClose
       default:
         return <Info className="w-5 h-5 text-blue-600" />;
     }
+  };
+
+  const getStatusBadge = (notif: InAppNotification) => {
+    if (notif.status === 'resolved') {
+      return (
+        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-medium">
+          Resolvida
+        </span>
+      );
+    }
+    if (notif.status === 'read') {
+      return (
+        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium">
+          Lida
+        </span>
+      );
+    }
+    return (
+      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 font-medium">
+        Nova
+      </span>
+    );
   };
 
   return (
@@ -99,9 +125,9 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, onClose
             <div
               key={notif.id}
               className={`p-4 rounded-xl border transition-all ${
-                notif.read
-                  ? 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'
-                  : 'bg-white dark:bg-slate-800 border-indigo-200 dark:border-indigo-900 shadow-sm'
+                notif.status === 'pending'
+                  ? 'bg-white dark:bg-slate-800 border-indigo-200 dark:border-indigo-900 shadow-sm'
+                  : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 opacity-75'
               }`}
               role="article"
               aria-label={`Notificação: ${notif.title}`}
@@ -111,9 +137,12 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, onClose
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
-                      <h3 className="font-semibold text-slate-900 dark:text-white text-sm">
-                        {notif.title}
-                      </h3>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-semibold text-slate-900 dark:text-white text-sm">
+                          {notif.title}
+                        </h3>
+                        {getStatusBadge(notif)}
+                      </div>
                       <p className="text-slate-600 dark:text-slate-400 text-xs mt-1">
                         {notif.message}
                       </p>
@@ -121,11 +150,12 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, onClose
                         {new Date(notif.createdAt).toLocaleString('pt-BR')}
                       </p>
                     </div>
-                    {!notif.read && (
+                    {notif.status === 'pending' && (
                       <button
                         onClick={() => handleMarkAsRead(notif.id)}
-                        className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
+                        className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors shrink-0"
                         aria-label={`Marcar como lida: ${notif.title}`}
+                        title="Marcar como lida"
                       >
                         <Check className="w-4 h-4 text-slate-400" />
                       </button>

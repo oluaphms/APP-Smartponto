@@ -15,6 +15,7 @@ import { db, isSupabaseConfigured } from '../../services/supabaseClient';
 import { LoadingState } from '../../../components/UI';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { i18n } from '../../../lib/i18n';
+import { queryCache, TTL } from '../../services/queryCache';
 
 interface CardData {
   totalEmployees: number;
@@ -57,28 +58,44 @@ const AdminDashboard: React.FC = () => {
       setLoadingData(true);
       try {
         const today = new Date().toISOString().slice(0, 10);
+        // Data de 7 dias atrás para limitar o payload de time_records
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        const weekStart = sevenDaysAgo.toISOString().slice(0, 10);
 
-        const [usersRows, recordsAll, recordsTodayRows] = await Promise.all([
-          db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
-          db.select('time_records', [{ column: 'company_id', operator: 'eq', value: user.companyId }], { column: 'created_at', ascending: false }, 500) as Promise<any[]>,
-          db.select('time_records', [
-            { column: 'company_id', operator: 'eq', value: user.companyId },
-          ]) as Promise<any[]>,
+        const cid = user.companyId;
+
+        // Uma única query de time_records dos últimos 7 dias (em vez de 2 queries sem filtro de data)
+        // Cache de 15s para dados em tempo real
+        const [usersRows, recordsWeek] = await Promise.all([
+          queryCache.getOrFetch(
+            `users:${cid}`,
+            () => db.select('users', [{ column: 'company_id', operator: 'eq', value: cid }]) as Promise<any[]>,
+            TTL.NORMAL,
+          ),
+          queryCache.getOrFetch(
+            `time_records:week:${cid}:${today}`,
+            () => db.select(
+              'time_records',
+              [
+                { column: 'company_id', operator: 'eq', value: cid },
+                { column: 'created_at', operator: 'gte', value: `${weekStart}T00:00:00.000Z` },
+              ],
+              { column: 'created_at', ascending: false },
+              500,
+            ) as Promise<any[]>,
+            TTL.REALTIME,
+          ),
         ]);
 
         const users = usersRows ?? [];
-        const records = recordsAll ?? [];
-        const todayRecords = (recordsTodayRows ?? []).filter((r: any) => r.created_at?.slice(0, 10) === today);
+        const records = recordsWeek ?? [];
+        const todayRecords = records.filter((r: any) => r.created_at?.slice(0, 10) === today);
 
         const activeIds = new Set<string>();
-        const byUserToday = new Map<string, boolean>();
-        todayRecords.forEach((r: any) => {
-          activeIds.add(r.user_id);
-          byUserToday.set(r.user_id, true);
-        });
+        todayRecords.forEach((r: any) => activeIds.add(r.user_id));
         const expectedEmployees = users.filter((u: any) => u.role !== 'admin' && u.role !== 'hr').length;
-        const presentToday = activeIds.size;
-        const absentToday = Math.max(0, expectedEmployees - presentToday);
+        const absentToday = Math.max(0, expectedEmployees - activeIds.size);
 
         setCards({
           totalEmployees: users.length,
@@ -87,33 +104,31 @@ const AdminDashboard: React.FC = () => {
           absentToday,
         });
 
+        // Gráfico dos últimos 7 dias
         const last7Days: WeeklyData[] = [];
         for (let i = 6; i >= 0; i--) {
           const d = new Date();
           d.setDate(d.getDate() - i);
           const dayStr = d.toISOString().slice(0, 10);
-          const count = (records as any[]).filter((r: any) => r.created_at?.slice(0, 10) === dayStr).length;
+          const count = records.filter((r: any) => r.created_at?.slice(0, 10) === dayStr).length;
           last7Days.push({ day: dayStr, count });
         }
         setWeeklyData(last7Days);
 
-        const latestToday = (records as any[])
-          .filter((r: any) => r.created_at?.slice(0, 10) === today)
-          .slice(0, 1);
-
-        const userIds = [...new Set(latestToday.map((r: any) => r.user_id))];
-        const userMap = new Map<string, { nome: string }>();
-        await Promise.all(
-          userIds.map(async (uid) => {
-            const u = users.find((x: any) => x.id === uid);
-            if (u) userMap.set(uid, { nome: u.nome || u.email || 'N/A' });
-          })
+        // Últimos registros de hoje — lookup em memória (sem query extra)
+        const userMap = new Map<string, string>(
+          users.map((u: any) => [u.id, u.nome || u.email || 'N/A']),
         );
-        const last = latestToday.map((r: any) => ({
-          employeeName: userMap.get(r.user_id)?.nome ?? r.user_id?.slice(0, 8) ?? '—',
+        const last = todayRecords.slice(0, 5).map((r: any) => ({
+          employeeName: userMap.get(r.user_id) ?? r.user_id?.slice(0, 8) ?? '—',
           type: r.type,
-          time: r.created_at ? new Date(r.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—',
-          location: r.location?.lat != null ? `${Number(r.location.lat).toFixed(4)}, ${Number(r.location.lng).toFixed(4)}` : '—',
+          time: r.created_at
+            ? new Date(r.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+            : '—',
+          location:
+            r.location?.lat != null
+              ? `${Number(r.location.lat).toFixed(4)}, ${Number(r.location.lng).toFixed(4)}`
+              : '—',
           userId: r.user_id,
         }));
         setLastRecords(last);

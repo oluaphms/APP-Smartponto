@@ -318,165 +318,210 @@ const AdminJustificativas: React.FC = () => {
         </div>
 
         {modalOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={() => !saving && setModalOpen(false)}>
-            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white">{editingId ? 'Editar justificativa' : 'Nova justificativa'}</h3>
-              {modalError && (
-                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">{modalError}</div>
-              )}
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Dados de identificação</label>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Código</label>
-                    <input
-                      type="text"
-                      value={codigo}
-                      onChange={(e) => { setCodigo(e.target.value); setModalError(null); }}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                      placeholder="Ex: FALTA"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome (até ~7 caracteres)</label>
-                    <input
-                      type="text"
-                      value={nome}
-                      onChange={(e) => setNome(e.target.value)}
-                      maxLength={12}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                      placeholder="Ex: FALTAS"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Evento</label>
-                    <select
-                      value={eventoId}
-                      onChange={(e) => setEventoId(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                    >
-                      <option value="">(opcional) Vincular evento...</option>
-                      {eventos.map((ev) => (
-                        <option key={ev.id} value={ev.id}>
-                          {ev.codigo} - {ev.descricao}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Descrição</label>
-                <input
-                  type="text"
-                  value={descricao}
-                  onChange={(e) => { setDescricao(e.target.value); setModalError(null); }}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  placeholder="Ex: Falta justificada, Férias, Atestado"
-                />
+          /* Overlay — alinha o modal no centro com scroll seguro em telas pequenas */
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-justificativa-title"
+            onClick={() => !saving && setModalOpen(false)}
+          >
+            {/* Container do modal: flex-col com altura máxima de 90vh */}
+            <div
+              className="flex flex-col bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-lg max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Cabeçalho fixo */}
+              <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
+                <h3
+                  id="modal-justificativa-title"
+                  className="text-base font-bold text-slate-900 dark:text-white"
+                >
+                  {editingId ? 'Editar justificativa' : 'Nova justificativa'}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => !saving && setModalOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  aria-label="Fechar modal"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+              {/* Corpo com scroll interno */}
+              <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-4 min-h-0">
+                {modalError && (
+                  <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">
+                    {modalError}
+                  </div>
+                )}
+
+                {/* Identificação */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Valor Dia</label>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
+                    Dados de identificação
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Código</label>
+                      <input
+                        type="text"
+                        value={codigo}
+                        onChange={(e) => { setCodigo(e.target.value); setModalError(null); }}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                        placeholder="Ex: FALTA"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome <span className="text-slate-400 font-normal">(~7 chars)</span></label>
+                      <input
+                        type="text"
+                        value={nome}
+                        onChange={(e) => setNome(e.target.value)}
+                        maxLength={12}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                        placeholder="Ex: FALTAS"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Evento</label>
+                      <select
+                        value={eventoId}
+                        onChange={(e) => setEventoId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                      >
+                        <option value="">(opcional)</option>
+                        {eventos.map((ev) => (
+                          <option key={ev.id} value={ev.id}>
+                            {ev.codigo} - {ev.descricao}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Descrição</label>
                   <input
                     type="text"
-                    inputMode="decimal"
-                    value={valorDia}
-                    onChange={(e) => setValorDia(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                    placeholder="Ex: 08:00 ou 8,0"
+                    value={descricao}
+                    onChange={(e) => { setDescricao(e.target.value); setModalError(null); }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                    placeholder="Ex: Falta justificada, Férias, Atestado"
                   />
                 </div>
-                <label className="flex items-center gap-2 mt-6 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={automaticoValorDia}
-                    onChange={(e) => setAutomaticoValorDia(e.target.checked)}
-                    className="rounded border-slate-300"
-                  />
-                  <span className="text-sm text-slate-700 dark:text-slate-300">
-                    Valor Dia automático pela carga horária
-                  </span>
-                </label>
-              </div>
-              <hr className="border-slate-200 dark:border-slate-800" />
-              <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">
-                  Abonar automaticamente
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={abonarAjuste} onChange={(e) => setAbonarAjuste(e.target.checked)} className="rounded border-slate-300" />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Lançar em Ajuste</span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Valor Dia</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={valorDia}
+                      onChange={(e) => setValorDia(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                      placeholder="Ex: 08:00 ou 8,0"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer pb-0.5">
+                    <input
+                      type="checkbox"
+                      checked={automaticoValorDia}
+                      onChange={(e) => setAutomaticoValorDia(e.target.checked)}
+                      className="rounded border-slate-300 shrink-0"
+                    />
+                    <span className="text-sm text-slate-700 dark:text-slate-300">Automático pela carga horária</span>
                   </label>
+                </div>
+
+                <hr className="border-slate-200 dark:border-slate-700" />
+
+                {/* Abonar automaticamente */}
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
+                    Abonar automaticamente
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {[
+                      { checked: abonarAjuste, onChange: setAbonarAjuste, label: 'Lançar em Ajuste' },
+                      { checked: abonarAbono2, onChange: setAbonarAbono2, label: 'Lançar em Abono 2' },
+                      { checked: abonarAbono3, onChange: setAbonarAbono3, label: 'Lançar em Abono 3' },
+                      { checked: abonarAbono4, onChange: setAbonarAbono4, label: 'Lançar em Abono 4' },
+                    ].map(({ checked, onChange, label }) => (
+                      <label key={label} className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="rounded border-slate-300 shrink-0" />
+                        <span className="text-sm text-slate-700 dark:text-slate-300">{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <hr className="border-slate-200 dark:border-slate-700" />
+
+                {/* Outras opções */}
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
+                    Outras opções
+                  </p>
+                  <div className="space-y-2">
+                    {[
+                      { checked: lancarComoFaltas, onChange: setLancarComoFaltas, label: 'Lançar como horas faltas' },
+                      { checked: descontarDsr, onChange: setDescontarDsr, label: 'Descontar DSR sem contabilizar como falta' },
+                      { checked: naoAbonarNoturnas, onChange: setNaoAbonarNoturnas, label: 'Não abonar horas noturnas' },
+                      { checked: naoCalcularDsr, onChange: setNaoCalcularDsr, label: 'Não calcular DSR' },
+                      { checked: descontarBancoHoras, onChange: setDescontarBancoHoras, label: 'Descontar horas do banco de horas' },
+                      { checked: descontarProvisao, onChange: setDescontarProvisao, label: 'Descontar horas em período de provisão' },
+                    ].map(({ checked, onChange, label }) => (
+                      <label key={label} className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="rounded border-slate-300 shrink-0" />
+                        <span className="text-sm text-slate-700 dark:text-slate-300">{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <hr className="border-slate-200 dark:border-slate-700" />
+
+                {/* T+ */}
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
+                    Comportamento de Abonos com T+
+                  </p>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={abonarAbono2} onChange={(e) => setAbonarAbono2(e.target.checked)} className="rounded border-slate-300" />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Lançar em Abono 2</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={abonarAbono3} onChange={(e) => setAbonarAbono3(e.target.checked)} className="rounded border-slate-300" />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Lançar em Abono 3</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={abonarAbono4} onChange={(e) => setAbonarAbono4(e.target.checked)} className="rounded border-slate-300" />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Lançar em Abono 4</span>
+                    <input
+                      type="checkbox"
+                      checked={incluirTMaisNosAbonos}
+                      onChange={(e) => setIncluirTMaisNosAbonos(e.target.checked)}
+                      className="rounded border-slate-300 shrink-0"
+                    />
+                    <span className="text-sm text-slate-700 dark:text-slate-300">
+                      Incluir valores positivos de T+ nas colunas de abono
+                    </span>
                   </label>
                 </div>
               </div>
-              <hr className="border-slate-200 dark:border-slate-800" />
-              <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">
-                  Outras opções
-                </label>
-                <div className="space-y-1.5">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={lancarComoFaltas} onChange={(e) => setLancarComoFaltas(e.target.checked)} className="rounded border-slate-300" />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Lançar como horas faltas</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={descontarDsr} onChange={(e) => setDescontarDsr(e.target.checked)} className="rounded border-slate-300" />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Descontar DSR sem contabilizar como falta</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={naoAbonarNoturnas} onChange={(e) => setNaoAbonarNoturnas(e.target.checked)} className="rounded border-slate-300" />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Não abonar horas noturnas</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={naoCalcularDsr} onChange={(e) => setNaoCalcularDsr(e.target.checked)} className="rounded border-slate-300" />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Não calcular DSR</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={descontarBancoHoras} onChange={(e) => setDescontarBancoHoras(e.target.checked)} className="rounded border-slate-300" />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Descontar horas do banco de horas</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={descontarProvisao} onChange={(e) => setDescontarProvisao(e.target.checked)} className="rounded border-slate-300" />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Descontar horas em período de provisão</span>
-                  </label>
-                </div>
-              </div>
-              <hr className="border-slate-200 dark:border-slate-800" />
-              <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">
-                  Comportamento de Abonos com T+
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={incluirTMaisNosAbonos}
-                    onChange={(e) => setIncluirTMaisNosAbonos(e.target.checked)}
-                    className="rounded border-slate-300"
-                  />
-                  <span className="text-sm text-slate-700 dark:text-slate-300">
-                    Incluir valores positivos de T+ nas colunas de abono
-                  </span>
-                </label>
-              </div>
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium">Cancelar</button>
-                <button type="button" onClick={(e) => handleSave(e)} disabled={saving} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50">{saving ? 'Salvando...' : 'Concluir'}</button>
+
+              {/* Rodapé fixo */}
+              <div className="flex gap-3 px-5 py-4 border-t border-slate-100 dark:border-slate-800 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleSave(e)}
+                  disabled={saving}
+                  className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-medium text-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                >
+                  {saving ? 'Salvando...' : 'Concluir'}
+                </button>
               </div>
             </div>
           </div>

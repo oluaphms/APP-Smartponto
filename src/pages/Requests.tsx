@@ -131,6 +131,7 @@ const RequestsPage: React.FC = () => {
           type: 'info',
           title: 'Solicitação enviada',
           message: 'Sua solicitação foi registrada e aguarda aprovação.',
+          metadata: { requestId: id },
         });
       } catch {
         /* notificação opcional */
@@ -167,14 +168,16 @@ const RequestsPage: React.FC = () => {
     if (!user || !isSupabaseConfigured) return;
 
     try {
-      await db.update('requests', row.id, {
-        status,
-      });
+      await db.update('requests', row.id, { status });
 
       setRows((prev) =>
         prev.map((r) => (r.id === row.id ? { ...r, status } : r)),
       );
 
+      // Resolve notificações pendentes do colaborador referentes a esta solicitação
+      await NotificationService.resolveByReference(row.user_id, row.id, 'request');
+
+      // Cria nova notificação informando o resultado
       await NotificationService.create({
         userId: row.user_id,
         type: status === 'approved' ? 'success' : 'warning',
@@ -183,6 +186,7 @@ const RequestsPage: React.FC = () => {
           status === 'approved'
             ? 'Sua solicitação foi aprovada.'
             : 'Sua solicitação foi rejeitada.',
+        metadata: { requestId: row.id },
       });
 
       await LoggingService.log({

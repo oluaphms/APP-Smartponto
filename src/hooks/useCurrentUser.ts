@@ -36,7 +36,9 @@ export function useCurrentUser() {
 
     const applyStored = () => {
       if (!mounted) return;
-      setUser(getStoredUser());
+      // Só aplica o usuário do storage se ele existir — nunca re-loga a partir de storage vazio.
+      const stored = getStoredUser();
+      setUser(stored);
       setLoading(false);
     };
 

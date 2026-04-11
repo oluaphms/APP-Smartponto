@@ -11,6 +11,7 @@ import { getWorkInsights } from './services/geminiService';
 import { PontoService } from './services/pontoService';
 import { useRecords } from './src/hooks/useRecords';
 import { authService } from './services/authService';
+import { queryCache } from './src/services/queryCache';
 import {
   auth,
   isSupabaseConfigured,
@@ -363,12 +364,16 @@ const AppMain: React.FC = () => {
     let unsubscribe: (() => void) | null = null;
     if (isSupabaseConfigured) {
       try {
-        unsubscribe = authService.onAuthStateChanged((user) => {
+        unsubscribe = authService.onAuthStateChanged((authUser) => {
           if (!isMounted) return;
 
-          if (user) {
-            setUser(user);
-            PontoService.getCompany(user.companyId).then(comp => {
+          if (authUser) {
+            // Só atualiza se o usuário React ainda estiver logado (evita re-login após logout).
+            setUser((current) => {
+              if (current === null) return null; // logout já ocorreu — não re-logar
+              return authUser;
+            });
+            PontoService.getCompany(authUser.companyId).then(comp => {
               if (isMounted && comp) setCompany(comp);
             }).catch(error => {
               console.error('Error loading company in auth state change:', error);
@@ -706,6 +711,20 @@ const AppMain: React.FC = () => {
   };
 
   const handleLogout = useCallback(async () => {
+    // Zera o estado React imediatamente — evita qualquer re-render com usuário ainda presente
+    // enquanto o signOut assíncrono ainda está em andamento.
+    setUser(null);
+    setCompany(null);
+    setInsights(null);
+    setLoginStep('choice');
+    setLoginRole(null);
+    setLoginData({ identifier: '', password: '' });
+    setLoginError(null);
+    navigate('/', { replace: true });
+
+    // Limpa o cache de queries para não vazar dados entre sessões
+    queryCache.clear();
+
     try {
       await authService.signOut();
       // Em PWA, caches podem manter respostas/artefatos antigos em memória.
@@ -723,16 +742,6 @@ const AppMain: React.FC = () => {
       }
     } catch (error) {
       console.error('Erro ao fazer logout:', error);
-    } finally {
-      setUser(null);
-      setCompany(null);
-      setInsights(null);
-      setLoginStep('choice');
-      setLoginRole(null);
-      setLoginData({ identifier: '', password: '' });
-      setLoginError(null);
-      // Uma única transição para login na raiz (evita piscar: React login + reload completo).
-      navigate('/', { replace: true });
     }
   }, [navigate]);
 

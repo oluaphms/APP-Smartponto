@@ -51,6 +51,9 @@ function readCurrentUserFromProfileStore(): string | null {
 }
 
 class AuthService {
+  /** Previne que o listener onAuthStateChanged tente recuperar sessão durante o logout. */
+  private _isSigningOut = false;
+
   /**
    * Sincroniza tenant_id no user_metadata (JWT) — só chama API se ainda não estiver no token/cache.
    * Evita updateUser repetido (principal causa de lentidão/instabilidade no login).
@@ -694,6 +697,8 @@ class AuthService {
    */
   async signOut(): Promise<void> {
     const startedAt = Date.now();
+    // Sinaliza para o listener onAuthStateChanged ignorar eventos de sessão nula durante o logout.
+    this._isSigningOut = true;
     try {
       // 1) Derruba a sessão local imediatamente (instantâneo).
       // Isso evita ficar preso num estado “meio logado” no PWA.
@@ -748,6 +753,8 @@ class AuthService {
       } catch {
         // ignora falha ao limpar storage
       } finally {
+        // Libera a flag após um tick para garantir que eventos pendentes do Supabase já foram processados.
+        setTimeout(() => { this._isSigningOut = false; }, 500);
         if (import.meta.env?.DEV && typeof console !== 'undefined') {
           console.info('[Auth] Logout concluído em', Date.now() - startedAt, 'ms');
         }
@@ -958,12 +965,22 @@ class AuthService {
   onAuthStateChanged(callback: (user: User | null) => void) {
     return auth.onAuthStateChange(async (event, session) => {
       /**
+       * Durante o logout, ignorar qualquer evento do listener para evitar o loop:
+       * signOut → SIGNED_OUT → listener tenta recuperar sessão → re-loga o usuário.
+       * A flag _isSigningOut é liberada 500ms após o signOut concluir.
+       */
+      if (this._isSigningOut) {
+        return;
+      }
+
+      /**
        * Corrida comum no login: `clearLocalAuthSession()` chama signOut e o listener pode receber
        * `session === null` *depois* do signIn já ter concluído — isso apagava o usuário na UI.
        * Se o storage ainda tiver sessão válida, recuperamos antes de deslogar.
+       * IMPORTANTE: só faz isso fora do fluxo de logout (flag acima já garante isso).
        */
       let sess = session;
-      if (!sess?.user) {
+      if (!sess?.user && event !== 'SIGNED_OUT') {
         try {
           const { data } = await auth.getSession();
           if (data.session?.user) {
