@@ -53,7 +53,6 @@ interface AdminViewProps {
 }
 
 const AdminView: React.FC<AdminViewProps> = ({ admin }) => {
-  const [employees, setEmployees] = useState<EmployeeSummary[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<EmployeeSummary | null>(null);
   const [empRecords, setEmpRecords] = useState<TimeRecord[]>([]);
@@ -63,7 +62,6 @@ const AdminView: React.FC<AdminViewProps> = ({ admin }) => {
   const [adjustmentForm, setAdjustmentForm] = useState({ type: LogType.IN, time: '09:00', reason: '' });
   const [isAdjusting, setIsAdjusting] = useState(false);
 
-  const [company, setCompany] = useState<any>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -81,11 +79,8 @@ const AdminView: React.FC<AdminViewProps> = ({ admin }) => {
     departmentId: '',
     role: 'employee' as UserRole,
   });
-  const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [createSuccess, setCreateSuccess] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
 
   useEffect(() => {
@@ -229,7 +224,7 @@ const AdminView: React.FC<AdminViewProps> = ({ admin }) => {
       const updated = await PontoService.adjustRecord(admin, adjustingRecord.id, adjustmentForm);
       setEmpRecords(prev => prev.map(r => r.id === updated.id ? updated : r));
       setAdjustingRecord(null);
-      PontoService.getAllEmployees(admin.companyId).then(setEmployees);
+      queryClient.invalidateQueries({ queryKey: ['employees', admin.companyId] });
     } catch (err) {
       console.error(err);
     } finally {

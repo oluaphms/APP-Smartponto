@@ -8,6 +8,7 @@ import { auth, db, isSupabaseConfigured } from './supabase';
 import { User, UserRole } from '../types';
 import { LoggingService } from './loggingService';
 import { LogSeverity } from '../types';
+import ExcelJS from 'exceljs';
 
 export interface CreateUserData {
   nome: string;
@@ -152,7 +153,6 @@ class AdminUserService {
 
     try {
       // Ler arquivo
-      const ExcelJS = (await import('exceljs')).default;
       const workbook = new ExcelJS.Workbook();
       
       const buffer = await file.arrayBuffer();
@@ -268,7 +268,6 @@ class AdminUserService {
    * Gerar modelo de planilha para download
    */
   async downloadTemplate(): Promise<void> {
-    const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Funcionários');
 
