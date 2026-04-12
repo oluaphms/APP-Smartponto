@@ -826,7 +826,8 @@ class AuthService {
     if (!isSupabaseConfigured || !supabase) return { session: null };
     try {
       if (typeof supabase.auth.initialize === 'function') await supabase.auth.initialize();
-      const session = await auth.getSession();
+      const { data: sessionData } = await auth.getSession();
+      const session = sessionData?.session ?? null;
       if (session?.user?.id) return { session };
       if (typeof window === 'undefined' || !window.location?.hash) return { session: null };
       const hash = window.location.hash.replace(/^#/, '');
@@ -837,8 +838,8 @@ class AuthService {
       if (accessToken && refreshToken) {
         const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
         if (error) return { session: null };
-        const next = await auth.getSession();
-        return { session: next ?? null };
+        const { data: nextData } = await auth.getSession();
+        return { session: nextData?.session ?? null };
       }
       const tokenHash = params.get('token_hash');
       if (tokenHash) {
@@ -921,7 +922,8 @@ class AuthService {
       return null;
     }
 
-    const session = await auth.getSession();
+    const { data: sessionData } = await auth.getSession();
+    const session = sessionData?.session ?? null;
     if (!session?.user) {
       try {
         clearCurrentUserFromAllStorages();

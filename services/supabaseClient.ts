@@ -53,17 +53,36 @@ export const auth = {
   signUp: async (email: string, password: string, options?: any) => {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase não inicializado');
-    return client.auth.signUp({ email, password, options });
+    const { data, error } = await client.auth.signUp({ email, password, options });
+    if (error) throw error;
+    return data;
+  },
+  /** Alias de signInWithPassword para compatibilidade com authService */
+  signIn: async (email: string, password: string) => {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase não inicializado');
+    const { data, error } = await client.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return data;
   },
   signInWithPassword: async (email: string, password: string) => {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase não inicializado');
-    return client.auth.signInWithPassword({ email, password });
+    const { data, error } = await client.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return data;
   },
-  signOut: async () => {
+  signInWithOAuth: async (provider: string, options?: any) => {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase não inicializado');
-    return client.auth.signOut();
+    const { data, error } = await client.auth.signInWithOAuth({ provider: provider as any, ...options });
+    if (error) throw error;
+    return data;
+  },
+  signOut: async (options?: { scope?: 'global' | 'local' | 'others' }) => {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase não inicializado');
+    return client.auth.signOut(options);
   },
   getSession: async () => {
     const client = getSupabaseClient();
@@ -74,6 +93,18 @@ export const auth = {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase não inicializado');
     return client.auth.getUser();
+  },
+  updatePassword: async (newPassword: string) => {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase não inicializado');
+    const { error } = await client.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+  },
+  resetPassword: async (email: string, redirectTo?: string) => {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase não inicializado');
+    const { error } = await client.auth.resetPasswordForEmail(email, redirectTo ? { redirectTo } : undefined);
+    if (error) throw error;
   },
   onAuthStateChange: (callback: any) => {
     const client = getSupabaseClient();
