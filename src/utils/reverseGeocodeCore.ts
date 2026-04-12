@@ -88,8 +88,12 @@ export async function resolveAddressFromCoordinates(lat: number, lng: number): P
 
   // Tentar Photon
   try {
-    const url = `https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}&lang=pt`;
-    const res = await fetchWithTimeout(url, {
+    const photonUrl = new URL('https://photon.komoot.io/reverse');
+    photonUrl.searchParams.set('lat', String(lat));
+    photonUrl.searchParams.set('lon', String(lng));
+    photonUrl.searchParams.set('lang', 'pt');
+    
+    const res = await fetchWithTimeout(photonUrl.toString(), {
       headers: { Accept: 'application/json' },
     });
     if (res.ok) {
@@ -109,9 +113,13 @@ export async function resolveAddressFromCoordinates(lat: number, lng: number): P
   // Fallback para Nominatim
   if (!text) {
     try {
-      const nominatimUrl =
-        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=pt-BR`;
-      const nomRes = await fetchWithTimeout(nominatimUrl, {
+      const nominatimUrl = new URL('https://nominatim.openstreetmap.org/reverse');
+      nominatimUrl.searchParams.set('format', 'jsonv2');
+      nominatimUrl.searchParams.set('lat', String(lat));
+      nominatimUrl.searchParams.set('lon', String(lng));
+      nominatimUrl.searchParams.set('accept-language', 'pt-BR');
+      
+      const nomRes = await fetchWithTimeout(nominatimUrl.toString(), {
         headers: NOMINATIM_HEADERS,
       });
       if (nomRes.ok) {
