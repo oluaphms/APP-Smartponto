@@ -17,23 +17,23 @@ DROP POLICY IF EXISTS "notifications_delete_own" ON public.notifications;
 
 -- 2) Recriar políticas simples e eficientes
 -- SELECT: usuário vê suas próprias notificações
-CREATE POLICY "notifications_select_own" ON public.notifications
+CREATE POLICY "notifications_select_own_v2" ON public.notifications
   FOR SELECT TO authenticated
   USING (auth.uid()::text = user_id);
 
 -- INSERT: usuário cria suas próprias notificações
-CREATE POLICY "notifications_insert_own" ON public.notifications
+CREATE POLICY "notifications_insert_own_v2" ON public.notifications
   FOR INSERT TO authenticated
   WITH CHECK (auth.uid()::text = user_id);
 
 -- UPDATE: usuário atualiza suas próprias notificações
-CREATE POLICY "notifications_update_own" ON public.notifications
+CREATE POLICY "notifications_update_own_v2" ON public.notifications
   FOR UPDATE TO authenticated
   USING (auth.uid()::text = user_id)
   WITH CHECK (auth.uid()::text = user_id);
 
 -- DELETE: usuário deleta suas próprias notificações
-CREATE POLICY "notifications_delete_own" ON public.notifications
+CREATE POLICY "notifications_delete_own_v2" ON public.notifications
   FOR DELETE TO authenticated
   USING (auth.uid()::text = user_id);
 

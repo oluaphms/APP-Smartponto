@@ -206,8 +206,215 @@ const AdminTimesheet: React.FC = () => {
     return rows.sort((a, b) => a.userName.localeCompare(b.userName));
   }, [filteredRecords, employees, shiftSchedules]);
 
-  const handleExportPDF = () => {
-    window.print();
+  const handleExportPDF = async () => {
+    try {
+      const { jsPDF } = await import('jspdf');
+      const AutoTable = (await import('jspdf-autotable')).default;
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      let currentY = 15;
+
+      // ===== CABEÇALHO =====
+      pdf.setFontSize(14);
+      pdf.setFont(undefined, 'bold');
+      pdf.text('ESPELHO DE PONTO', pageWidth / 2, currentY, { align: 'center' });
+      currentY += 8;
+
+      // Período
+      pdf.setFontSize(10);
+      pdf.setFont(undefined, 'normal');
+      const periodText = `Período: ${new Date(periodStart).toLocaleDateString('pt-BR')} a ${new Date(periodEnd).toLocaleDateString('pt-BR')}`;
+      pdf.text(periodText, pageWidth / 2, currentY, { align: 'center' });
+      currentY += 10;
+
+      // ===== DADOS DO COLABORADOR (por cada um) =====
+      // Agrupar por colaborador
+      const byEmployee = new Map<string, any>();
+      for (const row of buildRows) {
+        if (!byEmployee.has(row.userId)) {
+          byEmployee.set(row.userId, {
+            name: row.userName,
+            dates: row.dates,
+            byDate: row.byDate,
+            userId: row.userId,
+          });
+        }
+      }
+
+      // Processar cada colaborador
+      for (const [, empData] of byEmployee) {
+        // Verificar se precisa de nova página
+        if (currentY > pageHeight - 80) {
+          pdf.addPage();
+          currentY = 15;
+        }
+
+        // Dados do colaborador
+        pdf.setFontSize(11);
+        pdf.setFont(undefined, 'bold');
+        pdf.text(`Colaborador: ${empData.name}`, 15, currentY);
+        currentY += 6;
+
+        pdf.setFontSize(9);
+        pdf.setFont(undefined, 'normal');
+        
+        // Buscar dados adicionais do colaborador
+        const empInfo = employees.find((e: any) => e.id === empData.userId);
+        if (empInfo?.cargo) {
+          pdf.text(`Cargo: ${empInfo.cargo}`, 15, currentY);
+          currentY += 5;
+        }
+        if (empInfo?.department_id) {
+          const dept = departments.find((d: any) => d.id === empInfo.department_id);
+          if (dept) {
+            pdf.text(`Departamento: ${dept.name}`, 15, currentY);
+            currentY += 5;
+          }
+        }
+
+        currentY += 3;
+
+        // ===== TABELA DE PONTO =====
+        const tableData: any[] = [];
+        let totalHours = 0;
+        let totalExtra = 0;
+        let daysWorked = 0;
+        let absences = 0;
+
+        for (const d of empData.dates) {
+          const sum = empData.byDate.get(d);
+          
+          // Formatar data
+          const dateObj = new Date(d + 'T00:00:00');
+          const dateFormatted = dateObj.toLocaleDateString('pt-BR');
+
+          // Determinar ocorrência
+          let occurrence = 'OK';
+          if (sum?.isDayOff) {
+            occurrence = 'Folga';
+          } else if (sum?.hasAbsence) {
+            occurrence = 'Falta';
+            absences++;
+          } else if (sum?.hasLateEntry) {
+            occurrence = 'Atraso';
+          }
+
+          // Extrair horas
+          const entrada = sum?.entradaInicio || '—';
+          const saidaIntervalo = sum?.saidaIntervalo || '—';
+          const retorno = sum?.voltaIntervalo || '—';
+          const saida = sum?.saidaFinal || '—';
+          const horas = sum?.workedHours || '—';
+
+          // Contar horas para total
+          if (horas !== '—' && !sum?.isDayOff) {
+            try {
+              const [h, m] = horas.split(':').map(Number);
+              totalHours += h + (m / 60);
+              daysWorked++;
+            } catch {
+              // ignorar
+            }
+          }
+
+          tableData.push([
+            dateFormatted,
+            entrada,
+            saidaIntervalo,
+            retorno,
+            saida,
+            horas,
+            occurrence,
+          ]);
+        }
+
+        // Adicionar tabela
+        AutoTable(pdf, {
+          head: [['Data', 'Entrada', 'Pausa', 'Retorno', 'Saída', 'Horas', 'Ocorrência']],
+          body: tableData,
+          startY: currentY,
+          margin: { left: 15, right: 15, top: 10, bottom: 50 },
+          styles: {
+            fontSize: 9,
+            cellPadding: 3,
+            overflow: 'linebreak',
+            halign: 'center',
+            valign: 'middle',
+          },
+          headStyles: {
+            fillColor: [51, 65, 85],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            fontSize: 9,
+            halign: 'center',
+          },
+          alternateRowStyles: {
+            fillColor: [245, 245, 245],
+          },
+          columnStyles: {
+            0: { cellWidth: 25, halign: 'center' },
+            1: { cellWidth: 18, halign: 'center' },
+            2: { cellWidth: 18, halign: 'center' },
+            3: { cellWidth: 18, halign: 'center' },
+            4: { cellWidth: 18, halign: 'center' },
+            5: { cellWidth: 18, halign: 'center' },
+            6: { cellWidth: 25, halign: 'center' },
+          },
+          didDrawPage: () => {
+            // Nada aqui por enquanto
+          },
+        });
+
+        currentY = (pdf as any).lastAutoTable.finalY + 10;
+
+        // ===== RESUMO FINAL =====
+        pdf.setFontSize(9);
+        pdf.setFont(undefined, 'bold');
+        
+        const totalHoursFormatted = Math.floor(totalHours) + ':' + String(Math.round((totalHours % 1) * 60)).padStart(2, '0');
+        pdf.text(`Total de Horas: ${totalHoursFormatted}`, 15, currentY);
+        currentY += 5;
+        
+        pdf.text(`Dias Trabalhados: ${daysWorked}`, 15, currentY);
+        currentY += 5;
+        
+        pdf.text(`Faltas: ${absences}`, 15, currentY);
+        currentY += 8;
+
+        // ===== ASSINATURA =====
+        pdf.setFont(undefined, 'normal');
+        pdf.setFontSize(8);
+        
+        // Linha de assinatura do funcionário
+        pdf.line(15, currentY + 15, 50, currentY + 15);
+        pdf.text('Funcionário', 32.5, currentY + 18, { align: 'center' });
+        pdf.text('Data: ___/___/_____', 32.5, currentY + 22, { align: 'center' });
+
+        // Linha de assinatura do RH
+        pdf.line(pageWidth - 50, currentY + 15, pageWidth - 15, currentY + 15);
+        pdf.text('RH / Responsável', pageWidth - 32.5, currentY + 18, { align: 'center' });
+        pdf.text('Data: ___/___/_____', pageWidth - 32.5, currentY + 22, { align: 'center' });
+
+        // Adicionar página se houver mais colaboradores
+        if (byEmployee.size > 1 && Array.from(byEmployee.keys()).indexOf(empData.userId) < byEmployee.size - 1) {
+          pdf.addPage();
+          currentY = 15;
+        }
+      }
+
+      // Download
+      pdf.save(`espelho-ponto-${periodStart}-${periodEnd}.pdf`);
+    } catch (error) {
+      console.error('Erro ao exportar PDF:', error);
+      alert('Erro ao exportar PDF. Tente novamente.');
+    }
   };
 
   const handleExportExcel = async () => {
