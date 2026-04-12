@@ -3,7 +3,17 @@
  * Todos os imports devem vir daqui
  */
 
-export { supabase, isSupabaseConfigured } from './supabase';
+export { 
+  supabase, 
+  isSupabaseConfigured, 
+  getUserProfileStorage, 
+  clearCurrentUserFromAllStorages, 
+  useSessionStorageForAuth,
+  DB_SELECT_TIMEOUT_MS,
+  DEFAULT_CONNECTION_TIMEOUT_MS,
+  testSupabaseConnection,
+  withSupabaseTimeout
+} from './supabase';
 export { getSupabaseClient, getSupabaseClientOrThrow } from '../src/lib/supabaseClient';
 
 // Criar aliases para db e storage (compatibilidade com código antigo)

@@ -8,13 +8,12 @@ import { getAppBaseUrl } from './appUrl';
 import {
   auth,
   clearCurrentUserFromAllStorages,
-  clearLocalAuthSession,
   db,
   getUserProfileStorage,
   isSupabaseConfigured,
   supabase,
   DB_SELECT_TIMEOUT_MS,
-} from './supabase';
+} from './supabaseClient';
 import { withTimeout } from '../src/utils/withTimeout';
 import { User } from '../types';
 import { logTenantLoginSuccess } from '../src/services/tenantAudit';

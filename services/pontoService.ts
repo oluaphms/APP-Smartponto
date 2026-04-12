@@ -3,7 +3,7 @@ import { TimeRecord, LogType, User, GeoLocation, EmployeeSummary, PunchMethod, C
 import { ValidationService } from './validationService';
 import { LoggingService } from './loggingService';
 import { firestoreService } from './firestoreService';
-import { getUserProfileStorage } from './supabase';
+import { getUserProfileStorage } from './supabaseClient';
 
 // In-memory cache to reduce localStorage access (simulating database indexing and caching)
 const cache = {

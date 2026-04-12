@@ -5,7 +5,7 @@
  * Mantém compatibilidade com localStorage como fallback
  */
 
-import { db, storage } from './supabase';
+import { db, storage } from './supabaseClient';
 import { TimeRecord, Company, User, EmployeeSummary, CompanyKPIs } from '../types';
 
 // Verifica se Supabase está configurado

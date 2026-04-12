@@ -1,5 +1,5 @@
 import { AuditLog, LogSeverity } from '../types';
-import { isSupabaseConfigured, db } from './supabase';
+import { isSupabaseConfigured, db } from './supabaseClient';
 
 type AlertListener = (log: AuditLog) => void;
 const listeners = new Set<AlertListener>();

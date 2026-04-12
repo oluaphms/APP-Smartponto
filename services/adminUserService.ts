@@ -4,7 +4,7 @@
  * Serviço para administradores criarem usuários (funcionários)
  */
 
-import { auth, db, isSupabaseConfigured } from './supabase';
+import { auth, db, isSupabaseConfigured } from './supabaseClient';
 import { User, UserRole } from '../types';
 import { LoggingService } from './loggingService';
 import { LogSeverity } from '../types';
