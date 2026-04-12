@@ -96,6 +96,16 @@ export function resetSupabaseClient(): void {
   initializationAttempted = false;
 }
 
+/**
+ * Resetar a sessão de autenticação
+ */
+export async function resetSession(): Promise<void> {
+  const client = getSupabaseClient();
+  if (client) {
+    await client.auth.signOut();
+  }
+}
+
 // Timeout padrão para operações
 export const DEFAULT_CONNECTION_TIMEOUT_MS = 10000;
 export const DB_SELECT_TIMEOUT_MS = 28000;
