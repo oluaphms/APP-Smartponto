@@ -7,7 +7,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getAppBaseUrl } from './appUrl';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config/supabaseConfig';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../src/config/supabaseConfig';
 
 // ETAPA 1.2 - Verificar valores das variáveis
 const supabaseUrl = SUPABASE_URL.trim();
