@@ -175,16 +175,18 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user }) => {
 
   return (
     <div className="space-y-6 md:space-y-8 animate-in slide-in-from-bottom-6 duration-700">
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-6">
-        <div>
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">Meu Perfil</h2>
-          <p className="text-slate-500 dark:text-slate-400 mt-1 sm:mt-2 text-xs sm:text-sm">Gerencie suas informações pessoais e preferências</p>
+      <header className="flex flex-col gap-3 sm:gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-6">
+          <div className="flex-1">
+            <h2 className="text-xl sm:text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">Meu Perfil</h2>
+            <p className="text-slate-500 dark:text-slate-400 mt-1 text-[11px] sm:text-sm">Gerencie suas informações pessoais e preferências</p>
+          </div>
+          {!isEditing && (
+            <Button onClick={() => setIsEditing(true)} className="h-10 sm:h-14 px-4 sm:px-8 w-full sm:w-auto text-sm sm:text-base shrink-0">
+              Editar Perfil
+            </Button>
+          )}
         </div>
-        {!isEditing && (
-          <Button onClick={() => setIsEditing(true)} className="h-12 sm:h-14 px-6 sm:px-8 w-full sm:w-auto">
-            Editar Perfil
-          </Button>
-        )}
       </header>
 
       {/* Informações do Usuário */}
@@ -193,26 +195,30 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user }) => {
           <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-2xl sm:rounded-3xl bg-indigo-600 text-white flex items-center justify-center text-2xl sm:text-3xl md:text-4xl font-bold shadow-xl shadow-indigo-600/20 shrink-0">
             {user.nome.charAt(0).toUpperCase()}
           </div>
-          <div className="flex-1 text-center sm:text-left min-w-0">
-            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-2 sm:gap-3 mb-2">
-              <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-slate-900 dark:text-white truncate max-w-full">{user.nome}</h3>
-              {getRoleBadge()}
+          <div className="flex-1 text-center sm:text-left w-full sm:w-auto overflow-hidden">
+            <div className="flex flex-col items-center sm:items-start gap-1.5 sm:gap-2 mb-2">
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                <h3 className="text-base sm:text-xl md:text-2xl font-bold text-slate-900 dark:text-white">{user.nome}</h3>
+                {getRoleBadge()}
+              </div>
             </div>
-            <div className="flex flex-col sm:flex-row flex-wrap items-center sm:items-start gap-2 sm:gap-4 text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-              <div className="flex items-center gap-2">
-                <Mail size={14} className="sm:w-4 sm:h-4" />
-                <span className="truncate max-w-[200px] sm:max-w-none">{user.email}</span>
+            <div className="flex flex-col items-center sm:items-start gap-1.5 sm:gap-2 text-[11px] sm:text-sm text-slate-600 dark:text-slate-400">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <Mail size={12} className="sm:w-4 sm:h-4 shrink-0" />
+                <span className="break-all">{user.email}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Briefcase size={14} className="sm:w-4 sm:h-4" />
-                <span>{user.cargo}</span>
-              </div>
-              {user.companyId && (
-                <div className="flex items-center gap-2">
-                  <Building2 size={14} className="sm:w-4 sm:h-4" />
-                  <span>Empresa: {user.companyId}</span>
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-3 gap-y-1">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <Briefcase size={12} className="sm:w-4 sm:h-4 shrink-0" />
+                  <span>{user.cargo}</span>
                 </div>
-              )}
+                {user.companyId && (
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <Building2 size={12} className="sm:w-4 sm:h-4 shrink-0" />
+                    <span className="text-[10px] sm:text-xs">ID: {user.companyId.slice(0, 8)}...</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
