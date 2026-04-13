@@ -24,6 +24,7 @@ export const AdminTimesheet = React.lazy(ROUTE_LOADERS['/admin/timesheet']);
 export const AdminMonitoring = React.lazy(ROUTE_LOADERS['/admin/monitoring']);
 export const AdminSchedules = React.lazy(ROUTE_LOADERS['/admin/schedules']);
 export const AdminShifts = React.lazy(ROUTE_LOADERS['/admin/shifts']);
+export const AdminColaboradorJornada = React.lazy(ROUTE_LOADERS['/admin/colaborador-jornada']);
 export const AdminJobTitles = React.lazy(ROUTE_LOADERS['/admin/job-titles']);
 export const AdminCompany = React.lazy(ROUTE_LOADERS['/admin/company']);
 export const AdminReports = React.lazy(ROUTE_LOADERS['/admin/reports']);

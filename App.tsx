@@ -103,6 +103,7 @@ import {
   AdminSecurity,
   AdminSettings,
   AdminShifts,
+  AdminColaboradorJornada,
   AdminTimesheet,
   CompanyPage,
   DepartmentsPage,
@@ -1192,6 +1193,7 @@ const AppMain: React.FC = () => {
               <Route path="monitoring" element={<AdminMonitoring />} />
               <Route path="schedules" element={<AdminSchedules />} />
               <Route path="shifts" element={<AdminShifts />} />
+              <Route path="colaborador-jornada" element={<AdminColaboradorJornada />} />
               <Route path="departments" element={<DepartmentsPage />} />
               <Route path="job-titles" element={<AdminJobTitles />} />
               <Route path="estruturas" element={<AdminEstruturas />} />

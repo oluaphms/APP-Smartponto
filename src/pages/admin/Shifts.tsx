@@ -71,10 +71,18 @@ interface ShiftRow {
   break_end_time: string | null;
   break_duration: number;
   tolerance_minutes: number;
+  tolerancia_entrada: number;
+  tolerancia_saida: number;
   /** Tipo de jornada (modelo de trabalho) */
   shift_type: 'fixed' | 'flexible' | '6x1' | '5x2' | '12x36' | '24x72' | 'custom';
   /** Intervalo mínimo/automático em minutos (Portaria 671) */
   break_minutes: number;
+  /** Carga horária calculada em minutos */
+  carga_horaria_minutos: number;
+  /** Se é turno noturno */
+  is_night_shift: boolean;
+  /** Se o horário está ativo */
+  ativo: boolean;
   config?: {
     weekly_schedule?: WeeklyScheduleDay[];
     dsr?: DSRConfig;
@@ -98,8 +106,11 @@ const AdminShifts: React.FC = () => {
     break_end_time: '13:00',
     end_time: '17:00',
     tolerance_minutes: 15,
+    tolerancia_entrada: 10,
+    tolerancia_saida: 10,
     shift_type: 'fixed' as ShiftRow['shift_type'],
     intervalo_auto_minutos: 60,
+    ativo: true,
     weeklySchedule: createDefaultWeeklySchedule(),
     dsr: { tipo: 'automatico' as const } as DSRConfig,
     extras: { acumular: 'independentes' as const, controleHoras: 'diario' as const, numeroFaixas: 3 } as ExtrasConfig,
@@ -129,8 +140,13 @@ const AdminShifts: React.FC = () => {
           break_end_time: r.break_end_time ? toTimeStr(r.break_end_time) : null,
           break_duration: r.break_duration ?? r.break_minutes ?? 60,
           tolerance_minutes: r.tolerance_minutes ?? 0,
+          tolerancia_entrada: r.tolerancia_entrada ?? r.tolerance_minutes ?? 10,
+          tolerancia_saida: r.tolerancia_saida ?? r.tolerance_minutes ?? 10,
           shift_type: (r.shift_type as ShiftRow['shift_type']) || 'fixed',
           break_minutes: r.break_minutes ?? r.break_duration ?? 60,
+          carga_horaria_minutos: r.carga_horaria_minutos ?? 0,
+          is_night_shift: r.is_night_shift ?? r.night_shift ?? false,
+          ativo: r.ativo ?? true,
           config: r.config ?? {},
         }))
       );
@@ -157,8 +173,11 @@ const AdminShifts: React.FC = () => {
       break_end_time: '13:00',
       end_time: '17:00',
       tolerance_minutes: 15,
+      tolerancia_entrada: 10,
+      tolerancia_saida: 10,
       shift_type: 'fixed',
       intervalo_auto_minutos: 60,
+      ativo: true,
       weeklySchedule: ws,
       dsr: { tipo: 'automatico' },
       extras: { acumular: 'independentes', controleHoras: 'diario', numeroFaixas: 3 },
@@ -184,8 +203,11 @@ const AdminShifts: React.FC = () => {
       break_end_time: row.break_end_time ?? '13:00',
       end_time: toTimeStr(row.end_time),
       tolerance_minutes: row.tolerance_minutes ?? 15,
+      tolerancia_entrada: row.tolerancia_entrada ?? 10,
+      tolerancia_saida: row.tolerancia_saida ?? 10,
       shift_type: row.shift_type ?? 'fixed',
       intervalo_auto_minutos: row.break_minutes ?? row.break_duration ?? 60,
+      ativo: row.ativo ?? true,
       weeklySchedule: ws,
       dsr: row.config?.dsr ?? { tipo: 'automatico' },
       extras: row.config?.extras ?? { acumular: 'independentes', controleHoras: 'diario', numeroFaixas: 3 },
@@ -206,8 +228,11 @@ const AdminShifts: React.FC = () => {
       break_end_time: row.break_end_time ?? '13:00',
       end_time: toTimeStr(row.end_time),
       tolerance_minutes: row.tolerance_minutes ?? 15,
+      tolerancia_entrada: row.tolerancia_entrada ?? 10,
+      tolerancia_saida: row.tolerancia_saida ?? 10,
       shift_type: row.shift_type ?? 'fixed',
       intervalo_auto_minutos: row.break_minutes ?? row.break_duration ?? 60,
+      ativo: true,
       weeklySchedule: ws,
       dsr: row.config?.dsr ?? { tipo: 'automatico' },
       extras: row.config?.extras ?? { acumular: 'independentes', controleHoras: 'diario', numeroFaixas: 3 },
@@ -271,8 +296,11 @@ const AdminShifts: React.FC = () => {
         break_end_time: breakEnd,
         break_duration: breakDurationMin,
         tolerance_minutes: first?.toleranciaFaltas ?? form.tolerance_minutes,
+        tolerancia_entrada: form.tolerancia_entrada,
+        tolerancia_saida: form.tolerancia_saida,
         shift_type: form.shift_type,
         break_minutes: form.intervalo_auto_minutos || breakDurationMin,
+        ativo: form.ativo,
         config: {
           weekly_schedule: form.weeklySchedule.map((d) => ({ ...d, cargaHoraria: computeCargaHoraria(d) })),
           dsr: form.dsr,
@@ -343,31 +371,49 @@ const AdminShifts: React.FC = () => {
                   <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Nº</th>
                   <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Descrição</th>
                   <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Entrada / Saída</th>
+                  <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Carga</th>
+                  <th className="text-center px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Status</th>
                   <th className="text-right px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800">
-                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{row.number || '—'}</td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.description || row.name}</td>
-                    <td className="px-4 py-3 tabular-nums text-slate-600 dark:text-slate-300">
-                      <div className="space-y-0.5 whitespace-nowrap">
-                        <div>{toTimeStr(row.start_time)} – {toTimeStr(row.end_time)}</div>
-                        {row.break_start_time && row.break_end_time && (
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            intervalo {toTimeStr(row.break_start_time)}–{toTimeStr(row.break_end_time)}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button type="button" onClick={() => openDuplicate(row)} className="p-2 text-slate-500 hover:text-slate-700 rounded-lg" title="Duplicar"><Copy className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => openEdit(row)} className="p-2 text-slate-500 hover:text-indigo-600 rounded-lg" title="Editar"><Pencil className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => handleDelete(row.id)} className="p-2 text-slate-500 hover:text-red-600 rounded-lg" title="Excluir"><Trash2 className="w-4 h-4" /></button>
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((row) => {
+                  const cargaHoras = row.carga_horaria_minutos ? `${String(Math.floor(row.carga_horaria_minutos / 60)).padStart(2, '0')}:${String(row.carga_horaria_minutos % 60).padStart(2, '0')}` : '—';
+                  return (
+                    <tr key={row.id} className={`border-b border-slate-100 dark:border-slate-800 ${!row.ativo ? 'opacity-50' : ''}`}>
+                      <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{row.number || '—'}</td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                        <div className="flex items-center gap-2">
+                          {row.description || row.name}
+                          {row.is_night_shift && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded">Noturno</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 tabular-nums text-slate-600 dark:text-slate-300">
+                        <div className="space-y-0.5 whitespace-nowrap">
+                          <div>{toTimeStr(row.start_time)} – {toTimeStr(row.end_time)}</div>
+                          {row.break_start_time && row.break_end_time && (
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              intervalo {toTimeStr(row.break_start_time)}–{toTimeStr(row.break_end_time)}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 tabular-nums text-slate-600 dark:text-slate-300">{cargaHoras}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${row.ativo ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                          {row.ativo ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button type="button" onClick={() => openDuplicate(row)} className="p-2 text-slate-500 hover:text-slate-700 rounded-lg" title="Duplicar"><Copy className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => openEdit(row)} className="p-2 text-slate-500 hover:text-indigo-600 rounded-lg" title="Editar"><Pencil className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => handleDelete(row.id)} className="p-2 text-slate-500 hover:text-red-600 rounded-lg" title="Excluir"><Trash2 className="w-4 h-4" /></button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -410,27 +456,37 @@ const AdminShifts: React.FC = () => {
               </div>
             </div>
 
-            {/* Tolerância geral e intervalo automático */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Tolerâncias e intervalo automático */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Tolerância geral (minutos)
+                  Tolerância Entrada (min)
                 </label>
                 <input
                   type="number"
                   min={0}
-                  value={form.tolerance_minutes}
-                  onChange={(e) => setForm({ ...form, tolerance_minutes: Number(e.target.value || 0) })}
+                  value={form.tolerancia_entrada}
+                  onChange={(e) => setForm({ ...form, tolerancia_entrada: Number(e.target.value || 0) })}
                   className={inputClass}
                   placeholder="Ex: 10"
                 />
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                  Usada para arredondar pequenos atrasos/adiantamentos na jornada (base legal/operacional).
-                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Intervalo automático (minutos)
+                  Tolerância Saída (min)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.tolerancia_saida}
+                  onChange={(e) => setForm({ ...form, tolerancia_saida: Number(e.target.value || 0) })}
+                  className={inputClass}
+                  placeholder="Ex: 10"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Intervalo automático (min)
                 </label>
                 <input
                   type="number"
@@ -440,11 +496,22 @@ const AdminShifts: React.FC = () => {
                   className={inputClass}
                   placeholder="Ex: 60"
                 />
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                  Tempo mínimo de intervalo a aplicar automaticamente quando não houver marcação de saída/retorno (Portaria 671).
-                </p>
+              </div>
+              <div className="flex items-end pb-1">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.ativo}
+                    onChange={(e) => setForm({ ...form, ativo: e.target.checked })}
+                    className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Horário ativo</span>
+                </label>
               </div>
             </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-2">
+              Tolerâncias para arredondar pequenos atrasos/adiantamentos. Intervalo automático aplicado quando não houver marcação (Portaria 671).
+            </p>
 
             {/* Tabela semanal */}
             <div>

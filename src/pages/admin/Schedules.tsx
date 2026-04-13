@@ -10,12 +10,19 @@ const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 type TabId = 'simples' | 'ciclicas' | 'mensais';
 
+type TipoEscala = 'FIXA' | 'ROTATIVA' | 'PERSONALIZADA';
+
 interface ScheduleRow {
   id: string;
   name: string;
   days: number[];
   shift_id: string | null;
   shift_name?: string;
+  tipo: TipoEscala;
+  dias_trabalho: number;
+  dias_folga: number;
+  descricao?: string;
+  ativo: boolean;
 }
 
 interface CicloItem {
@@ -48,7 +55,16 @@ const AdminSchedules: React.FC = () => {
   // Escalas simples
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: '', days: [] as number[], shift_id: '' });
+  const [form, setForm] = useState({ 
+    name: '', 
+    days: [] as number[], 
+    shift_id: '', 
+    tipo: 'FIXA' as TipoEscala,
+    dias_trabalho: 5,
+    dias_folga: 2,
+    descricao: '',
+    ativo: true 
+  });
   const [saving, setSaving] = useState(false);
 
   // Escalas cíclicas
@@ -98,6 +114,11 @@ const AdminSchedules: React.FC = () => {
         days: Array.isArray(r.days) ? r.days : [],
         shift_id: r.shift_id,
         shift_name: r.shift_id ? shiftMap.get(r.shift_id) : undefined,
+        tipo: r.tipo || 'FIXA',
+        dias_trabalho: r.dias_trabalho ?? 5,
+        dias_folga: r.dias_folga ?? 2,
+        descricao: r.descricao || '',
+        ativo: r.ativo ?? true,
       })));
       setShifts((shiftRows ?? []).map((s: any) => ({ id: s.id, name: s.name })));
       setEmployees((userRows ?? []).filter((u: any) => u.role === 'employee' || u.role === 'hr' || u.role === 'admin').map((u: any) => ({ id: u.id, nome: u.nome || u.email || '' })));
@@ -143,13 +164,22 @@ const AdminSchedules: React.FC = () => {
   // --- Escalas simples ---
   const openCreate = () => {
     setEditingId(null);
-    setForm({ name: '', days: [], shift_id: '' });
+    setForm({ name: '', days: [], shift_id: '', tipo: 'FIXA', dias_trabalho: 5, dias_folga: 2, descricao: '', ativo: true });
     setModalOpen(true);
   };
 
   const openEdit = (row: ScheduleRow) => {
     setEditingId(row.id);
-    setForm({ name: row.name, days: row.days || [], shift_id: row.shift_id || '' });
+    setForm({ 
+      name: row.name, 
+      days: row.days || [], 
+      shift_id: row.shift_id || '',
+      tipo: row.tipo || 'FIXA',
+      dias_trabalho: row.dias_trabalho ?? 5,
+      dias_folga: row.dias_folga ?? 2,
+      descricao: row.descricao || '',
+      ativo: row.ativo ?? true
+    });
     setModalOpen(true);
   };
 
@@ -166,18 +196,26 @@ const AdminSchedules: React.FC = () => {
     setSaving(true);
     setMessage(null);
     try {
+      const payload = {
+        name: form.name.trim(),
+        days: form.days,
+        shift_id: form.shift_id || null,
+        tipo: form.tipo,
+        dias_trabalho: form.dias_trabalho,
+        dias_folga: form.dias_folga,
+        descricao: form.descricao.trim() || null,
+        ativo: form.ativo,
+        updated_at: new Date().toISOString(),
+      };
       if (editingId) {
-        await db.update('schedules', editingId, { name: form.name.trim(), days: form.days, shift_id: form.shift_id || null });
+        await db.update('schedules', editingId, payload);
         setMessage({ type: 'success', text: 'Escala atualizada com sucesso.' });
       } else {
         await db.insert('schedules', {
           id: crypto.randomUUID(),
           company_id: user.companyId,
-          name: form.name.trim(),
-          days: form.days,
-          shift_id: form.shift_id || null,
+          ...payload,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
         });
         setMessage({ type: 'success', text: 'Escala criada com sucesso.' });
       }
@@ -483,17 +521,32 @@ const AdminSchedules: React.FC = () => {
                   <thead>
                     <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
                       <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Nome</th>
+                      <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Tipo</th>
                       <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Dias da semana</th>
                       <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Horário</th>
+                      <th className="text-center px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Status</th>
                       <th className="text-right px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((row) => {
                       const dayLabels = getDayLabels(row.days);
+                      const tipoLabel = row.tipo === 'FIXA' ? 'Fixa' : row.tipo === 'ROTATIVA' ? 'Rotativa' : 'Personalizada';
+                      const tipoColor = row.tipo === 'FIXA' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : row.tipo === 'ROTATIVA' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300';
                       return (
-                        <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800">
-                          <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{row.name}</td>
+                        <tr key={row.id} className={`border-b border-slate-100 dark:border-slate-800 ${!row.ativo ? 'opacity-50' : ''}`}>
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-slate-900 dark:text-white">{row.name}</div>
+                            {row.descricao && <div className="text-xs text-slate-500 dark:text-slate-400">{row.descricao}</div>}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${tipoColor}`}>
+                              {tipoLabel}
+                            </span>
+                            {(row.tipo === 'FIXA' || row.tipo === 'ROTATIVA') && (
+                              <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{row.dias_trabalho}x{row.dias_folga}</div>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                             {dayLabels.length > 0 ? (
                               <div className="flex flex-wrap gap-1.5">
@@ -511,6 +564,11 @@ const AdminSchedules: React.FC = () => {
                             )}
                           </td>
                           <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.shift_name || '—'}</td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${row.ativo ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                              {row.ativo ? 'Ativa' : 'Inativa'}
+                            </span>
+                          </td>
                           <td className="px-4 py-3 text-right">
                             <button type="button" onClick={() => openEdit(row)} className="p-2 text-slate-500 hover:text-indigo-600 rounded-lg"><Pencil className="w-4 h-4" /></button>
                             <button type="button" onClick={() => handleDelete(row.id)} className="p-2 text-slate-500 hover:text-red-600 rounded-lg"><Trash2 className="w-4 h-4" /></button>
@@ -639,12 +697,53 @@ const AdminSchedules: React.FC = () => {
       {/* Modal Escala simples */}
       {modalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={() => !saving && setModalOpen(false)}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-lg p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">{editingId ? 'Editar Escala' : 'Criar Escala'}</h3>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome</label>
-              <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} placeholder="Ex: Comercial" />
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome</label>
+                <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} placeholder="Ex: 5x2 - Seg a Sex" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tipo de Escala</label>
+                <select value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value as TipoEscala })} className={inputClass}>
+                  <option value="FIXA">Fixa</option>
+                  <option value="ROTATIVA">Rotativa</option>
+                  <option value="PERSONALIZADA">Personalizada</option>
+                </select>
+              </div>
+              <div className="flex items-end pb-1">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.ativo}
+                    onChange={(e) => setForm({ ...form, ativo: e.target.checked })}
+                    className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Escala ativa</span>
+                </label>
+              </div>
             </div>
+
+            {(form.tipo === 'FIXA' || form.tipo === 'ROTATIVA') && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Dias de trabalho</label>
+                  <input type="number" min={1} max={7} value={form.dias_trabalho} onChange={(e) => setForm({ ...form, dias_trabalho: Number(e.target.value) })} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Dias de folga</label>
+                  <input type="number" min={1} max={7} value={form.dias_folga} onChange={(e) => setForm({ ...form, dias_folga: Number(e.target.value) })} className={inputClass} />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Descrição (opcional)</label>
+              <input type="text" value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} className={inputClass} placeholder="Ex: Segunda a Sexta trabalho, Sábado e Domingo folga" />
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Dias da semana</label>
               <div className="flex flex-wrap gap-2">
@@ -653,13 +752,15 @@ const AdminSchedules: React.FC = () => {
                 ))}
               </div>
             </div>
+
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Horário</label>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Horário padrão</label>
               <select value={form.shift_id} onChange={(e) => setForm({ ...form, shift_id: e.target.value })} className={inputClass}>
                 <option value="">Nenhum</option>
                 {shifts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
+
             <div className="flex gap-3 pt-2">
               <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium">Cancelar</button>
               <button type="button" onClick={handleSave} disabled={saving} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50">Salvar</button>

@@ -67,6 +67,7 @@ const ADMIN_ITEMS = [
   { label: 'Monitoramento', path: '/admin/monitoring', icon: Activity },
   { label: 'Escalas', path: '/admin/schedules', icon: Calendar },
   { label: 'Horários', path: '/admin/shifts', icon: Clock },
+  { label: 'Vinculação Jornada', path: '/admin/colaborador-jornada', icon: Users },
   { label: 'Empresa', path: '/admin/company', icon: Building },
   { label: 'Relatórios', path: '/admin/reports', icon: FileBarChart },
   { label: 'Banco de Horas', path: '/admin/bank-hours', icon: Scale },

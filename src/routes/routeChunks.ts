@@ -18,6 +18,7 @@ export const ROUTE_LOADERS = {
   '/admin/monitoring': () => import('../pages/admin/Monitoring'),
   '/admin/schedules': () => import('../pages/admin/Schedules'),
   '/admin/shifts': () => import('../pages/admin/Shifts'),
+  '/admin/colaborador-jornada': () => import('../pages/admin/ColaboradorJornada'),
   '/admin/departments': () => import('../pages/Departments'),
   '/admin/job-titles': () => import('../pages/admin/JobTitles'),
   '/admin/estruturas': () => import('../pages/admin/Estruturas'),

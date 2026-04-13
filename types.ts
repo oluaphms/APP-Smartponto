@@ -304,6 +304,72 @@ export interface TipoMarcacaoConfig {
   toleranciaEspecial?: { entrada: number; saida: number }[];
 }
 
+/** Tipo de escala */
+export type TipoEscala = 'FIXA' | 'ROTATIVA' | 'PERSONALIZADA';
+
+/** Tipo de dia na escala */
+export type TipoDiaEscala = 'TRABALHO' | 'FOLGA';
+
+/** Horário de trabalho completo */
+export interface Horario {
+  id: string;
+  companyId?: string;
+  numero?: string;
+  nome: string;
+  descricao?: string;
+  horaEntrada: string;
+  horaSaida: string;
+  intervaloInicio?: string;
+  intervaloFim?: string;
+  cargaHorariaMinutos?: number;
+  toleranciaEntrada: number;
+  toleranciaSaida: number;
+  tipoJornada: 'fixed' | 'flexible' | '6x1' | '5x2' | '12x36' | '24x72' | 'custom';
+  turnoNoturno: boolean;
+  ativo: boolean;
+  config?: {
+    weekly_schedule?: WeeklyScheduleDay[];
+    dsr?: DSRConfig;
+    extras?: ExtrasConfig;
+    tipoMarcacao?: TipoMarcacaoConfig;
+  };
+}
+
+/** Escala de trabalho completa */
+export interface Escala {
+  id: string;
+  companyId?: string;
+  nome: string;
+  tipo: TipoEscala;
+  diasTrabalho: number;
+  diasFolga: number;
+  descricao?: string;
+  diasSemana?: number[];
+  horarioPadraoId?: string;
+  ativo: boolean;
+}
+
+/** Dia detalhado da escala */
+export interface EscalaDia {
+  id: string;
+  escalaId: string;
+  diaSemana: number;
+  tipo: TipoDiaEscala;
+  horarioId?: string;
+}
+
+/** Vinculação de colaborador com jornada */
+export interface ColaboradorJornada {
+  id: string;
+  colaboradorId: string;
+  companyId: string;
+  horarioId?: string;
+  escalaId?: string;
+  dataInicio: string;
+  dataFim?: string;
+  ativo: boolean;
+}
+
 // Novos tipos de Log e Monitoramento
 export enum LogSeverity {
   INFO = 'info',
