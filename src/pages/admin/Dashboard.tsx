@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
-import { db, isSupabaseConfigured } from '../../services/supabaseClient';
+import { db, checkSupabaseConfigured } from '../../services/supabaseClient';
 import { LoadingState } from '../../../components/UI';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { i18n } from '../../../lib/i18n';
@@ -52,7 +52,7 @@ const AdminDashboard: React.FC = () => {
   const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !checkSupabaseConfigured()) return;
 
     const load = async () => {
       setLoadingData(true);

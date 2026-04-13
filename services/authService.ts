@@ -11,6 +11,7 @@ import {
   db,
   getUserProfileStorage,
   isSupabaseConfigured,
+  checkSupabaseConfigured,
   supabase,
   DB_SELECT_TIMEOUT_MS,
 } from './supabaseClient';
@@ -908,8 +909,8 @@ class AuthService {
 
   /** Implementação interna de getCurrentUser (sem timeout). */
   private async getCurrentUserResolved(): Promise<User | null> {
-    // Verificar se Supabase está configurado antes de tentar
-    if (!isSupabaseConfigured) {
+    // Verificar se Supabase está configurado antes de tentar (usando verificação dinâmica)
+    if (!checkSupabaseConfigured()) {
       console.warn('Supabase not configured - returning null user');
       try {
         const stored = readCurrentUserFromProfileStore();

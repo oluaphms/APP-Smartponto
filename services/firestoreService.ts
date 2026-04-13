@@ -5,16 +5,11 @@
  * Mantém compatibilidade com localStorage como fallback
  */
 
-import { db, storage, supabase } from './supabaseClient';
+import { db, storage, supabase, checkSupabaseConfigured } from './supabaseClient';
 import { TimeRecord, Company, User, EmployeeSummary, CompanyKPIs } from '../types';
 
-// Verifica se Supabase está configurado
-const isSupabaseConfigured = (): boolean => {
-  return !!(
-    import.meta.env.VITE_SUPABASE_URL &&
-    import.meta.env.VITE_SUPABASE_ANON_KEY
-  );
-};
+// Verifica se Supabase está configurado (usa verificação dinâmica do cliente)
+const isSupabaseConfigured = (): boolean => checkSupabaseConfigured();
 
 // Converte TimeRecord para formato Supabase
 const timeRecordToSupabase = (record: TimeRecord): any => {

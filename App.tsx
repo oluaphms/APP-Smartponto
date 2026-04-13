@@ -18,6 +18,7 @@ import { queryCache } from './src/services/queryCache';
 import {
   auth,
   isSupabaseConfigured,
+  checkSupabaseConfigured,
   testSupabaseConnection,
   resetSession,
   clearLocalAuthSession,
@@ -200,7 +201,7 @@ const AppMain: React.FC = () => {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(() => {
-    if (!isSupabaseConfigured) return false;
+    if (!checkSupabaseConfigured()) return false;
     return readCachedUser() === null;
   });
   const [company, setCompany] = useState<Company | null>(null);
@@ -282,8 +283,8 @@ const AppMain: React.FC = () => {
           }
         }, INIT_APP_MAX_MS);
 
-        // Verificar se Supabase está configurado
-        if (!isSupabaseConfigured) {
+        // Verificar se Supabase está configurado (usando verificação dinâmica)
+        if (!checkSupabaseConfigured()) {
           console.warn('Supabase not configured - app will show login screen');
           if (isMounted) {
             clearTimeout(timeoutId);
@@ -364,7 +365,7 @@ const AppMain: React.FC = () => {
 
     // Observar mudanças no estado de autenticação (apenas se Supabase configurado)
     let unsubscribe: (() => void) | null = null;
-    if (isSupabaseConfigured) {
+    if (checkSupabaseConfigured()) {
       try {
         unsubscribe = authService.onAuthStateChanged((authUser) => {
           if (!isMounted) return;
@@ -773,7 +774,7 @@ const AppMain: React.FC = () => {
 
   // Reconexão automática quando servidor está indisponível (ex.: free tier pausado)
   useEffect(() => {
-    if (!connectionUnavailable || !isSupabaseConfigured) return;
+    if (!connectionUnavailable || !checkSupabaseConfigured()) return;
 
     const interval = setInterval(async () => {
       setIsReconnecting(true);
@@ -1672,7 +1673,7 @@ const AppMain: React.FC = () => {
 };
 
 const App: React.FC = () =>
-  !isSupabaseConfigured ? (
+  !checkSupabaseConfigured() ? (
     <ConfigSupabaseScreen />
   ) : (
     <QueryClientProvider client={queryClient}>

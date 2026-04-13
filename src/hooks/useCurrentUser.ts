@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { User } from '../../types';
 import { authService } from '../../services/authService';
-import { getUserProfileStorage, isSupabaseConfigured } from '../../services/supabase';
+import { getUserProfileStorage, checkSupabaseConfigured } from '../../services/supabase';
 
 /** Alinhado ao tempo de SELECT no Supabase (rede lenta); evita spinner eterno se getCurrentUser demorar. */
 const HYDRATE_TIMEOUT_MS = 32000;
@@ -44,7 +44,7 @@ export function useCurrentUser() {
 
     const hydrate = async () => {
       if (hydratedRef.current) return;
-      if (!isSupabaseConfigured) {
+      if (!checkSupabaseConfigured()) {
         applyStored();
         hydratedRef.current = true;
         return;

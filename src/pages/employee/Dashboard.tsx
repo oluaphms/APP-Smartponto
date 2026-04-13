@@ -3,7 +3,7 @@ import { useNavigate, Navigate } from 'react-router-dom';
 import { Clock, CalendarDays, Activity, Scale, ClipboardList, LogIn, LogOut, FileEdit, FileText, CalendarClock } from 'lucide-react';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
-import { db, isSupabaseConfigured } from '../../services/supabaseClient';
+import { db, checkSupabaseConfigured } from '../../services/supabaseClient';
 import { Button, LoadingState } from '../../../components/UI';
 import { calculateWorkedHours } from '../../utils/timeCalculations';
 import { LogType, PunchMethod } from '../../../types';
@@ -26,7 +26,7 @@ const EmployeeDashboard: React.FC = () => {
   const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !checkSupabaseConfigured()) return;
     const load = async () => {
       setLoadingData(true);
       try {

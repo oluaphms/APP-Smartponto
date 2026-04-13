@@ -113,7 +113,7 @@ const Layout: React.FC<LayoutProps> = ({ user, children, activeTab, setActiveTab
               <button
                 type="button"
                 onClick={() => navigate(user?.role === 'admin' || user?.role === 'hr' ? '/profile' : '/employee/profile')}
-                className="hidden sm:flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-bold text-sm border-2 border-white dark:border-slate-700 hover:ring-2 hover:ring-indigo-500/50 transition-all shrink-0"
+                className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-bold text-sm border-2 border-white dark:border-slate-700 hover:ring-2 hover:ring-indigo-500/50 transition-all shrink-0"
                 aria-label={i18n.t('layout.openProfile')}
                 title={i18n.t('layout.profile')}
               >

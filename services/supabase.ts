@@ -13,8 +13,14 @@ export { resetSession };
 // Exportar o cliente (será null até estar pronto)
 export const supabase = getSupabaseClient();
 
-// Verificar se está configurado
+// Verificar se está configurado (valor do momento do import - para compatibilidade)
 export const isSupabaseConfigured = !!supabase;
+
+// Função para verificar se está configurado em tempo de execução (dinâmico)
+// Use esta função em vez da constante quando precisar de verificação atualizada
+export function checkSupabaseConfigured(): boolean {
+  return !!getSupabaseClient();
+}
 
 // Storage para autenticação
 const authStorageEnv = String(import.meta.env?.VITE_SUPABASE_AUTH_STORAGE || '').toLowerCase();

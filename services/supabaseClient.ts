@@ -6,6 +6,7 @@
 export { 
   supabase, 
   isSupabaseConfigured, 
+  checkSupabaseConfigured,
   getUserProfileStorage, 
   clearCurrentUserFromAllStorages, 
   useSessionStorageForAuth,

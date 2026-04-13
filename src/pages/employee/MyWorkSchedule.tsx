@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
-import { db, isSupabaseConfigured } from '../../services/supabaseClient';
+import { db, checkSupabaseConfigured } from '../../services/supabaseClient';
 import { LoadingState } from '../../../components/UI';
 import { i18n } from '../../../lib/i18n';
 import type { WeeklyScheduleDay } from '../../../types';
@@ -84,7 +84,7 @@ const MyWorkSchedule: React.FC = () => {
   const shiftId = user?.shift_id;
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) {
+    if (!user || !checkSupabaseConfigured()) {
       setLoadingData(false);
       return;
     }
