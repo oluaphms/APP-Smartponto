@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { db, isSupabaseConfigured, supabase } from '../../services/supabaseClient';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
@@ -150,74 +150,66 @@ const AdminTimesheet: React.FC = () => {
     setExpandedRows((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // Ref para controlar debounce e evitar múltiplos carregamentos
-  const loadTimeoutRef = useRef<number | null>(null);
+  // Ref para controlar carregamento
   const mountedRef = useRef(true);
-
-  // Função de carregamento de dados com debounce
-  const loadData = useCallback(async (companyId: string, dateFilter: string) => {
-    if (!mountedRef.current) return;
-    setLoadingData(true);
-    try {
-      const [usersRows, recordsRows, departmentsRows, shiftsRows, holidaysRows] = await Promise.all([
-        db.select('users', [{ column: 'company_id', operator: 'eq', value: companyId }]) as Promise<any[]>,
-        db.select('time_records', [
-          { column: 'company_id', operator: 'eq', value: companyId },
-          { column: 'created_at', operator: 'gte', value: dateFilter }
-        ], { column: 'created_at', ascending: false }, 1000) as Promise<any[]>,
-        db.select('departments', [{ column: 'company_id', operator: 'eq', value: companyId }]) as Promise<any[]>,
-        db.select('employee_shift_schedule', [{ column: 'company_id', operator: 'eq', value: companyId }]).catch(() => []) as Promise<any[]>,
-        db.select('feriados', [{ column: 'company_id', operator: 'eq', value: companyId }]).catch(() => []) as Promise<any[]>,
-      ]);
-      
-      if (!mountedRef.current) return;
-      
-      setEmployees((usersRows ?? []).map((u: any) => ({ id: u.id, nome: u.nome || u.email, department_id: u.department_id })));
-      setRecords(recordsRows ?? []);
-      setDepartments((departmentsRows ?? []).map((d: any) => ({ id: d.id, name: d.name })));
-      setShiftSchedules(shiftsRows ?? []);
-      setHolidays((holidaysRows ?? []).map((h: any) => ({
-        id: h.id,
-        date: (h.data || h.date || '').slice(0, 10),
-        name: h.descricao || h.name || 'Feriado',
-      })));
-    } catch (e) {
-      console.error('Erro ao carregar dados:', e);
-    } finally {
-      if (mountedRef.current) {
-        setLoadingData(false);
-      }
-    }
-  }, []);
+  const initialLoadDoneRef = useRef(false);
+  const lastPeriodStartRef = useRef(periodStart);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      if (loadTimeoutRef.current) {
-        clearTimeout(loadTimeoutRef.current);
-      }
     };
   }, []);
 
   useEffect(() => {
     if (!user?.companyId || !isSupabaseConfigured) return;
     
-    // Debounce de 300ms para evitar múltiplos carregamentos
-    if (loadTimeoutRef.current) {
-      clearTimeout(loadTimeoutRef.current);
-    }
-    
-    loadTimeoutRef.current = window.setTimeout(() => {
-      loadData(user.companyId, periodStart);
-    }, 300);
-    
-    return () => {
-      if (loadTimeoutRef.current) {
-        clearTimeout(loadTimeoutRef.current);
+    const loadData = async () => {
+      if (!mountedRef.current) return;
+      setLoadingData(true);
+      try {
+        const [usersRows, recordsRows, departmentsRows, shiftsRows, holidaysRows] = await Promise.all([
+          db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
+          db.select('time_records', [
+            { column: 'company_id', operator: 'eq', value: user.companyId },
+            { column: 'created_at', operator: 'gte', value: periodStart }
+          ], { column: 'created_at', ascending: false }, 1000) as Promise<any[]>,
+          db.select('departments', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
+          db.select('employee_shift_schedule', [{ column: 'company_id', operator: 'eq', value: user.companyId }]).catch(() => []) as Promise<any[]>,
+          db.select('feriados', [{ column: 'company_id', operator: 'eq', value: user.companyId }]).catch(() => []) as Promise<any[]>,
+        ]);
+        
+        if (!mountedRef.current) return;
+        
+        setEmployees((usersRows ?? []).map((u: any) => ({ id: u.id, nome: u.nome || u.email, department_id: u.department_id })));
+        setRecords(recordsRows ?? []);
+        setDepartments((departmentsRows ?? []).map((d: any) => ({ id: d.id, name: d.name })));
+        setShiftSchedules(shiftsRows ?? []);
+        setHolidays((holidaysRows ?? []).map((h: any) => ({
+          id: h.id,
+          date: (h.data || h.date || '').slice(0, 10),
+          name: h.descricao || h.name || 'Feriado',
+        })));
+        initialLoadDoneRef.current = true;
+        lastPeriodStartRef.current = periodStart;
+      } catch (e) {
+        console.error('Erro ao carregar dados:', e);
+      } finally {
+        if (mountedRef.current) {
+          setLoadingData(false);
+        }
       }
     };
-  }, [user?.companyId, periodStart, loadData]);
+    
+    // Carga inicial: imediata. Mudanças de período: com debounce curto
+    if (!initialLoadDoneRef.current) {
+      loadData();
+    } else if (periodStart !== lastPeriodStartRef.current) {
+      const timeoutId = window.setTimeout(loadData, 150);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [user?.companyId, periodStart]);
 
   const filteredRecords = useMemo(() => {
     let list = records;
