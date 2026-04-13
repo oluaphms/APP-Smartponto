@@ -86,15 +86,29 @@ const EmployeesPage: React.FC = () => {
     if (!user || !isSupabaseConfigured) return;
     setIsLoadingData(true);
     try {
+      // Otimização: carregar apenas colunas necessárias
       const [employees, ws, us, depts] = await Promise.all([
         db.select(
           'users',
           [{ column: 'company_id', operator: 'eq', value: user.companyId }],
-          { column: 'created_at', ascending: false },
+          { 
+            columns: 'id, nome, email, role, department_id, preferences, created_at',
+            orderBy: { column: 'created_at', ascending: false },
+            limit: 500,
+          },
         ) as Promise<any[]>,
-        db.select('work_schedules', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
-        db.select('user_schedules', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
-        db.select('departments', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
+        db.select('work_schedules', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+          columns: 'id, name',
+          limit: 200,
+        }) as Promise<any[]>,
+        db.select('user_schedules', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+          columns: 'user_id, schedule_id',
+          limit: 1000,
+        }) as Promise<any[]>,
+        db.select('departments', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+          columns: 'id, name',
+          limit: 100,
+        }) as Promise<any[]>,
       ]);
 
       const empList = employees ?? [];

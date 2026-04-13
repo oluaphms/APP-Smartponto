@@ -41,7 +41,11 @@ const AdminEstruturas: React.FC = () => {
   const loadUsers = async () => {
     if (!user?.companyId || !isSupabaseConfigured) return;
     try {
-      const data = (await db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }])) as any[];
+      // Otimização: carregar apenas colunas necessárias
+      const data = (await db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+        columns: 'id, nome, full_name, email',
+        limit: 500,
+      })) as any[];
       setUsers((data ?? []).map((u: any) => ({
         id: u.id,
         nome: u.nome || u.full_name || u.email || u.id,
@@ -58,7 +62,11 @@ const AdminEstruturas: React.FC = () => {
     }
     setLoadingData(true);
     try {
-      const estruturasData = (await db.select('estruturas', [{ column: 'company_id', operator: 'eq', value: user.companyId }])) as any[];
+      // Otimização: carregar apenas colunas necessárias
+      const estruturasData = (await db.select('estruturas', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+        columns: 'id, codigo, descricao, parent_id, company_id, created_at',
+        limit: 200,
+      })) as any[];
       const list: EstruturaRow[] = (estruturasData ?? []).map((r: any) => ({
         id: r.id,
         codigo: r.codigo || '',

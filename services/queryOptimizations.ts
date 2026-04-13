@@ -344,6 +344,150 @@ export async function getRecordsByIds(recordIds: string[]) {
 }
 
 // ============================================================================
+// ACTIVITY LOGS QUERIES
+// ============================================================================
+
+/**
+ * ❌ RUIM: SELECT * FROM activity_logs
+ * ✅ BOM: SELECT id, employee_id, app_name, url, duration, timestamp
+ */
+export const activityLogsQueries = {
+  async getByCompany(companyId: string, limit = 100, offset = 0) {
+    return getClient()
+      .from('activity_logs')
+      .select('id, employee_id, app_name, url, duration, timestamp, productivity_tag')
+      .eq('company_id', companyId)
+      .order('timestamp', { ascending: false })
+      .range(offset, offset + limit - 1);
+  },
+
+  async getByEmployee(employeeId: string, limit = 50, offset = 0) {
+    return getClient()
+      .from('activity_logs')
+      .select('id, app_name, url, duration, timestamp, productivity_tag')
+      .eq('employee_id', employeeId)
+      .order('timestamp', { ascending: false })
+      .range(offset, offset + limit - 1);
+  },
+
+  async countByCompany(companyId: string) {
+    return getClient()
+      .from('activity_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId);
+  },
+};
+
+// ============================================================================
+// ALERTS QUERIES
+// ============================================================================
+
+export const alertsQueries = {
+  async getByCompany(companyId: string, limit = 100, offset = 0) {
+    return getClient()
+      .from('alerts')
+      .select('id, employee_id, type, description, severity, created_at, resolved')
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+  },
+
+  async getUnresolved(companyId: string, limit = 50) {
+    return getClient()
+      .from('alerts')
+      .select('id, employee_id, type, description, severity, created_at')
+      .eq('company_id', companyId)
+      .eq('resolved', false)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+  },
+
+  async countUnresolved(companyId: string) {
+    return getClient()
+      .from('alerts')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .eq('resolved', false);
+  },
+};
+
+// ============================================================================
+// PROJECTS QUERIES
+// ============================================================================
+
+export const projectsQueries = {
+  async getByCompany(companyId: string, limit = 50, offset = 0) {
+    return getClient()
+      .from('projects')
+      .select('id, name, description, status, created_at')
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+  },
+
+  async getProjectMembers(projectId: string) {
+    return getClient()
+      .from('project_members')
+      .select('id, user_id, role')
+      .eq('project_id', projectId);
+  },
+
+  async getProjectTasks(projectId: string, limit = 100) {
+    return getClient()
+      .from('project_tasks')
+      .select('id, title, status, assignee_id, due_date')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+  },
+};
+
+// ============================================================================
+// DEPARTMENTS QUERIES
+// ============================================================================
+
+export const departmentsQueries = {
+  async getByCompany(companyId: string) {
+    return getClient()
+      .from('departments')
+      .select('id, name, description')
+      .eq('company_id', companyId)
+      .order('name', { ascending: true });
+  },
+
+  async getEmployeesByDepartment(departmentId: string, limit = 100) {
+    return getClient()
+      .from('users')
+      .select('id, nome, email, role, status')
+      .eq('department_id', departmentId)
+      .order('nome', { ascending: true })
+      .limit(limit);
+  },
+};
+
+// ============================================================================
+// SCHEDULES QUERIES
+// ============================================================================
+
+export const schedulesQueries = {
+  async getByCompany(companyId: string) {
+    return getClient()
+      .from('work_schedules')
+      .select('id, name, description')
+      .eq('company_id', companyId)
+      .order('name', { ascending: true });
+  },
+
+  async getUserSchedule(userId: string) {
+    return getClient()
+      .from('user_schedules')
+      .select('id, schedule_id, work_schedules(id, name)')
+      .eq('user_id', userId)
+      .single();
+  },
+};
+
+// ============================================================================
 // EXPORT SUMMARY
 // ============================================================================
 

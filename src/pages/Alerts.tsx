@@ -43,9 +43,17 @@ const AlertsPage: React.FC = () => {
       setIsLoadingData(true);
       setError(null);
       try {
+        // Otimização: carregar apenas colunas necessárias e limitar registros
         const [alertRows, employeeRows] = await Promise.all([
-          db.select('alerts', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
-          db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
+          db.select('alerts', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+            columns: 'id, employee_id, type, description, severity, created_at, resolved',
+            orderBy: { column: 'created_at', ascending: false },
+            limit: 300,
+          }) as Promise<any[]>,
+          db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+            columns: 'id, nome, email',
+            limit: 500,
+          }) as Promise<any[]>,
         ]);
 
         const empList: EmployeeRow[] =

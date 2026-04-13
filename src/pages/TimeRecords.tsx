@@ -43,10 +43,12 @@ const TimeRecordsPage: React.FC = () => {
           filters.push({ column: 'created_at', operator: 'lte', value: `${dateTo}T23:59:59` });
         }
 
+        // Otimização: carregar apenas colunas necessárias com limite
         const res =
-          (await db.select('time_records', filters, {
-            column: 'created_at',
-            ascending: false,
+          (await db.select('time_records', filters as any, {
+            columns: 'id, created_at, type, location, latitude, longitude, device_id',
+            orderBy: { column: 'created_at', ascending: false },
+            limit: 200,
           })) ?? [];
 
         setRows(

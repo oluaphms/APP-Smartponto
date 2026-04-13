@@ -48,12 +48,20 @@ const RealTimeInsightsPage: React.FC = () => {
       setIsLoadingData(true);
       setError(null);
       try {
+        // Otimização: carregar apenas colunas necessárias
         const [sessionsRows, employeeRows, projectRows] = await Promise.all([
-          db.select('activity_sessions', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<
-            any[]
-          >,
-          db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
-          db.select('projects', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
+          db.select('activity_sessions', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+            columns: 'id, employee_id, status, current_activity, active_time, idle_time, current_project_id',
+            limit: 200,
+          }) as Promise<any[]>,
+          db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+            columns: 'id, nome, email',
+            limit: 500,
+          }) as Promise<any[]>,
+          db.select('projects', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+            columns: 'id, name',
+            limit: 200,
+          }) as Promise<any[]>,
         ]);
 
         const empList: EmployeeRow[] =

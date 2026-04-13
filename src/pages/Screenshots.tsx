@@ -45,10 +45,21 @@ const ScreenshotsPage: React.FC = () => {
       setIsLoadingData(true);
       setError(null);
       try {
+        // Otimização: carregar apenas colunas necessárias e limitar registros
         const [shotRows, employeeRows, projectRows] = await Promise.all([
-          db.select('screenshots', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
-          db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
-          db.select('projects', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
+          db.select('screenshots', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+            columns: 'id, employee_id, image_url, captured_at, blurred, project_id',
+            orderBy: { column: 'captured_at', ascending: false },
+            limit: 100,
+          }) as Promise<any[]>,
+          db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+            columns: 'id, nome, email',
+            limit: 500,
+          }) as Promise<any[]>,
+          db.select('projects', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+            columns: 'id, name',
+            limit: 200,
+          }) as Promise<any[]>,
         ]);
 
         const empList: EmployeeRow[] =

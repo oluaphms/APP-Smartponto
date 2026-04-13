@@ -49,11 +49,16 @@ const RequestsPage: React.FC = () => {
         if (!isAdminView) {
           filters.push({ column: 'user_id', operator: 'eq', value: user.id });
         }
+        // Otimização: carregar apenas colunas necessárias com limite
         const res =
           (await db.select(
             'requests',
-            filters,
-            { column: 'created_at', ascending: false },
+            filters as any,
+            { 
+              columns: 'id, type, status, reason, created_at, user_id',
+              orderBy: { column: 'created_at', ascending: false },
+              limit: 200,
+            },
           )) ?? [];
 
         setRows(

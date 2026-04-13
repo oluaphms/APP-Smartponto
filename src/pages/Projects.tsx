@@ -54,15 +54,25 @@ const ProjectsPage: React.FC = () => {
       setIsLoadingData(true);
       setError(null);
       try {
+        // Otimização: carregar apenas colunas necessárias
         const [projectRows, memberRows, taskRows, employeeRows] = await Promise.all([
-          db.select('projects', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
-          db.select('project_members', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<
-            any[]
-          >,
-          db.select('project_tasks', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<
-            any[]
-          >,
-          db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
+          db.select('projects', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+            columns: 'id, name, description, status, created_at',
+            orderBy: { column: 'created_at', ascending: false },
+            limit: 100,
+          }) as Promise<any[]>,
+          db.select('project_members', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+            columns: 'id, project_id, user_id',
+            limit: 1000,
+          }) as Promise<any[]>,
+          db.select('project_tasks', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+            columns: 'id, project_id, status',
+            limit: 1000,
+          }) as Promise<any[]>,
+          db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+            columns: 'id, nome, email',
+            limit: 500,
+          }) as Promise<any[]>,
         ]);
 
         const empList: EmployeeRow[] =

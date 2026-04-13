@@ -30,7 +30,12 @@ const EmployeeDashboard: React.FC = () => {
     const load = async () => {
       setLoadingData(true);
       try {
-        const rows = (await db.select('time_records', [{ column: 'user_id', operator: 'eq', value: user.id }], { column: 'created_at', ascending: false }, 500)) as any[];
+        // Otimização: carregar apenas colunas necessárias
+        const rows = (await db.select('time_records', [{ column: 'user_id', operator: 'eq', value: user.id }], {
+          columns: 'id, user_id, company_id, type, method, created_at',
+          orderBy: { column: 'created_at', ascending: false },
+          limit: 200,
+        })) as any[];
         const today = new Date().toISOString().slice(0, 10);
         const todayList = (rows ?? []).filter((r: any) => (r.created_at || '').slice(0, 10) === today);
         const now = new Date();
@@ -90,7 +95,11 @@ const EmployeeDashboard: React.FC = () => {
         }
 
         try {
-          const reqs = (await db.select('requests', [{ column: 'user_id', operator: 'eq', value: user.id }])) as any[];
+          // Otimização: carregar apenas colunas necessárias
+          const reqs = (await db.select('requests', [{ column: 'user_id', operator: 'eq', value: user.id }], {
+            columns: 'id, status',
+            limit: 100,
+          })) as any[];
           const pending = (reqs ?? []).filter((r: any) => (r.status || '').toLowerCase() === 'pending' || (r.status || '').toLowerCase() === 'pendente');
           setPendingRequests(pending.length);
         } catch {
