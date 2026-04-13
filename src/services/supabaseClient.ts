@@ -15,11 +15,10 @@ import { SupabaseClient, createClient } from '@supabase/supabase-js';
  */
 
 import { db, auth, storage, isSupabaseConfigured, checkSupabaseConfigured } from '../../services/supabaseClient';
+import { getSupabaseClient } from '../lib/supabaseClient';
 
-// Exporta o client principal já existente para manter uma única fonte de verdade
-export const supabase: SupabaseClient | null = isSupabaseConfigured
-  ? (db as any).select as any
-  : null;
+// Exporta o client principal (com método .channel() para Realtime)
+export const supabase: SupabaseClient | null = getSupabaseClient();
 
 export { db, auth, storage, isSupabaseConfigured, checkSupabaseConfigured, SupabaseClient, createClient };
 
