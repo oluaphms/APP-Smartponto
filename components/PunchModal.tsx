@@ -580,8 +580,8 @@ const PunchModal: React.FC<PunchModalProps> = ({ user, type, onClose, onConfirm,
     // Biometric check
     if (method === PunchMethod.BIOMETRIC && !biometricVerified) return false;
 
-    // Location check for non-manual and non-biometric methods
-    if (method !== PunchMethod.MANUAL && method !== PunchMethod.BIOMETRIC && (!location || !location.lat)) return false;
+    // Location check - OBRIGATÓRIA para TODOS os métodos (foto, GPS, biométrico, manual)
+    if (!location || !location.lat) return false;
 
     return true;
   }, [company, photoRequired, isPhotoValid, method, justification, location, biometricVerified]);
@@ -603,8 +603,9 @@ const PunchModal: React.FC<PunchModalProps> = ({ user, type, onClose, onConfirm,
       return;
     }
 
-    if (method !== PunchMethod.MANUAL && method !== PunchMethod.BIOMETRIC && (!location || !location.lat)) {
-      setError("Localização não identificada. Verifique seu GPS.");
+    // Localização OBRIGATÓRIA para TODOS os métodos (foto, GPS, biométrico, manual)
+    if (!location || !location.lat) {
+      setError("Localização não identificada. Verifique seu GPS. Todos os registros de ponto requerem localização.");
       return;
     }
 

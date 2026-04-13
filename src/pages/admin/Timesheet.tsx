@@ -602,7 +602,7 @@ const AdminTimesheet: React.FC = () => {
     }
   };
 
-  const handleAddTimeRecord = async (data: { user_id: string; created_at: string; type: string; manual_reason?: string }) => {
+  const handleAddTimeRecord = async (data: { user_id: string; created_at: string; type: string; manual_reason?: string; latitude?: number; longitude?: number }) => {
     if (!user || !supabase) return;
     try {
       // Chamar RPC insert_time_record_for_user com bypass de RLS
@@ -614,6 +614,8 @@ const AdminTimesheet: React.FC = () => {
         p_source: 'admin',
         p_timestamp: data.created_at,
         p_manual_reason: data.manual_reason || 'Batida adicionada manualmente via Espelho de Ponto',
+        p_latitude: data.latitude ?? null,
+        p_longitude: data.longitude ?? null,
       });
 
       if (error) {

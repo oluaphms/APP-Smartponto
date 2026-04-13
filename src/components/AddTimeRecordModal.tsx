@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, MapPin, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '../../components/UI';
 import { db, isSupabaseConfigured } from '../services/supabaseClient';
 
@@ -38,6 +38,9 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
   });
   const [justificativas, setJustificativas] = useState<JustificativaOption[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [location, setLocation] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen || !companyId || !isSupabaseConfigured) return;
@@ -58,9 +61,46 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
     loadJustificativas();
   }, [isOpen, companyId]);
 
+  // Capturar localização automaticamente ao abrir o modal
+  useEffect(() => {
+    if (!isOpen) return;
+    setLocationError(null);
+    setLocationLoading(true);
+    
+    if (!navigator.geolocation) {
+      setLocationError('Geolocalização não suportada pelo navegador.');
+      setLocationLoading(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocation({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        });
+        setLocationLoading(false);
+        setLocationError(null);
+      },
+      (err) => {
+        console.error('Erro ao obter localização:', err);
+        setLocationError('Não foi possível obter a localização. Verifique as permissões do GPS.');
+        setLocationLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  }, [isOpen]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.user_id || !form.date || !form.time) return;
+
+    // Verificar localização obrigatória
+    if (!location) {
+      setLocationError('Localização obrigatória. Todos os registros de ponto devem ter localização.');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -74,6 +114,8 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
         created_at,
         type: form.type,
         manual_reason: reason,
+        latitude: location.lat,
+        longitude: location.lng,
       });
       setForm({
         user_id: userId || '',
@@ -83,6 +125,7 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
         manual_reason: '',
         justificativa_id: '',
       });
+      setLocation(null);
       onClose();
     } finally {
       setSubmitting(false);
@@ -203,10 +246,76 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
               </p>
             </div>
 
+            {/* Indicador de Localização */}
+            <div className={`p-3 rounded-lg border flex items-center gap-3 ${
+              location 
+                ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' 
+                : locationError 
+                  ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                  : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+            }`}>
+              {locationLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-slate-500" />
+                  <span className="text-xs text-slate-600 dark:text-slate-400">Obtendo localização...</span>
+                </>
+              ) : location ? (
+                <>
+                  <MapPin className="w-4 h-4 text-green-600 dark:text-green-400" />
+                  <div className="flex-1">
+                    <span className="text-xs font-medium text-green-700 dark:text-green-300">
+                      Localização capturada
+                    </span>
+                    <p className="text-[10px] text-green-600 dark:text-green-400">
+                      {location.lat.toFixed(5)}, {location.lng.toFixed(5)} (±{Math.round(location.accuracy)}m)
+                    </p>
+                  </div>
+                </>
+              ) : locationError ? (
+                <>
+                  <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
+                  <div className="flex-1">
+                    <span className="text-xs font-medium text-red-700 dark:text-red-300">
+                      Erro na localização
+                    </span>
+                    <p className="text-[10px] text-red-600 dark:text-red-400">{locationError}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setLocationLoading(true);
+                      setLocationError(null);
+                      navigator.geolocation.getCurrentPosition(
+                        (pos) => {
+                          setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy });
+                          setLocationLoading(false);
+                        },
+                        () => {
+                          setLocationError('Falha ao obter localização.');
+                          setLocationLoading(false);
+                        },
+                        { enableHighAccuracy: true, timeout: 15000 }
+                      );
+                    }}
+                    className="text-xs"
+                  >
+                    Tentar novamente
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <MapPin className="w-4 h-4 text-slate-400" />
+                  <span className="text-xs text-slate-500">Aguardando localização...</span>
+                </>
+              )}
+            </div>
+
             <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
               <p className="text-xs text-amber-700 dark:text-amber-300">
                 <strong>Atenção:</strong> Esta batida será registrada como manual e ficará destacada no espelho de ponto.
-                Certifique-se de que o motivo está correto.
+                Certifique-se de que o motivo está correto. <strong>A localização é obrigatória.</strong>
               </p>
             </div>
           </div>
@@ -226,7 +335,7 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
               type="submit"
               size="sm"
               className="flex-1"
-              disabled={submitting || !form.user_id || !form.date || !form.time}
+              disabled={submitting || !form.user_id || !form.date || !form.time || !location}
             >
               {submitting ? 'Adicionando...' : 'Adicionar Batida'}
             </Button>
