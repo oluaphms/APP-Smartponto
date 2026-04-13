@@ -2,7 +2,7 @@
  * Serviço de evidência de registro e alertas de fraude (SmartPonto Antifraude).
  */
 
-import { supabase, db, isSupabaseConfigured } from './supabaseClient';
+import { supabase, db, checkSupabaseConfigured } from '../../services/supabaseClient';
 
 export interface SavePunchEvidenceParams {
   timeRecordId: string;

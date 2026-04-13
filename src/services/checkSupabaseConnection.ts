@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { supabase, checkSupabaseConfigured } from '../../services/supabaseClient';
 
 /**
  * Verifica se a conexão com o Supabase está ativa (leitura de tabela employees).

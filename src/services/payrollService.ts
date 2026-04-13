@@ -7,7 +7,7 @@
  * 13º, encargos patronais etc. — apenas somatórios a partir de lançamentos informados.
  */
 
-import { db, isSupabaseConfigured } from './supabaseClient';
+import { db, checkSupabaseConfigured } from '../../services/supabaseClient';
 
 export type EventoNatureza = 'provento' | 'desconto' | 'informativo';
 
@@ -32,7 +32,7 @@ export async function consolidarFolhaPeriodo(
   year: number,
   month: number,
 ): Promise<ConsolidarFolhaResult> {
-  if (!isSupabaseConfigured) throw new Error('Supabase não configurado.');
+  if (!checkSupabaseConfigured()) throw new Error('Supabase não configurado.');
   const { start, end } = monthRange(year, month);
 
   const periodos = (await db.select('folha_pagamento_periodos', [

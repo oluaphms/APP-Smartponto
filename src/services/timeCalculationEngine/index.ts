@@ -3,7 +3,7 @@
  * Fluxo: time_records → punchInterpreter → escala → jornada → banco de horas
  */
 
-import { db, isSupabaseConfigured } from '../supabaseClient';
+import { db, checkSupabaseConfigured } from '../../../services/supabaseClient';
 import { interpretPunchSequence } from '../punchInterpreter';
 
 export interface WorkdayCalculationResult {

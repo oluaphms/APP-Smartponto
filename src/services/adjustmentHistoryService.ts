@@ -3,7 +3,7 @@
  * Responsável por consultar e exibir o histórico de mudanças
  */
 
-import { supabase, isSupabaseConfigured } from '../../services/supabase';
+import { supabase, checkSupabaseConfigured } from '../../services/supabase';
 import { db } from '../../services/supabaseClient';
 
 export interface AdjustmentHistoryEntry {
@@ -25,7 +25,7 @@ export const AdjustmentHistoryService = {
    * Obtém o histórico completo de um ajuste
    */
   async getAdjustmentHistory(adjustmentId: string): Promise<AdjustmentHistoryEntry[]> {
-    if (!isSupabaseConfigured || !supabase) return [];
+    if (!checkSupabaseConfigured() || !supabase) return [];
 
     try {
       const { data, error } = await supabase
@@ -35,147 +35,103 @@ export const AdjustmentHistoryService = {
         .order('changed_at', { ascending: true });
 
       if (error) {
-        console.error('[AdjustmentHistory] Erro ao buscar histórico:', error.message);
+        console.error('[AdjustmentHistoryService] Error fetching history:', error);
         return [];
       }
 
-      return (data ?? []) as AdjustmentHistoryEntry[];
-    } catch (e) {
-      console.error('[AdjustmentHistory] Erro:', e);
+      const entries: AdjustmentHistoryEntry[] = data || [];
+
+      // Enriquecer com nomes de usuários
+      const userIds = [...new Set(entries.map((e) => e.changed_by).filter(Boolean))];
+      if (userIds.length > 0) {
+        const { data: users } = await supabase.from('users').select('id, nome').in('id', userIds);
+        const userMap = new Map((users || []).map((u: any) => [u.id, u.nome]));
+        entries.forEach((e) => {
+          if (e.changed_by) {
+            e.changed_by_name = userMap.get(e.changed_by) || e.changed_by;
+          }
+        });
+      }
+
+      return entries;
+    } catch (err) {
+      console.error('[AdjustmentHistoryService] Unexpected error:', err);
       return [];
     }
   },
 
   /**
-   * Obtém histórico de todos os ajustes de uma empresa
+   * Obtém o histórico de múltiplos ajustes de uma vez
    */
-  async getCompanyAdjustmentHistory(
-    companyId: string,
-    limit: number = 100,
-    offset: number = 0
-  ): Promise<AdjustmentHistoryEntry[]> {
-    if (!isSupabaseConfigured || !supabase) return [];
+  async getHistoryForAdjustments(adjustmentIds: string[]): Promise<AdjustmentHistoryEntry[]> {
+    if (!checkSupabaseConfigured() || !supabase) return [];
 
     try {
       const { data, error } = await supabase
         .from('time_adjustments_history')
         .select('*')
-        .eq('company_id', companyId)
-        .order('changed_at', { ascending: false })
-        .range(offset, offset + limit - 1);
+        .in('adjustment_id', adjustmentIds)
+        .order('changed_at', { ascending: true });
 
       if (error) {
-        console.error('[AdjustmentHistory] Erro ao buscar histórico da empresa:', error.message);
+        console.error('[AdjustmentHistoryService] Error fetching batch history:', error);
         return [];
       }
 
-      return (data ?? []) as AdjustmentHistoryEntry[];
-    } catch (e) {
-      console.error('[AdjustmentHistory] Erro:', e);
+      const entries: AdjustmentHistoryEntry[] = data || [];
+
+      // Enriquecer com nomes de usuários
+      const userIds = [...new Set(entries.map((e) => e.changed_by).filter(Boolean))];
+      if (userIds.length > 0) {
+        const { data: users } = await supabase.from('users').select('id, nome').in('id', userIds);
+        const userMap = new Map((users || []).map((u: any) => [u.id, u.nome]));
+        entries.forEach((e) => {
+          if (e.changed_by) {
+            e.changed_by_name = userMap.get(e.changed_by) || e.changed_by;
+          }
+        });
+      }
+
+      return entries;
+    } catch (err) {
+      console.error('[AdjustmentHistoryService] Unexpected batch error:', err);
       return [];
     }
   },
 
   /**
-   * Obtém histórico de um colaborador
+   * Registra uma nova entrada no histórico
    */
-  async getUserAdjustmentHistory(
-    userId: string,
-    limit: number = 50
-  ): Promise<AdjustmentHistoryEntry[]> {
-    if (!isSupabaseConfigured || !supabase) return [];
-
-    try {
-      const { data, error } = await supabase
-        .from('time_adjustments_history')
-        .select(`
-          *,
-          adjustment_id (
-            user_id
-          )
-        `)
-        .eq('adjustment_id.user_id', userId)
-        .order('changed_at', { ascending: false })
-        .limit(limit);
-
-      if (error) {
-        console.error('[AdjustmentHistory] Erro ao buscar histórico do usuário:', error.message);
-        return [];
-      }
-
-      return (data ?? []) as AdjustmentHistoryEntry[];
-    } catch (e) {
-      console.error('[AdjustmentHistory] Erro:', e);
-      return [];
-    }
-  },
-
-  /**
-   * Formata entrada de histórico para exibição
-   */
-  formatHistoryEntry(entry: AdjustmentHistoryEntry): string {
-    const date = new Date(entry.changed_at).toLocaleString('pt-BR');
-    const status = `${entry.old_status ?? 'novo'} → ${entry.new_status}`;
-    const reason = entry.reason ? ` (${entry.reason})` : '';
-    return `${date}: ${status}${reason}`;
-  },
-
-  /**
-   * Obtém resumo de mudanças (quantas aprovações, rejeições, etc)
-   */
-  async getAdjustmentStats(companyId: string): Promise<{
-    total_changes: number;
-    approvals: number;
-    rejections: number;
-    pending_to_approved: number;
-    pending_to_rejected: number;
-  }> {
-    if (!isSupabaseConfigured || !supabase) {
-      return {
-        total_changes: 0,
-        approvals: 0,
-        rejections: 0,
-        pending_to_approved: 0,
-        pending_to_rejected: 0,
-      };
+  async recordHistory(
+    adjustmentId: string,
+    oldStatus: string | null,
+    newStatus: string,
+    reason: string | null,
+    details: Record<string, any> | null,
+    companyId: string | null
+  ): Promise<void> {
+    if (!checkSupabaseConfigured() || !supabase) {
+      console.warn('[AdjustmentHistoryService] Supabase not configured, skipping history record');
+      return;
     }
 
     try {
-      const { data, error } = await supabase
-        .from('time_adjustments_history')
-        .select('*')
-        .eq('company_id', companyId);
+      const { error } = await supabase.from('time_adjustments_history').insert({
+        adjustment_id: adjustmentId,
+        old_status: oldStatus,
+        new_status: newStatus,
+        reason,
+        details,
+        company_id: companyId,
+        changed_by: (await supabase.auth.getUser()).data.user?.id ?? null,
+        changed_at: new Date().toISOString(),
+      });
 
       if (error) {
-        console.error('[AdjustmentHistory] Erro ao calcular stats:', error.message);
-        return {
-          total_changes: 0,
-          approvals: 0,
-          rejections: 0,
-          pending_to_approved: 0,
-          pending_to_rejected: 0,
-        };
+        console.error('[AdjustmentHistoryService] Error recording history:', error);
       }
-
-      const entries = (data ?? []) as AdjustmentHistoryEntry[];
-      const stats = {
-        total_changes: entries.length,
-        approvals: entries.filter(e => e.new_status === 'approved').length,
-        rejections: entries.filter(e => e.new_status === 'rejected').length,
-        pending_to_approved: entries.filter(e => e.old_status === 'pending' && e.new_status === 'approved').length,
-        pending_to_rejected: entries.filter(e => e.old_status === 'pending' && e.new_status === 'rejected').length,
-      };
-
-      return stats;
-    } catch (e) {
-      console.error('[AdjustmentHistory] Erro:', e);
-      return {
-        total_changes: 0,
-        approvals: 0,
-        rejections: 0,
-        pending_to_approved: 0,
-        pending_to_rejected: 0,
-      };
+    } catch (err) {
+      console.error('[AdjustmentHistoryService] Unexpected error recording history:', err);
     }
   },
 };

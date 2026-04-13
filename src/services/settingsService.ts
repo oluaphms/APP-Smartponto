@@ -3,7 +3,7 @@
  * Lê e atualiza a tabela global_settings (uma única linha).
  */
 
-import { supabase, checkSupabaseConfigured } from './supabaseClient';
+import { supabase, checkSupabaseConfigured } from '../../services/supabaseClient';
 import type { GlobalSettings, CompanyLocation } from '../types/settings';
 import { DEFAULT_GLOBAL_SETTINGS } from '../types/settings';
 

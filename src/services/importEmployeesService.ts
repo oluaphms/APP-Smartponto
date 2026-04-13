@@ -3,7 +3,7 @@
  * Validação CPF/email, mapeamento de campos, inserção em lote, log de erros.
  */
 
-import { db, supabase, isSupabaseConfigured } from './supabaseClient';
+import { db, supabase, checkSupabaseConfigured } from '../../services/supabaseClient';
 
 export const REQUIRED_FIELDS = ['nome_completo', 'cpf', 'data_admissao'] as const;
 export const TEMPLATE_HEADERS = [
