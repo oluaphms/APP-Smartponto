@@ -1,14 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '../../components/UI';
+import { db, isSupabaseConfigured } from '../services/supabaseClient';
 
 interface AddTimeRecordModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: { user_id: string; created_at: string; type: string; latitude?: number; longitude?: number }) => Promise<void>;
+  onSubmit: (data: { user_id: string; created_at: string; type: string; manual_reason?: string; latitude?: number; longitude?: number }) => Promise<void>;
   userId?: string;
   date?: string;
   employees: { id: string; nome: string }[];
+  companyId?: string;
+}
+
+interface JustificativaOption {
+  id: string;
+  codigo: string;
+  descricao: string;
 }
 
 export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
@@ -18,14 +26,37 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
   userId,
   date,
   employees,
+  companyId,
 }) => {
   const [form, setForm] = useState({
     user_id: userId || '',
     date: date || new Date().toISOString().slice(0, 10),
     time: '09:00',
     type: 'entrada',
+    manual_reason: '',
+    justificativa_id: '',
   });
+  const [justificativas, setJustificativas] = useState<JustificativaOption[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !companyId || !isSupabaseConfigured) return;
+    const loadJustificativas = async () => {
+      try {
+        const rows = await db.select('justificativas', [
+          { column: 'company_id', operator: 'eq', value: companyId }
+        ]) as any[];
+        setJustificativas((rows ?? []).map((r: any) => ({
+          id: r.id,
+          codigo: r.codigo || '',
+          descricao: r.descricao || '',
+        })));
+      } catch (e) {
+        console.error('Erro ao carregar justificativas:', e);
+      }
+    };
+    loadJustificativas();
+  }, [isOpen, companyId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,16 +65,23 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
     setSubmitting(true);
     try {
       const created_at = `${form.date}T${form.time}:00.000Z`;
+      const selectedJustificativa = justificativas.find(j => j.id === form.justificativa_id);
+      const reason = form.manual_reason.trim() || 
+        (selectedJustificativa ? `${selectedJustificativa.codigo} - ${selectedJustificativa.descricao}` : 'Batida adicionada manualmente');
+      
       await onSubmit({
         user_id: form.user_id,
         created_at,
         type: form.type,
+        manual_reason: reason,
       });
       setForm({
         user_id: userId || '',
         date: date || new Date().toISOString().slice(0, 10),
         time: '09:00',
         type: 'entrada',
+        manual_reason: '',
+        justificativa_id: '',
       });
       onClose();
     } finally {
@@ -125,15 +163,50 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
               >
                 <option value="entrada">Entrada</option>
                 <option value="saida">Saída</option>
-                <option value="intervalo_saida">Intervalo (Saída)</option>
-                <option value="intervalo_volta">Intervalo (Volta)</option>
+                <option value="pausa">Pausa (Intervalo)</option>
               </select>
             </div>
 
-            <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-              <p className="text-xs text-blue-700 dark:text-blue-300">
-                <strong>Nota:</strong> Esta batida será registrada como manual. Certifique-se de que o colaborador realmente
-                esqueceu de bater o ponto.
+            {justificativas.length > 0 && (
+              <div>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
+                  Justificativa (opcional)
+                </label>
+                <select
+                  value={form.justificativa_id}
+                  onChange={(e) => setForm((f) => ({ ...f, justificativa_id: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                >
+                  <option value="">Selecione uma justificativa</option>
+                  {justificativas.map((j) => (
+                    <option key={j.id} value={j.id}>
+                      {j.codigo} - {j.descricao}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
+                Motivo da Batida Manual
+              </label>
+              <textarea
+                value={form.manual_reason}
+                onChange={(e) => setForm((f) => ({ ...f, manual_reason: e.target.value }))}
+                placeholder="Ex: Funcionário esqueceu de bater ponto, ajuste de horário, etc."
+                rows={2}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm resize-none"
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Se uma justificativa for selecionada acima e o motivo estiver vazio, será usado o código da justificativa.
+              </p>
+            </div>
+
+            <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                <strong>Atenção:</strong> Esta batida será registrada como manual e ficará destacada no espelho de ponto.
+                Certifique-se de que o motivo está correto.
               </p>
             </div>
           </div>

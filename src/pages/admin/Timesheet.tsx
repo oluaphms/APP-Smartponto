@@ -5,15 +5,22 @@ import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { useToast } from '../../components/ToastProvider';
 import PageHeader from '../../components/PageHeader';
 import { LoadingState, Button } from '../../../components/UI';
-import { FileDown, FileSpreadsheet, Lock, Plus } from 'lucide-react';
+import { FileDown, FileSpreadsheet, Lock, Plus, Pencil } from 'lucide-react';
 import { closeTimesheet } from '../../services/timeProcessingService';
 import { buildDayMirrorSummary } from '../../utils/timesheetMirror';
 import { extractLatLng, reverseGeocode } from '../../utils/reverseGeocode';
 import { ExpandableStreetCell, ExpandableTextCell } from '../../components/ClickableFullContent';
 import { AddTimeRecordModal } from '../../components/AddTimeRecordModal';
 import { ManualRecordModal } from '../../components/ManualRecordModal';
+import { EditTimeRecordModal } from '../../components/EditTimeRecordModal';
 import { LoggingService } from '../../../services/loggingService';
 import { LogSeverity } from '../../../types';
+
+interface HolidayRow {
+  id: string;
+  date: string;
+  name: string;
+}
 
 type DaySummary = {
   date: string;
@@ -135,6 +142,9 @@ const AdminTimesheet: React.FC = () => {
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedManualRecord, setSelectedManualRecord] = useState<{ reason?: string; timestamp?: string; type?: string } | null>(null);
+  const [editingRecord, setEditingRecord] = useState<any | null>(null);
+  const [editingEmployeeName, setEditingEmployeeName] = useState<string>('');
+  const [holidays, setHolidays] = useState<HolidayRow[]>([]);
 
   const toggleExpandedRow = (key: string) => {
     setExpandedRows((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -149,7 +159,7 @@ const AdminTimesheet: React.FC = () => {
         // Isso garante que todos os dados do período selecionado sejam carregados
         const dateFilter = periodStart;
 
-        const [usersRows, recordsRows, departmentsRows, shiftsRows] = await Promise.all([
+        const [usersRows, recordsRows, departmentsRows, shiftsRows, holidaysRows] = await Promise.all([
           db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
           db.select('time_records', [
             { column: 'company_id', operator: 'eq', value: user.companyId },
@@ -157,6 +167,7 @@ const AdminTimesheet: React.FC = () => {
           ], { column: 'created_at', ascending: false }, 2000) as Promise<any[]>,
           db.select('departments', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
           db.select('employee_shift_schedule', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
+          db.select('holidays', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
         ]);
         
         setEmployees((usersRows ?? []).map((u: any) => ({ id: u.id, nome: u.nome || u.email, department_id: u.department_id })));
@@ -183,6 +194,11 @@ const AdminTimesheet: React.FC = () => {
         }
         
         setShiftSchedules(shiftsRows ?? []);
+        setHolidays((holidaysRows ?? []).map((h: any) => ({
+          id: h.id,
+          date: (h.date || '').slice(0, 10),
+          name: h.name || h.descricao || 'Feriado',
+        })));
       } catch (e) {
         console.error(e);
       } finally {
@@ -592,7 +608,7 @@ const AdminTimesheet: React.FC = () => {
     }
   };
 
-  const handleAddTimeRecord = async (data: { user_id: string; created_at: string; type: string }) => {
+  const handleAddTimeRecord = async (data: { user_id: string; created_at: string; type: string; manual_reason?: string }) => {
     if (!user || !supabase) return;
     try {
       // Chamar RPC insert_time_record_for_user com bypass de RLS
@@ -603,7 +619,7 @@ const AdminTimesheet: React.FC = () => {
         p_method: 'admin',
         p_source: 'admin',
         p_timestamp: data.created_at,
-        p_manual_reason: 'Batida adicionada manualmente via Espelho de Ponto',
+        p_manual_reason: data.manual_reason || 'Batida adicionada manualmente via Espelho de Ponto',
       });
 
       if (error) {
@@ -653,6 +669,85 @@ const AdminTimesheet: React.FC = () => {
       console.error('Error adding time record:', err);
       toast.addToast('error', err?.message || 'Erro ao adicionar batida.');
     }
+  };
+
+  const handleUpdateTimeRecord = async (id: string, data: { type: string; created_at: string; manual_reason: string }) => {
+    if (!user || !supabase) return;
+    try {
+      const { error } = await supabase
+        .from('time_records')
+        .update({
+          type: data.type,
+          created_at: data.created_at,
+          is_manual: true,
+          manual_reason: data.manual_reason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      await LoggingService.log({
+        severity: LogSeverity.SECURITY,
+        action: 'ADMIN_UPDATE_TIME_RECORD',
+        userId: user.id,
+        userName: user.nome,
+        companyId: user.companyId,
+        details: { timeRecordId: id, ...data },
+      });
+
+      const recordsRows = (await db.select('time_records', [
+        { column: 'company_id', operator: 'eq', value: user.companyId },
+        { column: 'created_at', operator: 'gte', value: periodStart }
+      ], { column: 'created_at', ascending: false }, 2000)) ?? [];
+      setRecords(recordsRows);
+
+      toast.addToast('success', 'Batida atualizada com sucesso.');
+    } catch (err: any) {
+      console.error('Error updating time record:', err);
+      toast.addToast('error', err?.message || 'Erro ao atualizar batida.');
+    }
+  };
+
+  const handleDeleteTimeRecord = async (id: string) => {
+    if (!user || !supabase) return;
+    try {
+      const { error } = await supabase
+        .from('time_records')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      await LoggingService.log({
+        severity: LogSeverity.SECURITY,
+        action: 'ADMIN_DELETE_TIME_RECORD',
+        userId: user.id,
+        userName: user.nome,
+        companyId: user.companyId,
+        details: { timeRecordId: id },
+      });
+
+      const recordsRows = (await db.select('time_records', [
+        { column: 'company_id', operator: 'eq', value: user.companyId },
+        { column: 'created_at', operator: 'gte', value: periodStart }
+      ], { column: 'created_at', ascending: false }, 2000)) ?? [];
+      setRecords(recordsRows);
+
+      toast.addToast('success', 'Batida excluída com sucesso.');
+    } catch (err: any) {
+      console.error('Error deleting time record:', err);
+      toast.addToast('error', err?.message || 'Erro ao excluir batida.');
+    }
+  };
+
+  const openEditModal = (record: any, employeeName: string) => {
+    setEditingRecord(record);
+    setEditingEmployeeName(employeeName);
+  };
+
+  const isHoliday = (dateStr: string): HolidayRow | undefined => {
+    return holidays.find(h => h.date === dateStr);
   };
 
   if (loading) return <LoadingState message="Carregando..." />;
@@ -755,7 +850,19 @@ const AdminTimesheet: React.FC = () => {
                         {displayGivenNameForColumn(row.userName)}
                       </td>
                       <td className="px-4 py-3 align-top whitespace-nowrap">
-                        <ExpandableTextCell label="Data" value={d} />
+                        {(() => {
+                          const holiday = isHoliday(d);
+                          return (
+                            <div>
+                              <ExpandableTextCell label="Data" value={d} />
+                              {holiday && (
+                                <span className="block text-[10px] text-purple-600 dark:text-purple-400 font-medium mt-0.5" title={holiday.name}>
+                                  🎉 {holiday.name.length > 12 ? holiday.name.slice(0, 12) + '...' : holiday.name}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 tabular-nums max-w-[100px] align-top">
                         <ExpandableTextCell 
@@ -833,22 +940,35 @@ const AdminTimesheet: React.FC = () => {
                                   return (
                                     <div 
                                       key={r.id || `${rowKey}-${when}`} 
-                                      className={`flex items-center gap-3 cursor-pointer p-2 rounded transition-colors whitespace-nowrap overflow-x-auto ${
+                                      className={`flex items-center gap-3 p-2 rounded transition-colors whitespace-nowrap overflow-x-auto ${
                                         isManual 
-                                          ? 'bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30' 
+                                          ? 'bg-amber-50 dark:bg-amber-900/20' 
                                           : 'hover:bg-slate-100 dark:hover:bg-slate-700/30'
                                       }`}
-                                      onClick={() => {
-                                        if (isManual) {
-                                          setSelectedManualRecord({
-                                            reason: r.manual_reason,
-                                            timestamp: r.created_at,
-                                            type: r.type,
-                                          });
-                                        }
-                                      }}
                                     >
-                                      <span className={`font-mono flex-shrink-0 ${isManual ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-slate-500'}`}>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          openEditModal(r, row.userName);
+                                        }}
+                                        className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 flex-shrink-0"
+                                        title="Editar batida"
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                      <span 
+                                        className={`font-mono flex-shrink-0 cursor-pointer ${isManual ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-slate-500'}`}
+                                        onClick={() => {
+                                          if (isManual) {
+                                            setSelectedManualRecord({
+                                              reason: r.manual_reason,
+                                              timestamp: r.created_at,
+                                              type: r.type,
+                                            });
+                                          }
+                                        }}
+                                      >
                                         {when}{isManual ? ' ⚠' : ''}
                                       </span>
                                       <span className={`uppercase text-[11px] px-1.5 py-0.5 rounded flex-shrink-0 ${
@@ -885,11 +1005,82 @@ const AdminTimesheet: React.FC = () => {
         )}
       </div>
 
+      {/* Resumo de Totais */}
+      {!loadingData && buildRows.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-5 print:border-0">
+          <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-4">
+            Resumo do Período
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            {(() => {
+              let totalMinutes = 0;
+              let daysWorked = 0;
+              let absences = 0;
+              let lateEntries = 0;
+              let daysOff = 0;
+              let holidaysCount = 0;
+
+              buildRows.forEach(row => {
+                row.dates.forEach(d => {
+                  const sum = row.byDate.get(d);
+                  if (sum) {
+                    if (sum.isDayOff) daysOff++;
+                    else if (sum.hasAbsence) absences++;
+                    else if (sum.workedHours) {
+                      const match = sum.workedHours.match(/(\d+)h\s*(\d+)m/);
+                      if (match) {
+                        totalMinutes += parseInt(match[1]) * 60 + parseInt(match[2]);
+                        daysWorked++;
+                      }
+                    }
+                    if (sum.hasLateEntry) lateEntries++;
+                  }
+                  if (isHoliday(d)) holidaysCount++;
+                });
+              });
+
+              const totalHours = Math.floor(totalMinutes / 60);
+              const totalMins = totalMinutes % 60;
+
+              return (
+                <>
+                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 text-center">
+                    <p className="text-2xl font-bold text-slate-900 dark:text-white">{totalHours}h {totalMins}m</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Total Trabalhado</p>
+                  </div>
+                  <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-3 text-center">
+                    <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{daysWorked}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Dias Trabalhados</p>
+                  </div>
+                  <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-3 text-center">
+                    <p className="text-2xl font-bold text-red-700 dark:text-red-300">{absences}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Faltas</p>
+                  </div>
+                  <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3 text-center">
+                    <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">{lateEntries}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Atrasos</p>
+                  </div>
+                  <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-3 text-center">
+                    <p className="text-2xl font-bold text-green-700 dark:text-green-300">{daysOff}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Folgas</p>
+                  </div>
+                  <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-3 text-center">
+                    <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">{holidaysCount}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Feriados</p>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
       <AddTimeRecordModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onSubmit={handleAddTimeRecord}
         employees={employees}
+        companyId={user?.companyId}
       />
 
       <ManualRecordModal
@@ -898,6 +1089,18 @@ const AdminTimesheet: React.FC = () => {
         reason={selectedManualRecord?.reason}
         timestamp={selectedManualRecord?.timestamp}
         type={selectedManualRecord?.type}
+      />
+
+      <EditTimeRecordModal
+        isOpen={editingRecord !== null}
+        onClose={() => {
+          setEditingRecord(null);
+          setEditingEmployeeName('');
+        }}
+        onUpdate={handleUpdateTimeRecord}
+        onDelete={handleDeleteTimeRecord}
+        record={editingRecord}
+        employeeName={editingEmployeeName}
       />
     </div>
   );
