@@ -26,12 +26,12 @@ const getClient = () => getSupabaseClientOrThrow();
  * Redução: 5-10MB → 50-100KB (99% redução)
  */
 export const timeRecordsQueries = {
-  // Otimizado: Apenas colunas necessárias
+  // Otimizado: Apenas colunas necessárias (colunas core que sempre existem)
   async getRecordsByUser(userId: string, limit = 50, offset = 0) {
     return getClient()
       .from('time_records')
       .select(
-        'id, user_id, type, method, created_at, location, photo_url, fraud_flags, status, manual_reason'
+        'id, user_id, type, method, created_at, location, status'
       )
       .eq('user_id', userId)
       .order('created_at', { ascending: false })

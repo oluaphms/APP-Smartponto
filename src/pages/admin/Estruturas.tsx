@@ -43,12 +43,12 @@ const AdminEstruturas: React.FC = () => {
     try {
       // Otimização: carregar apenas colunas necessárias
       const data = (await db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
-        columns: 'id, nome, full_name, email',
+        columns: 'id, nome, email',
         limit: 500,
       })) as any[];
       setUsers((data ?? []).map((u: any) => ({
         id: u.id,
-        nome: u.nome || u.full_name || u.email || u.id,
+        nome: u.nome || u.email || u.id,
       })));
     } catch (e) {
       console.error(e);

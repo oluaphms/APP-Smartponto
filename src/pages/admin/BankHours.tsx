@@ -40,9 +40,13 @@ const AdminBankHours: React.FC = () => {
   useEffect(() => {
     if (!user?.companyId || !isSupabaseConfigured) return;
     const load = async () => {
+      // Otimização: carregar apenas colunas necessárias
       const usersRows = await queryCache.getOrFetch(
         `users:${user.companyId}`,
-        () => db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }]) as Promise<any[]>,
+        () => db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
+          columns: 'id, nome, email',
+          limit: 500,
+        }) as Promise<any[]>,
         TTL.NORMAL,
       );
       setEmployees((usersRows ?? []).map((u: any) => ({ id: u.id, nome: u.nome || u.email })));
@@ -62,17 +66,14 @@ const AdminBankHours: React.FC = () => {
         const userIds = filterUserId ? [filterUserId] : (employees.map((e) => e.id));
         const bankRows = await db.select('bank_hours', filters, { column: 'date', ascending: false }, 500) as any[];
 
-        // Busca time_balance em uma única query filtrando pelo mês — elimina o N+1 anterior
+        // Busca time_balance em uma única query filtrando pelo mês
+        // Nota: time_balance não tem company_id, usa user_id com operador 'in'
         let balanceRows: any[] = [];
         if (userIds.length > 0) {
           const balanceFilters: { column: string; operator: string; value: any }[] = [
             { column: 'month', operator: 'eq', value: monthFilter },
+            { column: 'user_id', operator: 'in', value: userIds },
           ];
-          if (filterUserId) {
-            balanceFilters.push({ column: 'user_id', operator: 'eq', value: filterUserId });
-          } else {
-            balanceFilters.push({ column: 'company_id', operator: 'eq', value: user.companyId });
-          }
           const allBalance = await db.select('time_balance', balanceFilters, undefined, 200) as any[];
           balanceRows = allBalance ?? [];
         }

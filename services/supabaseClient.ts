@@ -43,8 +43,22 @@ interface SelectOptions {
 // Limite padrão para evitar carregamento de dados excessivos
 const DEFAULT_SELECT_LIMIT = 200;
 
+// Interface do db com sobrecargas para compatibilidade
+interface DbInterface {
+  select: (table: string, filters?: Filter[], orderBy?: OrderBy | SelectOptions, limit?: number) => Promise<any[]>;
+  insert: (table: string, data: any) => Promise<any>;
+  // Sobrecargas para update: (table, id, data) ou (table, data, filters)
+  update: ((table: string, id: string, data: any) => Promise<any>) & ((table: string, data: any, filters?: Filter[]) => Promise<any>);
+  // Sobrecargas para delete: (table, id) ou (table, filters)
+  delete: ((table: string, id: string) => Promise<void>) & ((table: string, filters?: Filter[]) => Promise<void>);
+  findById: (table: string, id: string, columns?: string) => Promise<any | null>;
+  selectPaginated: (table: string, options: { columns?: string; filters?: Filter[]; orderBy?: OrderBy; limit?: number; offset?: number; count?: boolean }) => Promise<{ data: any[]; count: number | null }>;
+  count: (table: string, filters?: Filter[]) => Promise<number>;
+  subscribe: (table: string, callback: (payload: any) => void, filter?: string) => () => void;
+}
+
 // Implementação completa do db com suporte a filtros, ordenação e limite
-export const db = {
+export const db: DbInterface = {
   select: async (
     table: string,
     filters?: Filter[],
@@ -156,9 +170,25 @@ export const db = {
     return result;
   },
 
-  update: async (table: string, data: any, filters?: Filter[]): Promise<any> => {
+  update: async (table: string, idOrData: string | any, dataOrFilters?: any | Filter[]): Promise<any> => {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase não inicializado');
+
+    // Suporte a duas sintaxes:
+    // 1. update(table, id, data) - atualiza por ID
+    // 2. update(table, data, filters) - atualiza com filtros
+    let data: any;
+    let filters: Filter[] | undefined;
+    
+    if (typeof idOrData === 'string') {
+      // Sintaxe: update(table, id, data)
+      data = dataOrFilters;
+      filters = [{ column: 'id', operator: 'eq', value: idOrData }];
+    } else {
+      // Sintaxe: update(table, data, filters)
+      data = idOrData;
+      filters = dataOrFilters;
+    }
 
     let query = client.from(table).update(data);
 
@@ -188,11 +218,24 @@ export const db = {
     return result;
   },
 
-  delete: async (table: string, filters?: Filter[]): Promise<void> => {
+  delete: async (table: string, idOrFilters?: string | Filter[]): Promise<void> => {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase não inicializado');
 
     let query = client.from(table).delete();
+
+    // Suporte a duas sintaxes:
+    // 1. delete(table, id) - deleta por ID
+    // 2. delete(table, filters) - deleta com filtros
+    let filters: Filter[] | undefined;
+    
+    if (typeof idOrFilters === 'string') {
+      // Sintaxe: delete(table, id)
+      filters = [{ column: 'id', operator: 'eq', value: idOrFilters }];
+    } else {
+      // Sintaxe: delete(table, filters)
+      filters = idOrFilters;
+    }
 
     // Aplicar filtros para delete
     if (filters && filters.length > 0) {
