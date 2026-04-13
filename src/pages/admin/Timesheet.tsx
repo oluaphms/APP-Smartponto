@@ -152,8 +152,6 @@ const AdminTimesheet: React.FC = () => {
 
   // Ref para controlar carregamento
   const mountedRef = useRef(true);
-  const initialLoadDoneRef = useRef(false);
-  const lastPeriodStartRef = useRef(periodStart);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -165,8 +163,10 @@ const AdminTimesheet: React.FC = () => {
   useEffect(() => {
     if (!user?.companyId || !isSupabaseConfigured) return;
     
+    let cancelled = false;
+    
     const loadData = async () => {
-      if (!mountedRef.current) return;
+      if (cancelled || !mountedRef.current) return;
       setLoadingData(true);
       try {
         const [usersRows, recordsRows, departmentsRows, shiftsRows, holidaysRows] = await Promise.all([
@@ -180,7 +180,7 @@ const AdminTimesheet: React.FC = () => {
           db.select('feriados', [{ column: 'company_id', operator: 'eq', value: user.companyId }]).catch(() => []) as Promise<any[]>,
         ]);
         
-        if (!mountedRef.current) return;
+        if (cancelled || !mountedRef.current) return;
         
         setEmployees((usersRows ?? []).map((u: any) => ({ id: u.id, nome: u.nome || u.email, department_id: u.department_id })));
         setRecords(recordsRows ?? []);
@@ -191,24 +191,20 @@ const AdminTimesheet: React.FC = () => {
           date: (h.data || h.date || '').slice(0, 10),
           name: h.descricao || h.name || 'Feriado',
         })));
-        initialLoadDoneRef.current = true;
-        lastPeriodStartRef.current = periodStart;
       } catch (e) {
         console.error('Erro ao carregar dados:', e);
       } finally {
-        if (mountedRef.current) {
+        if (!cancelled && mountedRef.current) {
           setLoadingData(false);
         }
       }
     };
     
-    // Carga inicial: imediata. Mudanças de período: com debounce curto
-    if (!initialLoadDoneRef.current) {
-      loadData();
-    } else if (periodStart !== lastPeriodStartRef.current) {
-      const timeoutId = window.setTimeout(loadData, 150);
-      return () => clearTimeout(timeoutId);
-    }
+    loadData();
+    
+    return () => {
+      cancelled = true;
+    };
   }, [user?.companyId, periodStart]);
 
   const filteredRecords = useMemo(() => {
@@ -987,7 +983,7 @@ const AdminTimesheet: React.FC = () => {
           </table>
           </div>
         )}
-        {!loadingData && (() => {
+        {!loadingData && employees.length > 0 && (() => {
           const hasAnyDateInPeriod = buildRows.some(row => row.dates.length > 0);
           if (!hasAnyDateInPeriod) {
             return (
@@ -998,6 +994,11 @@ const AdminTimesheet: React.FC = () => {
           }
           return null;
         })()}
+        {!loadingData && employees.length === 0 && (
+          <p className="p-8 text-center text-slate-500 dark:text-slate-400">
+            Nenhum colaborador encontrado.
+          </p>
+        )}
       </div>
 
       {/* Resumo de Totais */}
