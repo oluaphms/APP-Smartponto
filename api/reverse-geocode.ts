@@ -1,7 +1,10 @@
-/** Hobby: máx. 10s; Pro pode aumentar no dashboard ou em vercel.json. */
+/** Hobby: máx. 10s; função deve terminar antes para evitar 504 no gateway. */
 export const config = {
   maxDuration: 10,
 };
+
+const FALLBACK = 'Endereço não disponível para este ponto';
+const HARD_CAP_MS = 7500;
 
 const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -9,86 +12,48 @@ const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Headers': 'Content-Type, Accept',
 };
 
+async function fetchWithTimeout(url: string, ms: number, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+function formatNominatimAddress(a: Record<string, unknown>): string {
+  const road = a.road != null ? String(a.road) : '';
+  const houseNumber = a.house_number != null ? String(a.house_number) : '';
+  const suburb = a.suburb != null ? String(a.suburb) : '';
+  const city =
+    (a.city as string) ||
+    (a.town as string) ||
+    (a.village as string) ||
+    (a.county as string) ||
+    '';
+  const state = a.state != null ? String(a.state) : '';
+
+  const streetLine = [road, houseNumber].filter(Boolean).join(', ').trim();
+  const parts: string[] = [];
+  if (streetLine) parts.push(streetLine);
+  if (suburb && !parts.join(' ').toLowerCase().includes(suburb.toLowerCase())) parts.push(suburb);
+  if (city && !parts.join(' ').toLowerCase().includes(city.toLowerCase())) parts.push(city);
+  if (state && !parts.join(' ').toLowerCase().includes(state.toLowerCase())) parts.push(state);
+  return parts.join(' — ').trim();
+}
+
+/**
+ * Apenas Nominatim (um round-trip), timeout curto — evita 504 na Vercel (Hobby 10s).
+ * Photon removido: segunda chamada frequentemente estourava o orçamento.
+ */
 async function resolveAddressFromCoordinates(lat: number, lng: number): Promise<string> {
-  /** Duas chamadas em sequência (Nominatim + Photon); sem retry para caber em maxDuration 10s. */
-  const FETCH_TIMEOUT = 4000;
-  const MAX_RETRIES = 0;
-
-  async function fetchWithTimeout(url: string, options: RequestInit = {}, retries = 0): Promise<Response> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-
-    try {
-      const res = await fetch(url, {
-        ...options,
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      return res;
-    } catch (e) {
-      clearTimeout(timeoutId);
-      if (retries < MAX_RETRIES && (e instanceof Error && e.name === 'AbortError')) {
-        return fetchWithTimeout(url, options, retries + 1);
-      }
-      throw e;
-    }
-  }
-
-  function formatPhotonProperties(p: Record<string, unknown>): string {
-    const housenumber = p.housenumber != null ? String(p.housenumber) : '';
-    const street = p.street != null ? String(p.street) : '';
-    const line1 = [housenumber, street].filter(Boolean).join(', ').trim();
-    const name = p.name != null ? String(p.name) : '';
-    const firstLine = line1 || name;
-
-    const city =
-      (p.city as string) ||
-      (p.town as string) ||
-      (p.village as string) ||
-      (p.district as string) ||
-      '';
-    const state = p.state != null ? String(p.state) : '';
-    const country = p.country != null ? String(p.country) : '';
-
-    const parts: string[] = [];
-    if (firstLine) parts.push(firstLine);
-    if (city && !firstLine.toLowerCase().includes(city.toLowerCase())) parts.push(city);
-    else if (city && !parts.length) parts.push(city);
-    if (state && !parts.join(' ').includes(state)) parts.push(state);
-    if (!parts.length && country) parts.push(country);
-
-    return parts.filter(Boolean).join(' — ') || '';
-  }
-
-  function formatNominatimAddress(a: Record<string, unknown>): string {
-    const road = a.road != null ? String(a.road) : '';
-    const houseNumber = a.house_number != null ? String(a.house_number) : '';
-    const suburb = a.suburb != null ? String(a.suburb) : '';
-    const city =
-      (a.city as string) ||
-      (a.town as string) ||
-      (a.village as string) ||
-      (a.county as string) ||
-      '';
-    const state = a.state != null ? String(a.state) : '';
-
-    const streetLine = [road, houseNumber].filter(Boolean).join(', ').trim();
-    const parts: string[] = [];
-    if (streetLine) parts.push(streetLine);
-    if (suburb && !parts.join(' ').toLowerCase().includes(suburb.toLowerCase())) parts.push(suburb);
-    if (city && !parts.join(' ').toLowerCase().includes(city.toLowerCase())) parts.push(city);
-    if (state && !parts.join(' ').toLowerCase().includes(state.toLowerCase())) parts.push(state);
-    return parts.join(' — ').trim();
-  }
-
+  const NOMINATIM_MS = 4000;
   const NOMINATIM_HEADERS = {
     Accept: 'application/json',
     'User-Agent': 'ChronoDigital/1.0 (reverse-geocode; https://chrono-digital.vercel.app)',
   } as const;
 
-  let text = '';
-
-  // 1) Nominatim primeiro (costuma responder melhor de servidores; uso político do OSM)
   try {
     const nominatimUrl = new URL('https://nominatim.openstreetmap.org/reverse');
     nominatimUrl.searchParams.set('format', 'jsonv2');
@@ -96,61 +61,20 @@ async function resolveAddressFromCoordinates(lat: number, lng: number): Promise<
     nominatimUrl.searchParams.set('lon', String(lng));
     nominatimUrl.searchParams.set('accept-language', 'pt-BR');
 
-    const nomRes = await fetchWithTimeout(nominatimUrl.toString(), {
+    const nomRes = await fetchWithTimeout(nominatimUrl.toString(), NOMINATIM_MS, {
       headers: NOMINATIM_HEADERS,
     });
     if (nomRes.ok) {
       const nomData = (await nomRes.json()) as { display_name?: string; address?: Record<string, unknown> };
       const fromAddress = nomData.address ? formatNominatimAddress(nomData.address).trim() : '';
-      text = fromAddress || String(nomData.display_name || '').trim();
+      const text = fromAddress || String(nomData.display_name || '').trim();
+      if (text) return text;
     }
   } catch (e) {
     console.warn('Nominatim reverse geocode failed:', e instanceof Error ? e.message : e);
   }
 
-  // 2) Photon como fallback
-  if (!text) {
-    try {
-      const photonUrl = new URL('https://photon.komoot.io/reverse');
-      photonUrl.searchParams.set('lat', String(lat));
-      photonUrl.searchParams.set('lon', String(lng));
-      photonUrl.searchParams.set('lang', 'pt');
-
-      const res = await fetchWithTimeout(photonUrl.toString(), {
-        headers: { Accept: 'application/json' },
-      });
-      if (res.ok) {
-        const data = (await res.json()) as {
-          features?: Array<{ properties?: Record<string, unknown> }>;
-        };
-        const props = data?.features?.[0]?.properties;
-        if (props) {
-          text = formatPhotonProperties(props).trim();
-        }
-      }
-    } catch (e) {
-      console.warn('Photon reverse geocode failed:', e instanceof Error ? e.message : e);
-    }
-  }
-
-  if (!text) {
-    text = 'Endereço não disponível para este ponto';
-  }
-
-  return text;
-}
-
-async function resolveAddressWithTimeout(lat: number, lon: number): Promise<string> {
-  try {
-    const address = await resolveAddressFromCoordinates(lat, lon);
-    if (typeof address !== 'string') {
-      throw new Error('Invalid address type returned');
-    }
-    return address;
-  } catch (e) {
-    console.error('Error in resolveAddressWithTimeout:', e);
-    return 'Endereço não disponível para este ponto';
-  }
+  return FALLBACK;
 }
 
 export default async function handler(request: Request): Promise<Response> {
@@ -175,10 +99,16 @@ export default async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'lat e lon devem ser números válidos.' }, { status: 400, headers: corsHeaders });
     }
 
-    const address = await resolveAddressWithTimeout(lat, lon);
+    const address = await Promise.race([
+      resolveAddressFromCoordinates(lat, lon),
+      new Promise<string>((resolve) => {
+        setTimeout(() => resolve(FALLBACK), HARD_CAP_MS);
+      }),
+    ]);
+
     return Response.json({ address }, { status: 200, headers: corsHeaders });
   } catch (e) {
     console.error('Reverse geocode handler error:', e);
-    return Response.json({ address: 'Endereço não disponível para este ponto' }, { status: 200, headers: corsHeaders });
+    return Response.json({ address: FALLBACK }, { status: 200, headers: corsHeaders });
   }
 }

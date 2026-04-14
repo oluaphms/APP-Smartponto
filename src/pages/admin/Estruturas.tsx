@@ -90,8 +90,8 @@ const AdminEstruturas: React.FC = () => {
           if (!respMap.has(r.estrutura_id)) respMap.set(r.estrutura_id, []);
           respMap.get(r.estrutura_id)!.push(r.user_id);
         });
-        const { data: userNames } = await supabase.from('users').select('id, nome, full_name, email');
-        const nameMap = new Map((userNames ?? []).map((u: any) => [u.id, u.nome || u.full_name || u.email || u.id]));
+        const { data: userNames } = await supabase.from('users').select('id, nome, email');
+        const nameMap = new Map((userNames ?? []).map((u: any) => [u.id, u.nome || u.email || u.id]));
         list.forEach((e) => {
           const ids = respMap.get(e.id) ?? [];
           e.responsaveis = ids.map((user_id) => ({ user_id, nome: nameMap.get(user_id) || user_id }));
