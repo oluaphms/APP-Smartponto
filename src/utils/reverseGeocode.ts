@@ -11,28 +11,57 @@ function cacheKey(lat: number, lng: number): string {
   return `${lat.toFixed(5)},${lng.toFixed(5)}`;
 }
 
-export function extractLatLng(row: {
-  location?: { lat?: number; lng?: number; lon?: number } | null;
-  latitude?: number | null;
-  longitude?: number | null;
-}): { lat: number; lng: number } | null {
-  if (row.latitude != null && row.longitude != null) {
-    const lat = Number(row.latitude);
-    const lng = Number(row.longitude);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-    return { lat, lng };
-  }
-  const loc = row.location;
-  if (loc && typeof loc === 'object') {
-    const lat = loc.lat ?? (loc as { latitude?: number }).latitude;
-    const lng = loc.lng ?? loc.lon ?? (loc as { longitude?: number }).longitude;
-    if (lat != null && lng != null) {
-      const la = Number(lat);
-      const ln = Number(lng);
-      if (!Number.isFinite(la) || !Number.isFinite(ln)) return null;
-      return { lat: la, lng: ln };
+function pairFromNumbers(lat: unknown, lng: unknown): { lat: number; lng: number } | null {
+  if (lat == null || lng == null) return null;
+  const la = Number(lat);
+  const ln = Number(lng);
+  if (!Number.isFinite(la) || !Number.isFinite(ln)) return null;
+  return { lat: la, lng: ln };
+}
+
+/**
+ * Extrai lat/lng de uma linha `time_records` (colunas diretas, JSON `location`, GeoJSON, string JSON).
+ */
+export function extractLatLng(row: any): { lat: number; lng: number } | null {
+  if (!row || typeof row !== 'object') return null;
+
+  const direct = pairFromNumbers(row.latitude ?? row.lat, row.longitude ?? row.lng ?? row.lon);
+  if (direct) return direct;
+
+  let loc: unknown = row.location;
+  if (typeof loc === 'string') {
+    try {
+      loc = JSON.parse(loc) as unknown;
+    } catch {
+      loc = null;
     }
   }
+
+  if (loc && typeof loc === 'object') {
+    const g = loc as Record<string, unknown>;
+    // GeoJSON Point: coordinates [lng, lat]
+    if (g.type === 'Point' && Array.isArray(g.coordinates) && g.coordinates.length >= 2) {
+      const ln = Number(g.coordinates[0]);
+      const la = Number(g.coordinates[1]);
+      if (Number.isFinite(la) && Number.isFinite(ln)) return { lat: la, lng: ln };
+    }
+    // PostGIS / alguns drivers
+    const geom = g.geometry;
+    if (geom && typeof geom === 'object') {
+      const gg = geom as Record<string, unknown>;
+      if (gg.type === 'Point' && Array.isArray(gg.coordinates) && gg.coordinates.length >= 2) {
+        const ln = Number(gg.coordinates[0]);
+        const la = Number(gg.coordinates[1]);
+        if (Number.isFinite(la) && Number.isFinite(ln)) return { lat: la, lng: ln };
+      }
+    }
+    const nested = pairFromNumbers(
+      g.lat ?? g.latitude,
+      g.lng ?? g.lon ?? g.longitude,
+    );
+    if (nested) return nested;
+  }
+
   return null;
 }
 

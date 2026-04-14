@@ -77,6 +77,14 @@ function displayGivenNameForColumn(fullName: string): string {
   return `${parts[0]} ${parts[1]}`;
 }
 
+/** Ex.: 2026-04-01 → 01/04/2026 (melhor leitura em mobile). */
+function formatDatePtBr(ymd: string): string {
+  if (!ymd || ymd.length < 10) return ymd;
+  const [y, m, d] = ymd.slice(0, 10).split('-');
+  if (!y || !m || !d) return ymd;
+  return `${d}/${m}/${y}`;
+}
+
 /** Coordenadas da última batida do dia que tenha GPS (ordem por horário). */
 function lastPunchLocationCoords(dayRecs: any[]): { lat: number; lng: number } | undefined {
   const sorted = [...dayRecs].sort(
@@ -308,6 +316,25 @@ const AdminTimesheet: React.FC = () => {
     
     return rows.sort((a, b) => a.userName.localeCompare(b.userName));
   }, [filteredRecords, employees, shiftSchedules, periodStart, periodEnd, filterUserId]);
+
+  /** Linhas do espelho (tabela desktop + cards mobile) — mesma fonte de dados. */
+  const adminMirrorDays = useMemo(() => {
+    return buildRows.flatMap((row) =>
+      row.dates.map((d) => {
+        const sum = row.byDate.get(d);
+        const dayRecs = filteredRecords.filter(
+          (r: any) => r.user_id === row.userId && (r.created_at || '').slice(0, 10) === d,
+        );
+        return {
+          row,
+          d,
+          sum,
+          dayRecs,
+          rowKey: `${row.userId}-${d}`,
+        };
+      }),
+    );
+  }, [buildRows, filteredRecords]);
 
   const handleExportPDF = async () => {
     if (!filterUserId) {
@@ -859,8 +886,185 @@ const AdminTimesheet: React.FC = () => {
             <p className="text-slate-600 dark:text-slate-400 text-base font-medium">Selecione o colaborador</p>
           </div>
         ) : (
-          <div className="overflow-x-auto overscroll-x-contain touch-pan-x rounded-xl border border-slate-100 dark:border-slate-800 md:border-0">
-          <table className="w-full text-xs sm:text-sm min-w-[860px] md:min-w-0">
+          <>
+          <div className="md:hidden space-y-3 print:hidden">
+            {adminMirrorDays.map(({ row, d, sum, dayRecs, rowKey }) => {
+              const isExpanded = expandedRows[rowKey] === true;
+              const holiday = isHoliday(d);
+              return (
+                <article
+                  key={rowKey}
+                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-3 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Data</p>
+                      <p className="text-lg font-semibold text-slate-900 dark:text-white tabular-nums tracking-normal">
+                        {formatDatePtBr(d)}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate" title={row.userName}>
+                        {row.userName}
+                      </p>
+                      {holiday && (
+                        <span className="inline-block mt-1 text-[11px] text-purple-600 dark:text-purple-400 font-medium" title={holiday.name}>
+                          🎉 {holiday.name}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => toggleExpandedRow(rowKey)}
+                      className="shrink-0 text-xs font-medium text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+                    >
+                      {isExpanded ? 'Ocultar batidas' : 'Batidas do dia'}
+                    </button>
+                  </div>
+                  <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                    <div className="min-w-0">
+                      <dt className="text-[10px] font-bold uppercase text-slate-500">Entrada</dt>
+                      <dd className="mt-0.5 min-w-0">
+                        <ExpandableTextCell
+                          label="Entrada (início)"
+                          value={sum?.entradaInicio || ''}
+                          empty={sum?.isDayOff ? 'FOLGA' : sum?.hasAbsence ? 'FALTA' : '—'}
+                          className={sum?.isDayOff ? 'text-green-600 dark:text-green-400 font-bold' : sum?.hasAbsence ? 'text-red-600 dark:text-red-400 font-bold' : sum?.hasLateEntry ? 'text-red-600 dark:text-red-400' : ''}
+                        />
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-[10px] font-bold uppercase text-slate-500">Intervalo</dt>
+                      <dd className="mt-0.5 min-w-0">
+                        <ExpandableTextCell
+                          label="Intervalo (pausa)"
+                          value={sum?.saidaIntervalo || ''}
+                          empty={sum?.isDayOff ? 'FOLGA' : sum?.hasAbsence ? 'FALTA' : '—'}
+                          className={sum?.isDayOff ? 'text-green-600 dark:text-green-400 font-bold' : sum?.hasAbsence ? 'text-red-600 dark:text-red-400 font-bold' : ''}
+                        />
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-[10px] font-bold uppercase text-slate-500">Retorno</dt>
+                      <dd className="mt-0.5 min-w-0">
+                        <ExpandableTextCell
+                          label="Retorno"
+                          value={sum?.voltaIntervalo || ''}
+                          empty={sum?.isDayOff ? 'FOLGA' : sum?.hasAbsence ? 'FALTA' : '—'}
+                          className={sum?.isDayOff ? 'text-green-600 dark:text-green-400 font-bold' : sum?.hasAbsence ? 'text-red-600 dark:text-red-400 font-bold' : ''}
+                        />
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-[10px] font-bold uppercase text-slate-500">Saída</dt>
+                      <dd className="mt-0.5 min-w-0">
+                        <ExpandableTextCell
+                          label="Saída (final)"
+                          value={sum?.saidaFinal || ''}
+                          empty={sum?.isDayOff ? 'FOLGA' : sum?.hasAbsence ? 'FALTA' : '—'}
+                          className={sum?.isDayOff ? 'text-green-600 dark:text-green-400 font-bold' : sum?.hasAbsence ? 'text-red-600 dark:text-red-400 font-bold' : ''}
+                        />
+                      </dd>
+                    </div>
+                    <div className="min-w-0 col-span-2">
+                      <dt className="text-[10px] font-bold uppercase text-slate-500">Horas / status</dt>
+                      <dd className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <ExpandableTextCell
+                          label="Horas trabalhadas"
+                          value={sum?.workedHours || ''}
+                          empty={sum?.isDayOff ? 'FOLGA' : sum?.hasAbsence ? 'FALTA' : '—'}
+                          className={sum?.isDayOff ? 'text-green-600 dark:text-green-400 font-bold' : sum?.hasAbsence ? 'text-red-600 dark:text-red-400 font-bold' : ''}
+                        />
+                        <span className="text-slate-300 dark:text-slate-600">|</span>
+                        <ExpandableTextCell label="Status" value={sum?.status || 'OK'} />
+                      </dd>
+                    </div>
+                    <div className="min-w-0 col-span-2">
+                      <dt className="text-[10px] font-bold uppercase text-slate-500">Localização (última batida c/ GPS)</dt>
+                      <dd className="mt-0.5 text-sm min-w-0">
+                        {sum?.locationCoords ? (
+                          <ExpandableStreetCell lat={sum.locationCoords.lat} lng={sum.locationCoords.lng} previewMaxLength={56} />
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                  {isExpanded && (
+                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                      <p className="font-medium mb-2 text-xs text-slate-600 dark:text-slate-300">
+                        Batidas do dia {formatDatePtBr(d)}
+                      </p>
+                      <div className="space-y-2">
+                        {dayRecs
+                          .slice()
+                          .sort((a: any, b: any) => (a.created_at || '').localeCompare(b.created_at || ''))
+                          .map((r: any) => {
+                            const ll = extractLatLng(r);
+                            const when = r.created_at
+                              ? new Date(r.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                              : '--:--';
+                            const isManual = r.is_manual === true;
+                            return (
+                              <div
+                                key={r.id || `${rowKey}-${when}`}
+                                className={`rounded-lg p-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3 ${
+                                  isManual ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-slate-50 dark:bg-slate-800/40'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditModal(r, row.userName)}
+                                    className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-500"
+                                    title="Editar batida"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`font-mono text-sm ${isManual ? 'text-amber-700 dark:text-amber-300 font-bold' : 'text-slate-700 dark:text-slate-200'}`}
+                                    onClick={() => {
+                                      if (isManual) {
+                                        setSelectedManualRecord({
+                                          reason: r.manual_reason,
+                                          timestamp: r.created_at,
+                                          type: r.type,
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    {when}
+                                    {isManual ? ' ⚠' : ''}
+                                  </button>
+                                  <span
+                                    className={`uppercase text-[10px] px-2 py-0.5 rounded ${
+                                      isManual
+                                        ? 'bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100'
+                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100'
+                                    }`}
+                                  >
+                                    {(r.type || '—').toString()}
+                                  </span>
+                                </div>
+                                <div className="min-w-0 flex-1 pl-1 sm:pl-0">
+                                  {ll ? (
+                                    <ExpandableStreetCell lat={ll.lat} lng={ll.lng} previewMaxLength={72} />
+                                  ) : (
+                                    <span className="text-xs text-slate-500">Batida sem GPS</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto overscroll-x-contain touch-pan-x rounded-xl border border-slate-100 dark:border-slate-800 md:border-0 print:block">
+          <table className="w-full text-xs sm:text-sm min-w-[860px] md:min-w-0 print:min-w-0">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
                 <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Colaborador</th>
@@ -875,13 +1079,7 @@ const AdminTimesheet: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {buildRows.flatMap((row) =>
-                row.dates.map((d) => {
-                  const sum = row.byDate.get(d);
-                  const dayRecs = filteredRecords.filter(
-                    (r: any) => r.user_id === row.userId && (r.created_at || '').slice(0, 10) === d,
-                  );
-                  const rowKey = `${row.userId}-${d}`;
+              {adminMirrorDays.map(({ row, d, sum, dayRecs, rowKey }) => {
                   const isExpanded = expandedRows[rowKey] === true;
                   return (
                     <React.Fragment key={rowKey}>
@@ -902,7 +1100,7 @@ const AdminTimesheet: React.FC = () => {
                           const holiday = isHoliday(d);
                           return (
                             <div>
-                              <ExpandableTextCell label="Data" value={d} />
+                              <ExpandableTextCell label="Data" value={d} preview={formatDatePtBr(d)} />
                               {holiday && (
                                 <span className="block text-[10px] text-purple-600 dark:text-purple-400 font-medium mt-0.5" title={holiday.name}>
                                   🎉 {holiday.name.length > 12 ? holiday.name.slice(0, 12) + '...' : holiday.name}
@@ -971,8 +1169,8 @@ const AdminTimesheet: React.FC = () => {
                       <tr className="bg-slate-50/70 dark:bg-slate-800/30 border-b border-slate-100 dark:border-slate-800">
                         <td colSpan={9} className="px-4 py-3">
                           <div className="text-xs text-slate-600 dark:text-slate-300">
-                            <p className="font-medium mb-2">Enderecos por batida do dia {d}:</p>
-                            <div className="space-y-1">
+                            <p className="font-medium mb-2">Endereços por batida do dia {formatDatePtBr(d)}:</p>
+                            <div className="space-y-2">
                               {dayRecs
                                 .slice()
                                 .sort((a: any, b: any) => (a.created_at || '').localeCompare(b.created_at || ''))
@@ -985,7 +1183,7 @@ const AdminTimesheet: React.FC = () => {
                                   return (
                                     <div 
                                       key={r.id || `${rowKey}-${when}`} 
-                                      className={`flex items-center gap-3 p-2 rounded transition-colors whitespace-nowrap overflow-x-auto ${
+                                      className={`flex flex-col sm:flex-row sm:items-start gap-2 p-2 rounded transition-colors min-w-0 ${
                                         isManual 
                                           ? 'bg-amber-50 dark:bg-amber-900/20' 
                                           : 'hover:bg-slate-100 dark:hover:bg-slate-700/30'
@@ -1023,12 +1221,14 @@ const AdminTimesheet: React.FC = () => {
                                       }`}>
                                         {(r.type || '—').toString()}
                                       </span>
-                                      <span className="text-slate-500 flex-shrink-0">-</span>
+                                      <span className="text-slate-500 flex-shrink-0 hidden sm:inline">-</span>
+                                      <div className="min-w-0 flex-1 pl-7 sm:pl-0">
                                       {ll ? (
-                                        <ExpandableStreetCell lat={ll.lat} lng={ll.lng} previewMaxLength={28} />
+                                        <ExpandableStreetCell lat={ll.lat} lng={ll.lng} previewMaxLength={40} />
                                       ) : (
-                                        <span className="text-slate-500 flex-shrink-0">Batida sem GPS</span>
+                                        <span className="text-slate-500 text-xs">Batida sem GPS</span>
                                       )}
+                                      </div>
                                     </div>
                                   );
                                 })}
@@ -1039,11 +1239,11 @@ const AdminTimesheet: React.FC = () => {
                     )}
                     </React.Fragment>
                   );
-                })
-              )}
+                })}
             </tbody>
           </table>
           </div>
+          </>
         )}
         {!loadingData && filterUserId && employees.length > 0 && (() => {
           const hasAnyDateInPeriod = buildRows.some(row => row.dates.length > 0);

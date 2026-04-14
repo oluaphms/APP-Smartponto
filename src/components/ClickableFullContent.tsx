@@ -26,18 +26,21 @@ export function DetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="clickable-detail-title"
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col"
+        className="bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-lg max-h-[min(92dvh,100vh)] sm:max-h-[85vh] overflow-hidden flex flex-col min-h-0 min-w-0"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
-          <h2 id="clickable-detail-title" className="text-base font-bold text-slate-900 dark:text-white pr-2">
+        <div className="flex items-start justify-between gap-3 px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 min-w-0">
+          <h2
+            id="clickable-detail-title"
+            className="text-sm sm:text-base font-bold text-slate-900 dark:text-white pr-2 min-w-0 flex-1 break-words"
+          >
             {title}
           </h2>
           <button
@@ -49,8 +52,10 @@ export function DetailModal({
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="px-5 py-4 overflow-y-auto text-sm min-h-0">{children}</div>
-        <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800 flex justify-end shrink-0">
+        <div className="px-4 py-3 sm:px-5 sm:py-4 flex-1 min-h-0 overflow-y-auto overflow-x-hidden text-sm overscroll-contain break-words [word-break:break-word]">
+          {children}
+        </div>
+        <div className="px-4 py-3 sm:px-5 border-t border-slate-100 dark:border-slate-800 flex justify-end shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
           <button
             type="button"
             onClick={onClose}
@@ -70,15 +75,19 @@ export function DetailModal({
 export function ExpandableTextCell({
   label,
   value,
+  preview,
   className = '',
   empty = '—',
 }: {
   label: string;
   value: string | null | undefined;
+  /** Texto na célula (ex.: data em pt-BR); se omitido, usa `value`. */
+  preview?: string | null;
   className?: string;
   empty?: string;
 }) {
   const raw = value != null ? String(value).trim() : '';
+  const previewText = preview != null && String(preview).trim() !== '' ? String(preview).trim() : raw;
   const [open, setOpen] = useState(false);
 
   if (!raw) {
@@ -94,7 +103,7 @@ export function ExpandableTextCell({
         title="Clique para ver o conteúdo completo"
       >
         <span className="line-clamp-2 break-words text-slate-800 dark:text-slate-200 group-hover:text-indigo-700 dark:group-hover:text-indigo-300">
-          {raw}
+          {previewText}
         </span>
       </button>
       <DetailModal title={label} open={open} onClose={() => setOpen(false)}>
