@@ -227,6 +227,9 @@ const AdminTimesheet: React.FC = () => {
   }, [records, filterUserId, filterDept, periodStart, periodEnd, employees]);
 
   const buildRows = useMemo((): TimesheetRow[] => {
+    /** Espelho só lista batidas após escolher um colaborador (evita exibir todos na grade). */
+    if (!filterUserId) return [];
+
     // Criar mapa de todos os usuários (não apenas os com registros)
     const byUser = new Map<string, { userName: string; departmentId?: string; recs: any[] }>();
     const userNames = new Map<string, string>(employees.map((e) => [e.id, e.nome]));
@@ -318,6 +321,10 @@ const AdminTimesheet: React.FC = () => {
   }, [filteredRecords, employees, shiftSchedules, periodStart, periodEnd, filterDept, filterUserId]);
 
   const handleExportPDF = async () => {
+    if (!filterUserId) {
+      toast.addToast('error', 'Selecione o colaborador para exportar o espelho.');
+      return;
+    }
     try {
       const { jsPDF } = await import('jspdf');
       const AutoTable = (await import('jspdf-autotable')).default;
@@ -529,6 +536,10 @@ const AdminTimesheet: React.FC = () => {
   };
 
   const handleExportExcel = async () => {
+    if (!filterUserId) {
+      toast.addToast('error', 'Selecione o colaborador para exportar o espelho.');
+      return;
+    }
     const headers = [
       'Colaborador',
       'Data',
@@ -756,7 +767,7 @@ const AdminTimesheet: React.FC = () => {
         <div>
           <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Colaborador</label>
           <select value={filterUserId} onChange={(e) => setFilterUserId(e.target.value)} className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white min-w-[180px]">
-            <option value="">Todos</option>
+            <option value="">Selecione o colaborador</option>
             {employees.map((e) => (
               <option key={e.id} value={e.id}>{e.nome}</option>
             ))}
@@ -780,10 +791,22 @@ const AdminTimesheet: React.FC = () => {
           <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={handleExportPDF} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <button
+            type="button"
+            onClick={handleExportPDF}
+            disabled={!filterUserId}
+            title={!filterUserId ? 'Selecione um colaborador no filtro acima' : undefined}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 disabled:pointer-events-none"
+          >
             <FileDown className="w-4 h-4" /> Exportar PDF
           </button>
-          <button type="button" onClick={handleExportExcel} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={!filterUserId}
+            title={!filterUserId ? 'Selecione um colaborador no filtro acima' : undefined}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 disabled:pointer-events-none"
+          >
             <FileSpreadsheet className="w-4 h-4" /> Exportar Excel
           </button>
           <button type="button" onClick={() => setIsAddModalOpen(true)} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
@@ -803,6 +826,10 @@ const AdminTimesheet: React.FC = () => {
         {loadingData ? (
           <div className="p-4 sm:p-6 min-h-[min(50vh,420px)] rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white/50 dark:bg-slate-900/30">
             <TimesheetTableSkeleton variant="admin" />
+          </div>
+        ) : !filterUserId && employees.length > 0 ? (
+          <div className="p-12 sm:p-16 text-center">
+            <p className="text-slate-600 dark:text-slate-400 text-base font-medium">Selecione o colaborador</p>
           </div>
         ) : (
           <div className="overflow-x-auto overscroll-x-contain touch-pan-x rounded-xl border border-slate-100 dark:border-slate-800 md:border-0">
@@ -991,7 +1018,7 @@ const AdminTimesheet: React.FC = () => {
           </table>
           </div>
         )}
-        {!loadingData && employees.length > 0 && (() => {
+        {!loadingData && filterUserId && employees.length > 0 && (() => {
           const hasAnyDateInPeriod = buildRows.some(row => row.dates.length > 0);
           if (!hasAnyDateInPeriod) {
             return (
@@ -1010,7 +1037,7 @@ const AdminTimesheet: React.FC = () => {
       </div>
 
       {/* Resumo de Totais */}
-      {!loadingData && buildRows.length > 0 && (
+      {!loadingData && filterUserId && buildRows.length > 0 && (
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-5 print:border-0">
           <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-4">
             Resumo do Período
