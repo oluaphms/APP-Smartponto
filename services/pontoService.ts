@@ -1,5 +1,16 @@
 
 import { TimeRecord, LogType, User, GeoLocation, EmployeeSummary, PunchMethod, Company, Adjustment, FraudFlag, Department, CompanyKPIs, LogSeverity } from '../types';
+
+/** `created_at` vindo do JSON pode ser string; evita crash em `.toDateString()`. */
+export function getRecordCreatedAtDate(record: { createdAt?: unknown }): Date | null {
+  const raw = record?.createdAt;
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) return raw;
+  if (typeof raw === 'string' || typeof raw === 'number') {
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
 import { ValidationService } from './validationService';
 import { LoggingService } from './loggingService';
 import { firestoreService } from './firestoreService';
@@ -375,14 +386,19 @@ export const PontoService = {
 
   calculateDailyHours(records: TimeRecord[]): string {
     const today = new Date().toDateString();
-    const todayRecords = records.filter(r => r.createdAt.toDateString() === today).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    const parsed = records
+      .map((r) => ({ r, d: getRecordCreatedAtDate(r) }))
+      .filter((x): x is { r: TimeRecord; d: Date } => x.d !== null);
+    const todayRecords = parsed
+      .filter(({ d }) => d.toDateString() === today)
+      .sort((a, b) => a.d.getTime() - b.d.getTime());
     if (todayRecords.length === 0) return "00h 00m";
     let totalMs = 0;
     let lastInTime: number | null = null;
-    for (const rec of todayRecords) {
-      if (rec.type === LogType.IN) lastInTime = rec.createdAt.getTime();
-      else if (lastInTime && (rec.type === LogType.OUT || rec.type === LogType.BREAK)) {
-        totalMs += rec.createdAt.getTime() - lastInTime;
+    for (const { r, d } of todayRecords) {
+      if (r.type === LogType.IN) lastInTime = d.getTime();
+      else if (lastInTime && (r.type === LogType.OUT || r.type === LogType.BREAK)) {
+        totalMs += d.getTime() - lastInTime;
         lastInTime = null;
       }
     }

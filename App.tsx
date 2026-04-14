@@ -11,7 +11,7 @@ import PunchModal from './components/PunchModal';
 import Onboarding from './components/Onboarding';
 import { Button, Badge, LoadingState, SuccessOverlay, Input } from './components/UI';
 import { getWorkInsights } from './services/geminiService';
-import { PontoService } from './services/pontoService';
+import { PontoService, getRecordCreatedAtDate } from './services/pontoService';
 import { useRecords } from './src/hooks/useRecords';
 import { authService } from './services/authService';
 import { queryCache } from './src/services/queryCache';
@@ -556,16 +556,19 @@ const AppMain: React.FC = () => {
     }
 
     const today = new Date().toDateString();
-    const todayRecords = records
-      .filter(r => r.createdAt.toDateString() === today)
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    const dated = records
+      .map((r) => ({ r, d: getRecordCreatedAtDate(r) }))
+      .filter((x): x is { r: typeof records[number]; d: Date } => x.d !== null);
+    const todayRecords = dated
+      .filter(({ d }) => d.toDateString() === today)
+      .sort((a, b) => a.d.getTime() - b.d.getTime());
 
     let totalMs = 0;
     let lastInTime: number | null = null;
-    for (const rec of todayRecords) {
-      if (rec.type === LogType.IN) lastInTime = rec.createdAt.getTime();
-      else if (lastInTime && (rec.type === LogType.OUT || rec.type === LogType.BREAK)) {
-        totalMs += rec.createdAt.getTime() - lastInTime;
+    for (const { r, d } of todayRecords) {
+      if (r.type === LogType.IN) lastInTime = d.getTime();
+      else if (lastInTime && (r.type === LogType.OUT || r.type === LogType.BREAK)) {
+        totalMs += d.getTime() - lastInTime;
         lastInTime = null;
       }
     }

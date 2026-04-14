@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
@@ -23,6 +24,27 @@ export default defineConfig(({ mode }) => {
 
     plugins: [
       react(),
+
+      /** Inline do manifest evita GET /manifest.json (401 em previews com Deployment Protection na Vercel). */
+      {
+        name: 'inline-web-manifest',
+        transformIndexHtml(html: string) {
+          try {
+            const manifestPath = path.join(projectRoot, 'public', 'manifest.json');
+            const raw = fs.readFileSync(manifestPath, 'utf-8');
+            const json = JSON.parse(raw) as Record<string, unknown>;
+            const compact = JSON.stringify(json);
+            const dataHref = `data:application/manifest+json;charset=utf-8,${encodeURIComponent(compact)}`;
+            return html.replace(
+              /<link\s+rel="manifest"\s+href="\/manifest\.json"\s*\/?>/i,
+              `<link rel="manifest" href="${dataHref}" />`
+            );
+          } catch (e) {
+            console.warn('[vite] inline-web-manifest:', e);
+            return html;
+          }
+        },
+      },
 
       {
         name: 'reverse-geocode-api-dev',
