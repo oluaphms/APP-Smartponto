@@ -95,11 +95,15 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
         const rows = await db.select('justificativas', [
           { column: 'company_id', operator: 'eq', value: companyId }
         ]) as any[];
-        setJustificativas((rows ?? []).map((r: any) => ({
-          id: r.id,
-          codigo: r.codigo || '',
-          descricao: r.descricao || '',
-        })));
+        setJustificativas(
+          (rows ?? [])
+            .filter((r: any) => !r.bloquear_uso_web)
+            .map((r: any) => ({
+              id: r.id,
+              codigo: r.codigo || '',
+              descricao: r.descricao || '',
+            })),
+        );
       } catch (e) {
         console.error('Erro ao carregar justificativas:', e);
       }

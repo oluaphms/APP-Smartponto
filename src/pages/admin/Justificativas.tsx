@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
-import { FileCheck, Plus, Pencil, Trash2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
+import { DoorOpen, FileCheck, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
 import { db, isSupabaseConfigured } from '../../services/supabaseClient';
@@ -26,6 +26,7 @@ interface JustificativaRow {
   descontar_banco_horas?: boolean;
   descontar_provisao?: boolean;
   incluir_t_mais_nos_abonos?: boolean;
+  bloquear_uso_web?: boolean;
   company_id: string;
   created_at: string;
 }
@@ -36,11 +37,23 @@ interface EventoOption {
   descricao: string;
 }
 
+function CellMark({ ok }: { ok: boolean }) {
+  return (
+    <span
+      className={`tabular-nums text-center inline-block w-full ${ok ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-300 dark:text-slate-600'}`}
+    >
+      {ok ? '✓' : '—'}
+    </span>
+  );
+}
+
 const AdminJustificativas: React.FC = () => {
+  const navigate = useNavigate();
   const { user, loading } = useCurrentUser();
   const [rows, setRows] = useState<JustificativaRow[]>([]);
   const [eventos, setEventos] = useState<EventoOption[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [codigo, setCodigo] = useState('');
@@ -60,9 +73,23 @@ const AdminJustificativas: React.FC = () => {
   const [descontarBancoHoras, setDescontarBancoHoras] = useState(false);
   const [descontarProvisao, setDescontarProvisao] = useState(false);
   const [incluirTMaisNosAbonos, setIncluirTMaisNosAbonos] = useState(false);
+  const [bloquearUsoWeb, setBloquearUsoWeb] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
+
+  const sortedRows = useMemo(() => {
+    return [...rows].sort((a, b) => {
+      const na = (a.nome || a.codigo || '').toLocaleLowerCase('pt-BR');
+      const nb = (b.nome || b.codigo || '').toLocaleLowerCase('pt-BR');
+      return na.localeCompare(nb, 'pt-BR');
+    });
+  }, [rows]);
+
+  const selectedRow = useMemo(
+    () => (selectedId ? rows.find((r) => r.id === selectedId) ?? null : null),
+    [rows, selectedId],
+  );
 
   const load = async () => {
     if (!user?.companyId || !isSupabaseConfigured) {
@@ -91,6 +118,7 @@ const AdminJustificativas: React.FC = () => {
         descontar_banco_horas: !!r.descontar_banco_horas,
         descontar_provisao: !!r.descontar_provisao,
         incluir_t_mais_nos_abonos: !!r.incluir_t_mais_nos_abonos,
+        bloquear_uso_web: !!r.bloquear_uso_web,
         company_id: r.company_id,
         created_at: r.created_at,
       })));
@@ -126,6 +154,7 @@ const AdminJustificativas: React.FC = () => {
 
   const openCreate = () => {
     setEditingId(null);
+    setSelectedId(null);
     setCodigo('');
     setDescricao('');
     setNome('');
@@ -143,12 +172,14 @@ const AdminJustificativas: React.FC = () => {
     setDescontarBancoHoras(false);
     setDescontarProvisao(false);
     setIncluirTMaisNosAbonos(false);
+    setBloquearUsoWeb(false);
     setModalOpen(true);
     setMessage(null);
     setModalError(null);
   };
 
   const openEdit = (row: JustificativaRow) => {
+    setSelectedId(row.id);
     setEditingId(row.id);
     setCodigo(row.codigo);
     setDescricao(row.descricao);
@@ -167,9 +198,19 @@ const AdminJustificativas: React.FC = () => {
     setDescontarBancoHoras(!!row.descontar_banco_horas);
     setDescontarProvisao(!!row.descontar_provisao);
     setIncluirTMaisNosAbonos(!!row.incluir_t_mais_nos_abonos);
+    setBloquearUsoWeb(!!row.bloquear_uso_web);
     setModalOpen(true);
     setMessage(null);
     setModalError(null);
+  };
+
+  const handleAlterar = () => {
+    if (selectedRow) openEdit(selectedRow);
+  };
+
+  const handleFechar = () => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate('/admin/dashboard');
   };
 
   const handleSave = async (e?: React.MouseEvent) => {
@@ -212,6 +253,7 @@ const AdminJustificativas: React.FC = () => {
         descontar_banco_horas: descontarBancoHoras,
         descontar_provisao: descontarProvisao,
         incluir_t_mais_nos_abonos: incluirTMaisNosAbonos,
+        bloquear_uso_web: bloquearUsoWeb,
       };
       if (editingId) {
         await db.update('justificativas', editingId, payload);
@@ -237,11 +279,13 @@ const AdminJustificativas: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleExcluirSelecionado = async () => {
+    if (!selectedId) return;
     if (!confirm('Excluir esta justificativa?')) return;
     try {
-      await db.delete('justificativas', id);
+      await db.delete('justificativas', selectedId);
       setMessage({ type: 'success', text: 'Justificativa excluída.' });
+      setSelectedId(null);
       load();
     } catch (e: any) {
       setMessage({ type: 'error', text: (e as Error)?.message || 'Erro ao excluir.' });
@@ -250,6 +294,41 @@ const AdminJustificativas: React.FC = () => {
 
   if (loading) return <LoadingState message="Carregando..." />;
   if (!user) return <Navigate to="/" replace />;
+
+  const toolbar = (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={openCreate}
+        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700/80"
+      >
+        <Plus className="w-4 h-4 shrink-0" /> Incluir
+      </button>
+      <button
+        type="button"
+        onClick={handleAlterar}
+        disabled={!selectedId}
+        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700/80 disabled:opacity-45 disabled:pointer-events-none"
+      >
+        <Pencil className="w-4 h-4 shrink-0" /> Alterar
+      </button>
+      <button
+        type="button"
+        onClick={handleExcluirSelecionado}
+        disabled={!selectedId}
+        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-red-700 dark:text-red-300 text-sm font-medium hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-45 disabled:pointer-events-none"
+      >
+        <Trash2 className="w-4 h-4 shrink-0" /> Excluir
+      </button>
+      <button
+        type="button"
+        onClick={handleFechar}
+        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-200/80 dark:hover:bg-slate-700"
+      >
+        <DoorOpen className="w-4 h-4 shrink-0" /> Fechar
+      </button>
+    </div>
+  );
 
   return (
     <RoleGuard user={user} allowedRoles={['admin', 'hr']}>
@@ -265,60 +344,88 @@ const AdminJustificativas: React.FC = () => {
             {message.text}
           </div>
         )}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <PageHeader
-            title="Justificativas"
-            subtitle="Cadastro de justificativas para lançamento no Cartão Ponto e Ajustes Parciais."
-            icon={<FileCheck size={24} />}
-          />
-          <button
-            type="button"
-            onClick={openCreate}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors"
-          >
-            <Plus className="w-5 h-5" /> Incluir
-          </button>
-        </div>
+        <PageHeader
+          title="Justificativas |"
+          subtitle="Cadastro para Cartão Ponto e ajustes. Nome curto típico: AT MEDI, FERIADO, FÉRIAS, FOLGA, L.MATER, LUTO, T.EXTER."
+          icon={<FileCheck size={24} />}
+          actions={toolbar}
+        />
 
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Dados gerais</p>
+          </div>
           {loadingData ? (
             <div className="p-12 text-center text-slate-500">Carregando...</div>
           ) : (
-            <>
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[720px]">
                 <thead>
                   <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
-                    <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Código</th>
-                    <th className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Descrição</th>
-                    <th className="text-right px-4 py-3 font-bold text-slate-500 dark:text-slate-400">Ações</th>
+                    <th className="text-left px-3 py-3 font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">Nome</th>
+                    <th className="text-left px-3 py-3 font-bold text-slate-500 dark:text-slate-400 min-w-[12rem]">Descrição</th>
+                    <th className="text-center px-2 py-3 font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">Ajuste</th>
+                    <th className="text-center px-2 py-3 font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">Abono 2</th>
+                    <th className="text-center px-2 py-3 font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">Abono 3</th>
+                    <th className="text-center px-2 py-3 font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">Abono 4</th>
+                    <th className="text-center px-2 py-3 font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">Vl. dia auto</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                      <td className="px-4 py-3 font-mono text-slate-700 dark:text-slate-300">{row.codigo}</td>
-                      <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{row.descricao}</td>
-                      <td className="px-4 py-3 text-right">
-                        <button type="button" onClick={() => openEdit(row)} className="p-2 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg" title="Editar">
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button type="button" onClick={() => handleDelete(row.id)} className="p-2 text-slate-500 hover:text-red-600 rounded-lg" title="Excluir">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {sortedRows.map((row) => {
+                    const shortName = (row.nome || row.codigo || '—').trim();
+                    const isSel = selectedId === row.id;
+                    return (
+                      <tr
+                        key={row.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedId(row.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelectedId(row.id);
+                          }
+                        }}
+                        onDoubleClick={() => openEdit(row)}
+                        className={`border-b border-slate-100 dark:border-slate-800 cursor-pointer ${
+                          isSel ? 'bg-indigo-50 dark:bg-indigo-950/35' : 'hover:bg-slate-50/50 dark:hover:bg-slate-800/30'
+                        }`}
+                      >
+                        <td className="px-3 py-2.5 font-mono text-xs font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                          {shortName}
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-900 dark:text-white">{row.descricao}</td>
+                        <td className="px-2 py-2.5">
+                          <CellMark ok={!!row.abonar_ajuste} />
+                        </td>
+                        <td className="px-2 py-2.5">
+                          <CellMark ok={!!row.abonar_abono2} />
+                        </td>
+                        <td className="px-2 py-2.5">
+                          <CellMark ok={!!row.abonar_abono3} />
+                        </td>
+                        <td className="px-2 py-2.5">
+                          <CellMark ok={!!row.abonar_abono4} />
+                        </td>
+                        <td className="px-2 py-2.5 text-center text-xs text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                          {row.automatico_valor_dia !== false ? 'Sim' : 'Não'}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               {!loadingData && rows.length === 0 && (
-                <p className="p-8 text-center text-slate-500 dark:text-slate-400">Nenhuma justificativa. Clique em Incluir para cadastrar.</p>
+                <p className="p-8 text-center text-slate-500 dark:text-slate-400">
+                  Nenhuma justificativa. Use <strong>Incluir</strong> para cadastrar.
+                </p>
               )}
-            </>
+            </div>
           )}
         </div>
 
         {modalOpen && (
-          /* Overlay — alinha o modal no centro com scroll seguro em telas pequenas */
           <div
             className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm"
             role="dialog"
@@ -326,96 +433,82 @@ const AdminJustificativas: React.FC = () => {
             aria-labelledby="modal-justificativa-title"
             onClick={() => !saving && setModalOpen(false)}
           >
-            {/* Container do modal: flex-col com altura máxima de 90vh */}
             <div
-              className="flex flex-col bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-lg max-h-[90vh]"
+              className="flex flex-col bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-3xl max-h-[90vh]"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Cabeçalho fixo */}
-              <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
-                <h3
-                  id="modal-justificativa-title"
-                  className="text-base font-bold text-slate-900 dark:text-white"
-                >
-                  {editingId ? 'Editar justificativa' : 'Nova justificativa'}
-                </h3>
+              <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
+                <div>
+                  <h3 id="modal-justificativa-title" className="text-lg font-bold text-slate-900 dark:text-white">
+                    Justificativas <span className="text-slate-300 dark:text-slate-600 font-light">|</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+                    {editingId ? 'Incluir – Editar' : 'Incluir'}
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={() => !saving && setModalOpen(false)}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                   aria-label="Fechar modal"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
 
-              {/* Corpo com scroll interno */}
-              <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-4 min-h-0">
+              <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-5 min-h-0">
                 {modalError && (
                   <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">
                     {modalError}
                   </div>
                 )}
 
-                {/* Identificação */}
-                <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                    Dados de identificação
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Dados de Identificação — ordem: Nome, Descrição, Evento, Valor Dia; código técnico ao final */}
+                <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/20 p-4 space-y-3">
+                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">Dados de Identificação</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Código</label>
-                      <input
-                        type="text"
-                        value={codigo}
-                        onChange={(e) => { setCodigo(e.target.value); setModalError(null); }}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
-                        placeholder="Ex: FALTA"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome <span className="text-slate-400 font-normal">(~7 chars)</span></label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome</label>
                       <input
                         type="text"
                         value={nome}
                         onChange={(e) => setNome(e.target.value)}
                         maxLength={12}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
-                        placeholder="Ex: FALTAS"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-mono"
+                        placeholder="Ex.: AT MEDI"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Evento</label>
-                      <select
-                        value={eventoId}
-                        onChange={(e) => setEventoId(e.target.value)}
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Descrição</label>
+                      <input
+                        type="text"
+                        value={descricao}
+                        onChange={(e) => {
+                          setDescricao(e.target.value);
+                          setModalError(null);
+                        }}
                         className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
-                      >
-                        <option value="">(opcional)</option>
-                        {eventos.map((ev) => (
-                          <option key={ev.id} value={ev.id}>
-                            {ev.codigo} - {ev.descricao}
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="Ex.: ATESTADO MÉDICO"
+                      />
                     </div>
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Descrição</label>
-                  <input
-                    type="text"
-                    value={descricao}
-                    onChange={(e) => { setDescricao(e.target.value); setModalError(null); }}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
-                    placeholder="Ex: Falta justificada, Férias, Atestado"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Evento</label>
+                    <select
+                      value={eventoId}
+                      onChange={(e) => setEventoId(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                    >
+                      <option value="">(opcional)</option>
+                      {eventos.map((ev) => (
+                        <option key={ev.id} value={ev.id}>
+                          {ev.codigo} — {ev.descricao}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Valor Dia</label>
                     <input
@@ -424,88 +517,96 @@ const AdminJustificativas: React.FC = () => {
                       value={valorDia}
                       onChange={(e) => setValorDia(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
-                      placeholder="Ex: 08:00 ou 8,0"
+                      placeholder="Ex.: 8 ou 08:00"
                     />
                   </div>
-                  <label className="flex items-center gap-2 cursor-pointer pb-0.5">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Código interno</label>
                     <input
-                      type="checkbox"
-                      checked={automaticoValorDia}
-                      onChange={(e) => setAutomaticoValorDia(e.target.checked)}
-                      className="rounded border-slate-300 shrink-0"
+                      type="text"
+                      value={codigo}
+                      onChange={(e) => {
+                        setCodigo(e.target.value);
+                        setModalError(null);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-mono"
+                      placeholder="Chave única na empresa (ex.: AT_MEDI)"
                     />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Automático pela carga horária</span>
-                  </label>
-                </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Obrigatório para salvar; não duplicar na empresa.</p>
+                  </div>
+                </section>
 
-                <hr className="border-slate-200 dark:border-slate-700" />
-
-                {/* Abonar automaticamente */}
-                <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                    Abonar automaticamente
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {/* Abonar automaticamente: Ajuste … Abono 4 | : | Automático */}
+                <section>
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-3">Abonar automaticamente</p>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/40 px-3 py-3">
                     {[
-                      { checked: abonarAjuste, onChange: setAbonarAjuste, label: 'Lançar em Ajuste' },
-                      { checked: abonarAbono2, onChange: setAbonarAbono2, label: 'Lançar em Abono 2' },
-                      { checked: abonarAbono3, onChange: setAbonarAbono3, label: 'Lançar em Abono 3' },
-                      { checked: abonarAbono4, onChange: setAbonarAbono4, label: 'Lançar em Abono 4' },
+                      { checked: abonarAjuste, onChange: setAbonarAjuste, label: 'Ajuste' },
+                      { checked: abonarAbono2, onChange: setAbonarAbono2, label: 'Abono 2' },
+                      { checked: abonarAbono3, onChange: setAbonarAbono3, label: 'Abono 3' },
+                      { checked: abonarAbono4, onChange: setAbonarAbono4, label: 'Abono 4' },
                     ].map(({ checked, onChange, label }) => (
-                      <label key={label} className="flex items-center gap-2 cursor-pointer">
+                      <label key={label} className="flex items-center gap-2 cursor-pointer shrink-0">
                         <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="rounded border-slate-300 shrink-0" />
                         <span className="text-sm text-slate-700 dark:text-slate-300">{label}</span>
                       </label>
                     ))}
+                    <span className="text-slate-400 dark:text-slate-500 font-light select-none px-1" aria-hidden>
+                      :
+                    </span>
+                    <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={automaticoValorDia}
+                        onChange={(e) => setAutomaticoValorDia(e.target.checked)}
+                        className="rounded border-slate-300 shrink-0"
+                      />
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Automático</span>
+                    </label>
                   </div>
-                </div>
-
-                <hr className="border-slate-200 dark:border-slate-700" />
-
-                {/* Outras opções */}
-                <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                    Outras opções
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+                    Automático: usar carga horária do colaborador como valor do dia (em conjunto com Valor Dia, quando aplicável).
                   </p>
+                </section>
+
+                <section>
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Outras opções</p>
                   <div className="space-y-2">
                     {[
-                      { checked: lancarComoFaltas, onChange: setLancarComoFaltas, label: 'Lançar como horas faltas' },
-                      { checked: descontarDsr, onChange: setDescontarDsr, label: 'Descontar DSR sem contabilizar como falta' },
+                      { checked: lancarComoFaltas, onChange: setLancarComoFaltas, label: 'Lançar como horas falta' },
+                      { checked: descontarDsr, onChange: setDescontarDsr, label: 'Descontar DSR' },
                       { checked: naoAbonarNoturnas, onChange: setNaoAbonarNoturnas, label: 'Não abonar horas noturnas' },
                       { checked: naoCalcularDsr, onChange: setNaoCalcularDsr, label: 'Não calcular DSR' },
                       { checked: descontarBancoHoras, onChange: setDescontarBancoHoras, label: 'Descontar horas do banco de horas' },
                       { checked: descontarProvisao, onChange: setDescontarProvisao, label: 'Descontar horas em período de provisão' },
+                      {
+                        checked: bloquearUsoWeb,
+                        onChange: setBloquearUsoWeb,
+                        label: 'Não permitir aos usuários web utilizar esta justificativa',
+                      },
                     ].map(({ checked, onChange, label }) => (
-                      <label key={label} className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="rounded border-slate-300 shrink-0" />
-                        <span className="text-sm text-slate-700 dark:text-slate-300">{label}</span>
+                      <label key={label} className="flex items-start gap-2 cursor-pointer">
+                        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="rounded border-slate-300 shrink-0 mt-0.5" />
+                        <span className="text-sm text-slate-700 dark:text-slate-300 leading-snug">{label}</span>
                       </label>
                     ))}
                   </div>
-                </div>
+                </section>
 
-                <hr className="border-slate-200 dark:border-slate-700" />
-
-                {/* T+ */}
-                <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                    Comportamento de Abonos com T+
-                  </p>
-                  <label className="flex items-center gap-2 cursor-pointer">
+                <section>
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">Comportamento de Abonos com T+</p>
+                  <label className="flex items-center gap-2 cursor-pointer rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 bg-white dark:bg-slate-800/40">
                     <input
                       type="checkbox"
                       checked={incluirTMaisNosAbonos}
                       onChange={(e) => setIncluirTMaisNosAbonos(e.target.checked)}
                       className="rounded border-slate-300 shrink-0"
                     />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">
-                      Incluir valores positivos de T+ nas colunas de abono
-                    </span>
+                    <span className="text-sm text-slate-700 dark:text-slate-300">Atuar em abonos?</span>
                   </label>
-                </div>
+                </section>
               </div>
 
-              {/* Rodapé fixo */}
               <div className="flex gap-3 px-5 py-4 border-t border-slate-100 dark:border-slate-800 shrink-0">
                 <button
                   type="button"
