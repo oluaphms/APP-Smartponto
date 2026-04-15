@@ -1,15 +1,10 @@
 /**
  * Autenticação para rotas /api/rep/* (proxy do relógio).
- * — Usuário: Bearer JWT do Supabase (admin/hr da mesma empresa do dispositivo).
- * — Agente/integração: Bearer REP_BRIDGE_TOKEN, REP_AGENT_TOKEN ou API_KEY (requer service role no servidor).
- *
- * Se SUPABASE_SERVICE_ROLE_KEY não estiver definido (ex.: dev local), o fluxo com **JWT do usuário**
- * usa anon key + RLS (mesmo modelo do app).
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { RepDevice } from '../../modules/rep-integration/types';
-import { getServiceRoleKeyResolved, getSupabaseAnonKeyResolved, getSupabaseUrlResolved } from './repEnv';
+import type { RepDevice } from './types';
+import { getServiceRoleKeyResolved, getSupabaseAnonKeyResolved, getSupabaseUrlResolved } from './repVercelEnv';
 
 const JSON_HDR = { 'Content-Type': 'application/json' };
 
@@ -94,9 +89,6 @@ async function authenticateWithServiceRole(
   return { device: device as RepDevice };
 }
 
-/**
- * Fallback sem service role: cliente Supabase com JWT do usuário + RLS.
- */
 async function authenticateWithUserJwt(deviceId: string, jwt: string): Promise<{ device: RepDevice } | Response> {
   const url = getSupabaseUrlResolved();
   const anon = getSupabaseAnonKeyResolved();

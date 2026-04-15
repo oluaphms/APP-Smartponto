@@ -92,16 +92,12 @@ export default defineConfig(({ mode }) => {
         configureServer(server) {
           server.middlewares.use(async (req, res, next) => {
             const pathname = req.url?.split('?')[0] ?? '';
-            if (pathname !== '/api/rep/status' && pathname !== '/api/rep/punches') {
+            if (!pathname.startsWith('/api/rep/')) {
               next();
               return;
             }
             try {
-              const loader =
-                pathname === '/api/rep/status'
-                  ? () => import('./api/rep/status.ts')
-                  : () => import('./api/rep/punches.ts');
-              const { default: handler } = await loader();
+              const { default: handler } = await import('./api/rep/[slug].ts');
               const host = (req.headers.host as string) || 'localhost:3010';
               const fullUrl = `http://${host}${req.url ?? ''}`;
               const response = await handler(

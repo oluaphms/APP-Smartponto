@@ -1,6 +1,5 @@
 /**
- * Lê URL/keys do Supabase no handler (Vite dev injeta VITE_* em import.meta.env;
- * process.env.VITE_* pode estar vazio no mesmo processo).
+ * Lê URL/keys do Supabase no handler Vercel (Vite dev injeta VITE_* em import.meta.env).
  */
 
 function viteEnv(): Record<string, string | undefined> | undefined {
