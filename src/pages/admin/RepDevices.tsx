@@ -17,7 +17,11 @@ import {
   ArrowLeftRight,
 } from 'lucide-react';
 import { testRepDeviceConnection, syncRepDevice } from '../../../modules/rep-integration/repSyncJob';
-import { pushEmployeeToDeviceViaApi, repExchangeViaApi } from '../../../modules/rep-integration/repDeviceBrowser';
+import {
+  pushEmployeeToDeviceViaApi,
+  repExchangeViaApi,
+  toUiString,
+} from '../../../modules/rep-integration/repDeviceBrowser';
 import type { RepDeviceClockSet, RepExchangeOp, RepUserFromDevice } from '../../../modules/rep-integration/types';
 
 type RepDeviceRow = {
@@ -223,7 +227,10 @@ const AdminRepDevices: React.FC = () => {
     setMessage(null);
     try {
       const r = await testRepDeviceConnection(supabase, id);
-      setMessage({ type: r.ok ? 'success' : 'error', text: r.message });
+      setMessage({
+        type: r.ok ? 'success' : 'error',
+        text: toUiString(r.message, r.ok ? 'Conexão OK' : 'Falha ao testar o relógio.'),
+      });
     } catch (e) {
       setMessage({ type: 'error', text: (e as Error).message });
     } finally {
@@ -262,8 +269,9 @@ const AdminRepDevices: React.FC = () => {
         appendSrLog(`Concluído: ${r.imported} marcação(ões) importada(s).`);
         setMessage({ type: 'success', text: `Sincronizado. ${r.imported} marcações importadas.` });
       } else {
-        appendSrLog(`Falha: ${r.error || 'erro ao sincronizar'}`);
-        setMessage({ type: 'error', text: r.error || 'Erro ao sincronizar' });
+        const errLine = toUiString(r.error, 'Erro ao sincronizar');
+        appendSrLog(`Falha: ${errLine}`);
+        setMessage({ type: 'error', text: errLine });
       }
       await loadDevices();
     } catch (e) {
@@ -297,12 +305,14 @@ const AdminRepDevices: React.FC = () => {
       const clock = buildLocalClockForRep(mode671);
       const r = await repExchangeViaApi(d.id, 'push_clock', session.access_token, clock);
       if (!r.ok) {
-        appendSrLog(`Falha: ${r.error || r.message || 'operação não concluída'}`);
-        setMessage({ type: 'error', text: r.error || r.message || 'Operação falhou.' });
+        const errLine = toUiString(r.error ?? r.message, 'Operação não concluída.');
+        appendSrLog(`Falha: ${errLine}`);
+        setMessage({ type: 'error', text: toUiString(r.error ?? r.message, 'Operação falhou.') });
         return;
       }
-      appendSrLog(r.message || 'Data e hora gravadas no relógio.');
-      setMessage({ type: 'success', text: r.message || 'Data e hora gravadas no relógio.' });
+      const okLine = toUiString(r.message, 'Data e hora gravadas no relógio.');
+      appendSrLog(okLine);
+      setMessage({ type: 'success', text: okLine });
     } catch (e) {
       appendSrLog(`Erro: ${(e as Error).message}`);
       setMessage({ type: 'error', text: (e as Error).message });
@@ -339,8 +349,9 @@ const AdminRepDevices: React.FC = () => {
       const clock = op === 'push_clock' ? buildLocalClockForRep(mode671) : undefined;
       const r = await repExchangeViaApi(d.id, op, session.access_token, clock);
       if (!r.ok) {
-        appendSrLog(`Falha: ${r.error || r.message || 'operação não concluída'}`);
-        setMessage({ type: 'error', text: r.error || r.message || 'Operação falhou.' });
+        const errLine = toUiString(r.error ?? r.message, 'Operação não concluída.');
+        appendSrLog(`Falha: ${errLine}`);
+        setMessage({ type: 'error', text: toUiString(r.error ?? r.message, 'Operação falhou.') });
         return;
       }
       if (op === 'pull_clock') {
@@ -403,12 +414,13 @@ const AdminRepDevices: React.FC = () => {
       }
       appendSrLog(`Enviando cadastro ao relógio "${d.nome_dispositivo}"…`);
       const r = await pushEmployeeToDeviceViaApi(d.id, userId, session.access_token);
+      const msg = toUiString(r.message, r.ok ? 'Cadastro enviado ao relógio.' : 'Falha ao enviar ao relógio.');
       if (r.ok) {
-        appendSrLog(r.message || 'Cadastro enviado ao relógio.');
+        appendSrLog(msg);
       } else {
-        appendSrLog(`Falha: ${r.message}`);
+        appendSrLog(`Falha: ${msg}`);
       }
-      setMessage({ type: r.ok ? 'success' : 'error', text: r.message });
+      setMessage({ type: r.ok ? 'success' : 'error', text: msg });
     } catch (e) {
       appendSrLog(`Erro: ${(e as Error).message}`);
       setMessage({ type: 'error', text: (e as Error).message });

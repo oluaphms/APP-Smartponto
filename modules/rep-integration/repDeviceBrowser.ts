@@ -9,6 +9,63 @@ function apiOrigin(): string {
   return window.location.origin;
 }
 
+/** Resposta JSON ou HTML/texto (ex.: 502/500 da CDN) sem quebrar o parse. */
+async function readJsonOrText(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  if (!text.trim()) return {};
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { _raw: text.slice(0, 500) };
+  }
+}
+
+/**
+ * Vercel e outros proxies podem devolver `error` como string ou `{ code, message }`.
+ * React não pode renderizar objetos — sempre produzir string.
+ */
+function normalizeApiError(data: Record<string, unknown>, status: number): string {
+  const pick = (v: unknown): string | null => {
+    if (v == null) return null;
+    if (typeof v === 'string') return v;
+    if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+    if (typeof v === 'object') {
+      const o = v as Record<string, unknown>;
+      if (typeof o.message === 'string') return o.message;
+      if (typeof o.error === 'string') return o.error;
+    }
+    return null;
+  };
+
+  const fromFields =
+    pick(data.error) ?? pick(data.message) ?? pick(data.details) ?? (typeof data._raw === 'string' ? data._raw : null);
+  if (fromFields) return fromFields;
+  try {
+    const s = JSON.stringify(data);
+    if (s !== '{}') return s.length > 400 ? `${s.slice(0, 400)}…` : s;
+  } catch {
+    /* ignore */
+  }
+  return `HTTP ${status}`;
+}
+
+/** Garante string para UI (evita React #31 se a API devolver objeto em message/error). */
+export function toUiString(v: unknown, fallback = ''): string {
+  if (v == null) return fallback;
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    if (typeof o.message === 'string') return o.message;
+  }
+  try {
+    const s = JSON.stringify(v);
+    return s.length > 520 ? `${s.slice(0, 520)}…` : s;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function fetchPunchesViaApi(
   deviceId: string,
   since: Date | undefined,
@@ -21,14 +78,16 @@ export async function fetchPunchesViaApi(
     method: 'GET',
     headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
   });
-  const data = (await res.json()) as { ok?: boolean; punches?: PunchFromDevice[]; message?: string };
+  const data = await readJsonOrText(res);
   if (!res.ok) {
-    throw new Error(data.message || `HTTP ${res.status}`);
+    throw new Error(normalizeApiError(data, res.status));
   }
   if (data.ok === false) {
-    throw new Error(data.message || 'Falha ao obter marcações do relógio');
+    throw new Error(
+      normalizeApiError(data, res.status) || 'Falha ao obter marcações do relógio'
+    );
   }
-  return Array.isArray(data.punches) ? data.punches : [];
+  return Array.isArray(data.punches) ? (data.punches as PunchFromDevice[]) : [];
 }
 
 export async function testConnectionViaApi(deviceId: string, accessToken: string): Promise<{ ok: boolean; message: string }> {
@@ -38,14 +97,18 @@ export async function testConnectionViaApi(deviceId: string, accessToken: string
     method: 'GET',
     headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
   });
-  const data = (await res.json()) as { ok?: boolean; message?: string };
+  const data = await readJsonOrText(res);
+  const errText = normalizeApiError(data, res.status);
   if (!res.ok) {
-    return { ok: false, message: data.message || `HTTP ${res.status}` };
+    return { ok: false, message: errText };
   }
   if (data.ok === false) {
-    return { ok: false, message: data.message || 'Falha ao contatar o relógio' };
+    return {
+      ok: false,
+      message: normalizeApiError(data, res.status) || 'Falha ao contatar o relógio',
+    };
   }
-  return { ok: true, message: data.message || 'Conexão OK' };
+  return { ok: true, message: toUiString(data.message, 'Conexão OK') };
 }
 
 /** Cadastra funcionário no relógio (fabricante com suporte, ex.: Control iD). */
@@ -64,14 +127,17 @@ export async function pushEmployeeToDeviceViaApi(
     },
     body: JSON.stringify({ device_id: deviceId, user_id: userId }),
   });
-  const data = (await res.json()) as { ok?: boolean; message?: string; error?: string };
+  const data = await readJsonOrText(res);
   if (!res.ok) {
-    return { ok: false, message: data.error || data.message || `HTTP ${res.status}` };
+    return { ok: false, message: normalizeApiError(data, res.status) };
   }
   if (data.ok === false) {
-    return { ok: false, message: data.message || 'Falha ao enviar funcionário ao relógio' };
+    return {
+      ok: false,
+      message: normalizeApiError(data, res.status) || 'Falha ao enviar funcionário ao relógio',
+    };
   }
-  return { ok: true, message: data.message || 'Funcionário enviado ao relógio.' };
+  return { ok: true, message: toUiString(data.message, 'Funcionário enviado ao relógio.') };
 }
 
 /** Envia/recebe dados auxiliares (hora, info, lista de usuários no relógio). */
@@ -97,24 +163,19 @@ export async function repExchangeViaApi(
     },
     body: JSON.stringify({ device_id: deviceId, op, ...(clock ? { clock } : {}) }),
   });
-  const data = (await res.json()) as {
-    ok?: boolean;
-    message?: string;
-    data?: unknown;
-    users?: RepUserFromDevice[];
-    error?: string;
-  };
+  const data = await readJsonOrText(res);
   if (!res.ok) {
-    return { ok: false, error: data.error || data.message || `HTTP ${res.status}` };
+    return { ok: false, error: normalizeApiError(data, res.status) };
   }
   if (data.ok === false) {
-    const err = data.error || data.message || 'Operação não concluída.';
-    return { ok: false, message: err, error: err, data: data.data, users: data.users };
+    const err = normalizeApiError(data, res.status) || 'Operação não concluída.';
+    return { ok: false, message: err, error: err, data: data.data, users: data.users as RepUserFromDevice[] | undefined };
   }
+  const okMsg = data.message != null ? toUiString(data.message) : '';
   return {
     ok: true,
-    message: data.message,
+    message: okMsg || undefined,
     data: data.data,
-    users: data.users,
+    users: data.users as RepUserFromDevice[] | undefined,
   };
 }
