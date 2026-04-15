@@ -1,11 +1,24 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
 import { db, supabase, isSupabaseConfigured } from '../../services/supabaseClient';
 import { LoadingState, Button } from '../../../components/UI';
-import { Clock, Plus, Pencil, Trash2, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import {
+  Clock,
+  Plus,
+  Pencil,
+  Trash2,
+  Wifi,
+  WifiOff,
+  UserPlus,
+  Download,
+  Upload,
+  ArrowLeftRight,
+} from 'lucide-react';
 import { testRepDeviceConnection, syncRepDevice } from '../../../modules/rep-integration/repSyncJob';
+import { pushEmployeeToDeviceViaApi, repExchangeViaApi } from '../../../modules/rep-integration/repDeviceBrowser';
+import type { RepDeviceClockSet, RepExchangeOp, RepUserFromDevice } from '../../../modules/rep-integration/types';
 
 type RepDeviceRow = {
   id: string;
@@ -23,11 +36,49 @@ type RepDeviceRow = {
   config_extra?: Record<string, unknown> | null;
 };
 
+type EmployeeForRep = {
+  id: string;
+  nome: string;
+  status: string;
+  invisivel: boolean;
+  demissao: string | null;
+};
+
+function isEmployeeEligibleForRepPush(e: EmployeeForRep): boolean {
+  if (e.invisivel) return false;
+  if (e.demissao) return false;
+  return (e.status || 'active').toLowerCase() === 'active';
+}
+
 const TIPOS_CONEXAO = [
   { value: 'rede', label: 'Rede (IP)' },
   { value: 'arquivo', label: 'Importação de arquivo' },
   { value: 'api', label: 'API do fabricante' },
 ];
+
+/** Fuso no formato Control iD Portaria 671 (ex.: -0300). */
+function formatTimezoneOffset671(d: Date): string {
+  const offsetMin = -d.getTimezoneOffset();
+  const sign = offsetMin >= 0 ? '+' : '-';
+  const abs = Math.abs(offsetMin);
+  const hh = String(Math.floor(abs / 60)).padStart(2, '0');
+  const mm = String(abs % 60).padStart(2, '0');
+  return `${sign}${hh}${mm}`;
+}
+
+function buildLocalClockForRep(mode671: boolean): RepDeviceClockSet {
+  const d = new Date();
+  const clock: RepDeviceClockSet = {
+    year: d.getFullYear(),
+    month: d.getMonth() + 1,
+    day: d.getDate(),
+    hour: d.getHours(),
+    minute: d.getMinutes(),
+    second: d.getSeconds(),
+  };
+  if (mode671) clock.timezone = formatTimezoneOffset671(d);
+  return clock;
+}
 
 const AdminRepDevices: React.FC = () => {
   const { user, loading } = useCurrentUser();
@@ -36,10 +87,23 @@ const AdminRepDevices: React.FC = () => {
   const [testingId, setTestingId] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pushingId, setPushingId] = useState<string | null>(null);
+  const [employees, setEmployees] = useState<EmployeeForRep[]>([]);
+  /** `${deviceId}:${op}` enquanto /api/rep/exchange roda */
+  const [exchangeBusy, setExchangeBusy] = useState<string | null>(null);
+  const [detailModal, setDetailModal] = useState<{ title: string; body: string } | null>(null);
+  const [usersModal, setUsersModal] = useState<{ title: string; users: RepUserFromDevice[] } | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   /** Em HTTPS (produção): nota sobre nuvem vs rede local e agente. */
   const [repDeploymentNote, setRepDeploymentNote] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  /** Modal Enviar e Receber (REP rede) */
+  const [sendReceiveOpen, setSendReceiveOpen] = useState(false);
+  const [srDeviceId, setSrDeviceId] = useState('');
+  const [srLog, setSrLog] = useState('');
+  /** Se marcado, não oferece no envio ao relógio inativos/demitidos/invisíveis. */
+  const [srSkipBlocked, setSrSkipBlocked] = useState(true);
+  const [srPushUserId, setSrPushUserId] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [configExtraBaseline, setConfigExtraBaseline] = useState<Record<string, unknown>>({});
   const [form, setForm] = useState({
@@ -75,9 +139,83 @@ const AdminRepDevices: React.FC = () => {
     if (user?.companyId) loadDevices();
   }, [user?.companyId]);
 
+  const loadEmployeesForRep = async () => {
+    if (!user?.companyId || !isSupabaseConfigured) return;
+    try {
+      const rows = (await db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }])) as {
+        id: string;
+        nome: string | null;
+        email: string | null;
+        role: string | null;
+        status?: string | null;
+        invisivel?: boolean | null;
+        demissao?: string | null;
+      }[];
+      const allowed = new Set(['employee', 'hr', 'admin']);
+      const list = (rows || [])
+        .filter((r) => allowed.has(String(r.role || '').toLowerCase()))
+        .map((r) => ({
+          id: r.id,
+          nome: (r.nome || r.email || r.id).trim(),
+          status: (r.status || 'active').trim(),
+          invisivel: r.invisivel === true,
+          demissao: r.demissao || null,
+        }))
+        .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+      setEmployees(list);
+    } catch {
+      setEmployees([]);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.companyId) loadEmployeesForRep();
+  }, [user?.companyId]);
+
   useEffect(() => {
     setRepDeploymentNote(typeof window !== 'undefined' && window.isSecureContext);
   }, []);
+
+  const redeDevices = useMemo(
+    () => devices.filter((d) => d.tipo_conexao === 'rede'),
+    [devices]
+  );
+
+  const srSelectedDevice = useMemo(
+    () => (srDeviceId ? devices.find((d) => d.id === srDeviceId) ?? null : null),
+    [devices, srDeviceId]
+  );
+
+  const employeesForModalPush = useMemo(() => {
+    if (!srSkipBlocked) return employees;
+    return employees.filter(isEmployeeEligibleForRepPush);
+  }, [employees, srSkipBlocked]);
+
+  const srActionsLocked = useMemo(() => {
+    const d = srSelectedDevice;
+    if (!d) return true;
+    if (syncingId === d.id || pushingId === d.id) return true;
+    if (exchangeBusy && exchangeBusy.startsWith(`${d.id}:`)) return true;
+    return false;
+  }, [srSelectedDevice, syncingId, pushingId, exchangeBusy]);
+
+  const appendSrLog = useCallback((line: string) => {
+    const ts = new Date().toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+    setSrLog((prev) => (prev ? `${prev}\n` : '') + `[${ts}] ${line}`);
+  }, []);
+
+  const openSendReceiveModal = () => {
+    const rede = devices.filter((d) => d.tipo_conexao === 'rede');
+    setSrDeviceId(rede.length === 1 ? rede[0].id : '');
+    setSrLog('');
+    setSrSkipBlocked(true);
+    setSrPushUserId('');
+    setSendReceiveOpen(true);
+  };
 
   const handleTestConnection = async (id: string) => {
     if (!supabase) return;
@@ -108,21 +246,174 @@ const AdminRepDevices: React.FC = () => {
     }
   };
 
-  const handleSync = async (id: string) => {
+  const srRunReceivePunches = async () => {
+    const d = srSelectedDevice;
+    if (!d || d.tipo_conexao !== 'rede') {
+      appendSrLog('Selecione um equipamento de rede.');
+      return;
+    }
     if (!supabase) return;
-    setSyncingId(id);
+    appendSrLog(`Recebendo marcações de "${d.nome_dispositivo}"…`);
+    setSyncingId(d.id);
     setMessage(null);
     try {
-      const r = await syncRepDevice(supabase, id);
-      setMessage({
-        type: r.ok ? 'success' : 'error',
-        text: r.ok ? `Sincronizado. ${r.imported} marcações importadas.` : (r.error || 'Erro ao sincronizar'),
-      });
+      const r = await syncRepDevice(supabase, d.id);
+      if (r.ok) {
+        appendSrLog(`Concluído: ${r.imported} marcação(ões) importada(s).`);
+        setMessage({ type: 'success', text: `Sincronizado. ${r.imported} marcações importadas.` });
+      } else {
+        appendSrLog(`Falha: ${r.error || 'erro ao sincronizar'}`);
+        setMessage({ type: 'error', text: r.error || 'Erro ao sincronizar' });
+      }
       await loadDevices();
     } catch (e) {
+      appendSrLog(`Erro: ${(e as Error).message}`);
       setMessage({ type: 'error', text: (e as Error).message });
     } finally {
       setSyncingId(null);
+    }
+  };
+
+  const srRunSendClock = async () => {
+    const d = srSelectedDevice;
+    if (!d || d.tipo_conexao !== 'rede') {
+      appendSrLog('Selecione um equipamento de rede.');
+      return;
+    }
+    if (!supabase) return;
+    const mode671 = d.config_extra?.mode_671 === true;
+    setExchangeBusy(`${d.id}:push_clock`);
+    setMessage(null);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        appendSrLog('Sessão expirada. Faça login novamente.');
+        setMessage({ type: 'error', text: 'Sessão expirada. Faça login novamente.' });
+        return;
+      }
+      appendSrLog(`Enviando data e hora para "${d.nome_dispositivo}"…`);
+      const clock = buildLocalClockForRep(mode671);
+      const r = await repExchangeViaApi(d.id, 'push_clock', session.access_token, clock);
+      if (!r.ok) {
+        appendSrLog(`Falha: ${r.error || r.message || 'operação não concluída'}`);
+        setMessage({ type: 'error', text: r.error || r.message || 'Operação falhou.' });
+        return;
+      }
+      appendSrLog(r.message || 'Data e hora gravadas no relógio.');
+      setMessage({ type: 'success', text: r.message || 'Data e hora gravadas no relógio.' });
+    } catch (e) {
+      appendSrLog(`Erro: ${(e as Error).message}`);
+      setMessage({ type: 'error', text: (e as Error).message });
+    } finally {
+      setExchangeBusy(null);
+    }
+  };
+
+  const srRunExchangeOp = async (op: RepExchangeOp) => {
+    const d = srSelectedDevice;
+    if (!d || d.tipo_conexao !== 'rede') {
+      appendSrLog('Selecione um equipamento de rede.');
+      return;
+    }
+    if (!supabase) return;
+    const mode671 = d.config_extra?.mode_671 === true;
+    setExchangeBusy(`${d.id}:${op}`);
+    setMessage(null);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        appendSrLog('Sessão expirada. Faça login novamente.');
+        setMessage({ type: 'error', text: 'Sessão expirada. Faça login novamente.' });
+        return;
+      }
+      const startMsg: Partial<Record<RepExchangeOp, string>> = {
+        pull_clock: 'Lendo data e hora do relógio…',
+        pull_info: 'Lendo informações do aparelho…',
+        pull_users: 'Lendo cadastros no relógio…',
+      };
+      if (startMsg[op]) appendSrLog(startMsg[op]!);
+      const clock = op === 'push_clock' ? buildLocalClockForRep(mode671) : undefined;
+      const r = await repExchangeViaApi(d.id, op, session.access_token, clock);
+      if (!r.ok) {
+        appendSrLog(`Falha: ${r.error || r.message || 'operação não concluída'}`);
+        setMessage({ type: 'error', text: r.error || r.message || 'Operação falhou.' });
+        return;
+      }
+      if (op === 'pull_clock') {
+        const body =
+          typeof r.data === 'string' ? r.data : JSON.stringify(r.data ?? {}, null, 2);
+        setDetailModal({ title: 'Data e hora no relógio', body });
+        appendSrLog('Hora lida. Abra o painel de detalhes.');
+        setMessage({ type: 'success', text: 'Hora lida do relógio.' });
+      } else if (op === 'pull_info') {
+        const body =
+          typeof r.data === 'string' ? r.data : JSON.stringify(r.data ?? {}, null, 2);
+        setDetailModal({ title: 'Informações do aparelho', body });
+        appendSrLog('Informações lidas. Abra o painel de detalhes.');
+        setMessage({ type: 'success', text: 'Configurações lidas do relógio.' });
+      } else if (op === 'pull_users') {
+        setUsersModal({
+          title: `Funcionários no relógio — ${d.nome_dispositivo}`,
+          users: r.users ?? [],
+        });
+        appendSrLog(`${(r.users ?? []).length} cadastro(s) listado(s) no relógio.`);
+        setMessage({
+          type: 'success',
+          text: `${(r.users ?? []).length} cadastro(s) no relógio (somente leitura).`,
+        });
+      }
+    } catch (e) {
+      appendSrLog(`Erro: ${(e as Error).message}`);
+      setMessage({ type: 'error', text: (e as Error).message });
+    } finally {
+      setExchangeBusy(null);
+    }
+  };
+
+  const srRunPushEmployee = async () => {
+    const d = srSelectedDevice;
+    if (!d || d.tipo_conexao !== 'rede') {
+      appendSrLog('Selecione um equipamento de rede.');
+      return;
+    }
+    const userId = srPushUserId;
+    if (!supabase || !userId) {
+      appendSrLog('Selecione um funcionário para enviar ao relógio.');
+      return;
+    }
+    const emp = employees.find((e) => e.id === userId);
+    if (srSkipBlocked && emp && !isEmployeeEligibleForRepPush(emp)) {
+      appendSrLog('Funcionário bloqueado ou inativo — não enviado. Desmarque a opção ou ajuste o cadastro.');
+      return;
+    }
+    setPushingId(d.id);
+    setMessage(null);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        appendSrLog('Sessão expirada. Faça login novamente.');
+        setMessage({ type: 'error', text: 'Sessão expirada. Faça login novamente.' });
+        return;
+      }
+      appendSrLog(`Enviando cadastro ao relógio "${d.nome_dispositivo}"…`);
+      const r = await pushEmployeeToDeviceViaApi(d.id, userId, session.access_token);
+      if (r.ok) {
+        appendSrLog(r.message || 'Cadastro enviado ao relógio.');
+      } else {
+        appendSrLog(`Falha: ${r.message}`);
+      }
+      setMessage({ type: r.ok ? 'success' : 'error', text: r.message });
+    } catch (e) {
+      appendSrLog(`Erro: ${(e as Error).message}`);
+      setMessage({ type: 'error', text: (e as Error).message });
+    } finally {
+      setPushingId(null);
     }
   };
 
@@ -240,13 +531,19 @@ const AdminRepDevices: React.FC = () => {
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
       <PageHeader
         title="Relógios REP"
-        subtitle="Cadastre e gerencie relógios de ponto (Registrador Eletrônico de Ponto)"
+        subtitle="Cadastre relógios e use Enviar e Receber para batidas, hora, funcionários e leitura de configuração (Control iD iDClass e compatíveis)."
         icon={<Clock size={24} />}
         actions={
-          <Button onClick={openCreate} variant="primary">
-            <Plus size={18} className="mr-2" />
-            Cadastrar relógio
-          </Button>
+          <div className="flex flex-wrap gap-2 justify-end">
+            <Button type="button" variant="outline" onClick={openSendReceiveModal}>
+              <ArrowLeftRight size={18} className="mr-2" />
+              Enviar e Receber
+            </Button>
+            <Button onClick={openCreate} variant="primary">
+              <Plus size={18} className="mr-2" />
+              Cadastrar relógio
+            </Button>
+          </div>
         }
       />
 
@@ -265,7 +562,9 @@ const AdminRepDevices: React.FC = () => {
         >
           <strong className="font-semibold">Arquitetura REP:</strong> o painel usa apenas rotas HTTPS do próprio app (
           <code className="text-xs bg-amber-100/80 dark:bg-amber-900/50 px-1 rounded">/api/rep/status</code>,{' '}
-          <code className="text-xs bg-amber-100/80 dark:bg-amber-900/50 px-1 rounded">/api/rep/punches</code>
+          <code className="text-xs bg-amber-100/80 dark:bg-amber-900/50 px-1 rounded">/api/rep/punches</code>,{' '}
+          <code className="text-xs bg-amber-100/80 dark:bg-amber-900/50 px-1 rounded">/api/rep/push-employee</code>,{' '}
+          <code className="text-xs bg-amber-100/80 dark:bg-amber-900/50 px-1 rounded">/api/rep/exchange</code>
           ) — sem mixed content nem CORS para o IP do relógio. Em <strong>produção na nuvem</strong> o backend não alcança
           <code className="text-xs mx-1 bg-amber-100/80 dark:bg-amber-900/50 px-1 rounded">192.168.x.x</code>: use o
           agente local <code className="text-xs bg-amber-100/80 dark:bg-amber-900/50 px-1 rounded">npm run rep:agent</code>,{' '}
@@ -323,29 +622,17 @@ const AdminRepDevices: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2">
                     {d.tipo_conexao === 'rede' && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1 min-w-[120px]"
-                          disabled={testingId === d.id}
-                          onClick={() => handleTestConnection(d.id)}
-                        >
-                          Testar
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1 min-w-[140px]"
-                          disabled={syncingId === d.id}
-                          onClick={() => handleSync(d.id)}
-                        >
-                          <RefreshCw size={14} className={syncingId === d.id ? 'animate-spin' : ''} />
-                          Sincronizar
-                        </Button>
-                      </>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 min-w-[100px]"
+                        disabled={testingId === d.id}
+                        onClick={() => handleTestConnection(d.id)}
+                      >
+                        Testar
+                      </Button>
                     )}
                     <Button size="sm" variant="outline" className="min-w-[44px]" onClick={() => openEdit(d)}>
                       <Pencil size={14} />
@@ -360,6 +647,11 @@ const AdminRepDevices: React.FC = () => {
                       <Trash2 size={14} />
                     </Button>
                   </div>
+                  {d.tipo_conexao === 'rede' && (
+                    <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                      Control iD: PIS/CPF no cadastro do funcionário; modo 671 exige CPF de 11 dígitos para envio.
+                    </p>
+                  )}
                 </div>
               ))
             )}
@@ -368,7 +660,7 @@ const AdminRepDevices: React.FC = () => {
           {/* Desktop/Tablet: tabela com scroll horizontal se necessário */}
           <div className="hidden md:block rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="w-full overflow-x-auto">
-              <table className="min-w-[980px] w-full text-left">
+              <table className="min-w-[880px] w-full text-left">
                 <thead className="bg-slate-50 dark:bg-slate-800/50">
                   <tr>
                     <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Nome</th>
@@ -416,25 +708,14 @@ const AdminRepDevices: React.FC = () => {
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-2">
                             {d.tipo_conexao === 'rede' && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={testingId === d.id}
-                                  onClick={() => handleTestConnection(d.id)}
-                                >
-                                  Testar
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={syncingId === d.id}
-                                  onClick={() => handleSync(d.id)}
-                                >
-                                  <RefreshCw size={14} className={syncingId === d.id ? 'animate-spin' : ''} />
-                                  Sincronizar
-                                </Button>
-                              </>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={testingId === d.id}
+                                onClick={() => handleTestConnection(d.id)}
+                              >
+                                Testar
+                              </Button>
                             )}
                             <Button size="sm" variant="outline" onClick={() => openEdit(d)}>
                               <Pencil size={14} />
@@ -458,6 +739,289 @@ const AdminRepDevices: React.FC = () => {
             </div>
           </div>
         </>
+      )}
+
+      {sendReceiveOpen && (
+        <div
+          className="fixed inset-0 z-[128] flex items-center justify-center bg-black/50 p-3 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="rep-send-receive-title"
+          onClick={() => setSendReceiveOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
+                <ArrowLeftRight size={22} />
+              </span>
+              <div>
+                <h2 id="rep-send-receive-title" className="text-lg font-bold text-slate-900 dark:text-white">
+                  Enviar e Receber
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Comunicação com o relógio pela rede (importação, horário e cadastros).
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Equipamento</label>
+                <select
+                  value={srDeviceId}
+                  onChange={(e) => setSrDeviceId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                >
+                  <option value="">Selecione o relógio…</option>
+                  {redeDevices.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.nome_dispositivo}
+                      {d.ip ? ` — ${d.ip}:${d.porta ?? 80}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {redeDevices.length === 0 && (
+                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                    Cadastre um dispositivo do tipo rede (IP) para habilitar esta tela.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Status</label>
+                <textarea
+                  readOnly
+                  rows={8}
+                  value={srLog}
+                  placeholder="As mensagens da comunicação aparecem aqui."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/50 text-slate-800 dark:text-slate-200 text-xs font-mono leading-relaxed resize-y min-h-[140px]"
+                />
+              </div>
+
+              <div className="rounded-xl border border-slate-200 dark:border-slate-600 p-3 space-y-3 bg-slate-50/80 dark:bg-slate-900/30">
+                <p className="text-xs font-medium text-slate-600 dark:text-slate-300">Opções</p>
+                <label className="flex gap-2 items-start opacity-70 cursor-not-allowed">
+                  <input type="checkbox" disabled className="mt-0.5 rounded border-slate-300" />
+                  <span className="text-sm text-slate-700 dark:text-slate-300">
+                    Salvar batidas em tabela temporária
+                    <span className="block text-[11px] text-slate-500 dark:text-slate-400 font-normal mt-0.5">
+                      No Chrono Digital as marcações importadas são gravadas direto nos registros de ponto; não há fila
+                      temporária separada.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex gap-2 items-start opacity-70 cursor-not-allowed">
+                  <input type="checkbox" disabled className="mt-0.5 rounded border-slate-300" />
+                  <span className="text-sm text-slate-700 dark:text-slate-300">
+                    Alocar batidas
+                    <span className="block text-[11px] text-slate-500 dark:text-slate-400 font-normal mt-0.5">
+                      Associação automática a escalas será evoluída em versões futuras.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex gap-2 items-start cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={srSkipBlocked}
+                    onChange={(e) => setSrSkipBlocked(e.target.checked)}
+                    className="mt-0.5 rounded border-slate-300"
+                  />
+                  <span className="text-sm text-slate-700 dark:text-slate-300">
+                    Não enviar funcionários bloqueados
+                    <span className="block text-[11px] text-slate-500 dark:text-slate-400 font-normal mt-0.5">
+                      Ao enviar cadastro ao relógio, considera apenas perfis ativos (exclui demitidos, invisíveis e status
+                      diferente de ativo).
+                    </span>
+                  </span>
+                </label>
+                <label className="flex gap-2 items-start opacity-70 cursor-not-allowed">
+                  <input type="checkbox" disabled className="mt-0.5 rounded border-slate-300" />
+                  <span className="text-sm text-slate-700 dark:text-slate-300">
+                    Barras padrão especial
+                    <span className="block text-[11px] text-slate-500 dark:text-slate-400 font-normal mt-0.5">
+                      Indisponível; o cartão de ponto segue o layout padrão do Chrono Digital.
+                    </span>
+                  </span>
+                </label>
+              </div>
+
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                <strong className="font-medium text-slate-600 dark:text-slate-300">Receber</strong> importa as marcações do
+                relógio para o sistema. <strong className="font-medium text-slate-600 dark:text-slate-300">Enviar</strong>{' '}
+                grava a data e hora deste computador no aparelho.
+              </p>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="flex-1 min-w-[100px]"
+                  disabled={srActionsLocked || redeDevices.length === 0}
+                  onClick={srRunReceivePunches}
+                >
+                  <Download size={16} className="mr-1.5" />
+                  Receber
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="flex-1 min-w-[100px]"
+                  disabled={srActionsLocked || redeDevices.length === 0}
+                  onClick={srRunSendClock}
+                >
+                  <Upload size={16} className="mr-1.5" />
+                  Enviar
+                </Button>
+                <Button type="button" variant="secondary" className="min-w-[88px]" onClick={() => setSendReceiveOpen(false)}>
+                  Fechar
+                </Button>
+              </div>
+
+              <details className="rounded-xl border border-slate-200 dark:border-slate-600 p-3 text-sm">
+                <summary className="cursor-pointer font-medium text-slate-700 dark:text-slate-200 select-none">
+                  Outras operações no relógio
+                </summary>
+                <div className="mt-3 space-y-3 pt-1 border-t border-slate-100 dark:border-slate-700">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Receber (leituras)</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={srActionsLocked || !srSelectedDevice}
+                      onClick={() => srRunExchangeOp('pull_clock')}
+                    >
+                      Ler hora
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={srActionsLocked || !srSelectedDevice}
+                      onClick={() => srRunExchangeOp('pull_users')}
+                    >
+                      Funcionários no aparelho
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={srActionsLocked || !srSelectedDevice}
+                      onClick={() => srRunExchangeOp('pull_info')}
+                    >
+                      Info / config
+                    </Button>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 pt-1">Enviar cadastro</p>
+                  <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+                    <div className="flex-1 min-w-0">
+                      <label className="block text-[11px] text-slate-500 mb-0.5">Funcionário</label>
+                      <select
+                        value={srPushUserId}
+                        onChange={(e) => setSrPushUserId(e.target.value)}
+                        disabled={employeesForModalPush.length === 0}
+                        className="w-full px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                      >
+                        <option value="">Selecione…</option>
+                        {employeesForModalPush.map((emp) => (
+                          <option key={emp.id} value={emp.id}>
+                            {emp.nome}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0"
+                      disabled={srActionsLocked || !srSelectedDevice || !srPushUserId || employeesForModalPush.length === 0}
+                      onClick={srRunPushEmployee}
+                    >
+                      <UserPlus size={14} className="mr-1" />
+                      Enviar ao relógio
+                    </Button>
+                  </div>
+                </div>
+              </details>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {detailModal && (
+        <div
+          className="fixed inset-0 z-[130] flex items-center justify-center bg-black/50 p-3 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setDetailModal(null)}
+        >
+          <div
+            className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col p-4 sm:p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-2">{detailModal.title}</h2>
+            <pre className="text-xs text-slate-700 dark:text-slate-200 overflow-auto flex-1 max-h-[60vh] whitespace-pre-wrap break-words bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 border border-slate-200 dark:border-slate-600">
+              {detailModal.body}
+            </pre>
+            <Button className="mt-4" variant="secondary" onClick={() => setDetailModal(null)}>
+              Fechar
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {usersModal && (
+        <div
+          className="fixed inset-0 z-[130] flex items-center justify-center bg-black/50 p-3 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setUsersModal(null)}
+        >
+          <div
+            className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col p-4 sm:p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-3">{usersModal.title}</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+              Somente leitura — não altera o cadastro do Chrono Digital.
+            </p>
+            <div className="overflow-auto flex-1 max-h-[55vh] rounded-lg border border-slate-200 dark:border-slate-600">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 dark:bg-slate-900/50 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300">Nome</th>
+                    <th className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300">CPF/PIS</th>
+                    <th className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300">Matrícula</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                  {usersModal.users.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="px-3 py-4 text-center text-slate-500">
+                        Nenhum usuário retornado.
+                      </td>
+                    </tr>
+                  ) : (
+                    usersModal.users.map((u, i) => (
+                      <tr key={i} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/30">
+                        <td className="px-3 py-2 text-slate-800 dark:text-slate-100">{u.nome || '—'}</td>
+                        <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{u.cpf || u.pis || '—'}</td>
+                        <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{u.matricula || '—'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <Button className="mt-4" variant="secondary" onClick={() => setUsersModal(null)}>
+              Fechar
+            </Button>
+          </div>
+        </div>
       )}
 
       {modalOpen && (

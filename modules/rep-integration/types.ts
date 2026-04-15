@@ -55,11 +55,52 @@ export interface RepConnectionTestResult {
   body?: unknown;
 }
 
+/** Dados do funcionário para cadastro no relógio (fabricantes que suportam envio). */
+export interface RepEmployeePayload {
+  nome: string;
+  cpf?: string | null;
+  pis?: string | null;
+  matricula?: string | null;
+}
+
+/** Usuário lido do relógio (ex.: Control iD load_users). */
+export interface RepUserFromDevice {
+  nome: string;
+  pis?: string;
+  cpf?: string;
+  matricula?: string;
+  raw?: Record<string, unknown>;
+}
+
+/** Data/hora local para set_system_date_time (Control iD). */
+export interface RepDeviceClockSet {
+  day: number;
+  month: number;
+  year: number;
+  hour: number;
+  minute: number;
+  second: number;
+  /** Modo 671: ex. "-0300" */
+  timezone?: string;
+}
+
+export type RepExchangeOp = 'pull_clock' | 'push_clock' | 'pull_info' | 'pull_users';
+
 export interface RepVendorAdapter {
   name: string;
   fetchPunches(device: RepDevice, since?: Date): Promise<PunchFromDevice[]>;
   /** API nativa do fabricante (ex.: Control iD iDClass — login.fcgi + get_info.fcgi). */
   testConnection?(device: RepDevice): Promise<RepConnectionTestResult>;
+  /** Cadastra funcionário no aparelho (ex.: Control iD — add_users.fcgi). */
+  pushEmployee?(device: RepDevice, employee: RepEmployeePayload): Promise<{ ok: boolean; message: string }>;
+  /** Lê data/hora do relógio. */
+  pullClock?(device: RepDevice): Promise<{ ok: boolean; message?: string; data?: unknown }>;
+  /** Ajusta data/hora no relógio. */
+  pushClock?(device: RepDevice, clock: RepDeviceClockSet): Promise<{ ok: boolean; message: string }>;
+  /** Resumo de hardware / cadastros (ex.: get_info). */
+  pullDeviceInfo?(device: RepDevice): Promise<{ ok: boolean; message?: string; data?: unknown }>;
+  /** Lista funcionários cadastrados no relógio. */
+  pullUsersFromDevice?(device: RepDevice): Promise<{ ok: boolean; message?: string; users: RepUserFromDevice[] }>;
 }
 
 export interface PunchFromDevice {

@@ -1,7 +1,20 @@
 import fs from 'node:fs';
+import type { IncomingMessage } from 'node:http';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+
+/** Corpo da requisição no middleware Connect → Request do handler (POST sem body quebra request.json()). */
+async function readConnectRequestBody(req: IncomingMessage): Promise<Uint8Array | undefined> {
+  const m = (req.method || 'GET').toUpperCase();
+  if (m === 'GET' || m === 'HEAD') return undefined;
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string | Uint8Array));
+  }
+  if (chunks.length === 0) return undefined;
+  return new Uint8Array(Buffer.concat(chunks));
+}
 
 const projectRoot = path.resolve(__dirname);
 
@@ -100,16 +113,21 @@ export default defineConfig(({ mode }) => {
               const { default: handler } = await import('./api/rep-bridge.ts');
               const host = (req.headers.host as string) || 'localhost:3010';
               const fullUrl = `http://${host}${req.url ?? ''}`;
+              const repRequestBody = await readConnectRequestBody(req as IncomingMessage);
               const response = await handler(
-                new Request(fullUrl, { method: req.method || 'GET', headers: req.headers as HeadersInit })
+                new Request(fullUrl, {
+                  method: req.method || 'GET',
+                  headers: req.headers as HeadersInit,
+                  ...(repRequestBody ? { body: repRequestBody } : {}),
+                })
               );
               res.statusCode = response.status;
               response.headers.forEach((value, key) => {
                 if (key.toLowerCase() === 'transfer-encoding') return;
                 res.setHeader(key, value);
               });
-              const body = Buffer.from(await response.arrayBuffer());
-              res.end(body);
+              const repResponseBuf = Buffer.from(await response.arrayBuffer());
+              res.end(repResponseBuf);
             } catch (e) {
               console.error('[rep-bridge-api-dev]', e);
               res.statusCode = 500;

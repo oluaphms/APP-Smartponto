@@ -3,7 +3,15 @@
  * Não importe no código do cliente (browser bundle).
  */
 
-import type { RepDevice, PunchFromDevice, RepConnectionTestResult } from './types';
+import type {
+  RepDevice,
+  PunchFromDevice,
+  RepConnectionTestResult,
+  RepEmployeePayload,
+  RepExchangeOp,
+  RepDeviceClockSet,
+  RepUserFromDevice,
+} from './types';
 import { deviceFetch } from './repDeviceHttp';
 import { getVendorAdapter, registerVendorAdapter } from './repDeviceManager';
 import ControlIdAdapter from './adapters/controlId';
@@ -307,4 +315,56 @@ export async function runRepConnectionTest(device: RepDevice): Promise<RepConnec
 export async function testConnectionServer(device: RepDevice): Promise<{ ok: boolean; message: string }> {
   const r = await runRepConnectionTest(device);
   return { ok: r.ok, message: r.message };
+}
+
+/**
+ * Envia cadastro de funcionário ao relógio (só fabricantes com adaptador pushEmployee).
+ */
+export async function pushEmployeeToDeviceServer(
+  device: RepDevice,
+  employee: RepEmployeePayload
+): Promise<{ ok: boolean; message: string }> {
+  const adapter = getVendorAdapter(device);
+  if (adapter?.pushEmployee) {
+    return adapter.pushEmployee(device, employee);
+  }
+  return {
+    ok: false,
+    message:
+      'Envio de funcionário pelo sistema não está disponível para este fabricante. Cadastre no próprio relógio ou use a documentação do fabricante.',
+  };
+}
+
+/**
+ * Troca dados com o relógio (hora, info, lista de usuários) — conforme adaptador do fabricante.
+ */
+export async function runRepExchange(
+  device: RepDevice,
+  op: RepExchangeOp,
+  clock?: RepDeviceClockSet
+): Promise<{ ok: boolean; message?: string; data?: unknown; users?: RepUserFromDevice[] }> {
+  const adapter = getVendorAdapter(device);
+  const unsupported = {
+    ok: false as const,
+    message:
+      'Esta operação não está disponível para o fabricante deste relógio (implementado para Control iD iDClass).',
+  };
+  if (!adapter) return unsupported;
+
+  if (op === 'pull_clock' && adapter.pullClock) {
+    return adapter.pullClock(device);
+  }
+  if (op === 'push_clock' && adapter.pushClock) {
+    if (!clock) {
+      return { ok: false, message: 'Informe data e hora para gravar no relógio.' };
+    }
+    return adapter.pushClock(device, clock);
+  }
+  if (op === 'pull_info' && adapter.pullDeviceInfo) {
+    return adapter.pullDeviceInfo(device);
+  }
+  if (op === 'pull_users' && adapter.pullUsersFromDevice) {
+    return adapter.pullUsersFromDevice(device);
+  }
+  return unsupported;
 }

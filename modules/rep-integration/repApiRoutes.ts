@@ -3,13 +3,205 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { authenticateRepDeviceRequest, repCorsHeaders } from './repVercelAuth';
+import { authenticateRepDeviceRequest, getServiceSupabase, repCorsHeaders } from './repVercelAuth';
 import { getSupabaseAnonKeyResolved, getSupabaseUrlResolved } from './repVercelEnv';
-import { runRepConnectionTest, getPunchesFromDeviceServer } from './repDeviceServer';
+import {
+  runRepConnectionTest,
+  getPunchesFromDeviceServer,
+  pushEmployeeToDeviceServer,
+  runRepExchange,
+} from './repDeviceServer';
 import { syncRepDevices } from './repSyncJob';
 import { ingestPunch } from './repService';
 import { parseAFD, parseTxtOrCsv } from './repParser';
 import { ingestAfdRecords } from './repService';
+import type { RepEmployeePayload, RepDeviceClockSet, RepExchangeOp } from './types';
+
+const JSON_HDR = { 'Content-Type': 'application/json' };
+
+/** Evita confundir corpo vazio com JSON inválido (ex.: middleware dev sem repassar POST). */
+async function readRequestJsonBody(
+  request: Request
+): Promise<{ ok: true; value: unknown } | { ok: false; error: string }> {
+  let text: string;
+  try {
+    text = await request.text();
+  } catch {
+    return { ok: false, error: 'Body JSON inválido' };
+  }
+  const t = text.trim();
+  if (!t) {
+    return {
+      ok: false,
+      error:
+        'Corpo da requisição vazio. Se estiver em npm run dev, reinicie o Vite (proxy /api/rep/* precisa repassar o corpo do POST).',
+    };
+  }
+  try {
+    return { ok: true, value: JSON.parse(t) };
+  } catch {
+    return { ok: false, error: 'Body JSON inválido' };
+  }
+}
+
+type UserRowRepPush = {
+  nome: string | null;
+  email: string | null;
+  cpf: string | null;
+  pis_pasep: string | null;
+  numero_folha: string | null;
+  company_id: string;
+  role: string | null;
+};
+
+async function fetchUserRowForRepPush(
+  request: Request,
+  userId: string,
+  expectedCompanyId: string
+): Promise<UserRowRepPush | Response> {
+  const select = 'nome, email, cpf, pis_pasep, numero_folha, company_id, role';
+  const ctx = getServiceSupabase();
+  if (ctx) {
+    const { data, error } = await ctx.admin.from('users').select(select).eq('id', userId).maybeSingle();
+    if (error || !data) {
+      return Response.json({ error: 'Funcionário não encontrado' }, { status: 404, headers: JSON_HDR });
+    }
+    const u = data as UserRowRepPush;
+    if (u.company_id !== expectedCompanyId) {
+      return Response.json({ error: 'Funcionário não pertence a esta empresa' }, { status: 403, headers: JSON_HDR });
+    }
+    const role = String(u.role || '').toLowerCase();
+    if (!['employee', 'hr', 'admin'].includes(role)) {
+      return Response.json({ error: 'Este perfil não pode ser enviado ao relógio' }, { status: 403, headers: JSON_HDR });
+    }
+    return u;
+  }
+  const url = getSupabaseUrlResolved();
+  const anon = getSupabaseAnonKeyResolved();
+  if (!url || !anon) {
+    return Response.json(
+      { error: 'Servidor sem SUPABASE_SERVICE_ROLE_KEY e sem variáveis Supabase públicas.' },
+      { status: 500, headers: JSON_HDR }
+    );
+  }
+  const authHeader = request.headers.get('Authorization') || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  const userClient = createClient(url, anon, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data, error } = await userClient.from('users').select(select).eq('id', userId).maybeSingle();
+  if (error || !data) {
+    return Response.json({ error: 'Funcionário não encontrado' }, { status: 404, headers: JSON_HDR });
+  }
+  const u = data as UserRowRepPush;
+  if (u.company_id !== expectedCompanyId) {
+    return Response.json({ error: 'Funcionário não pertence a esta empresa' }, { status: 403, headers: JSON_HDR });
+  }
+  const role = String(u.role || '').toLowerCase();
+  if (!['employee', 'hr', 'admin'].includes(role)) {
+    return Response.json({ error: 'Este perfil não pode ser enviado ao relógio' }, { status: 403, headers: JSON_HDR });
+  }
+  return u;
+}
+
+async function handlePushEmployee(request: Request): Promise<Response> {
+  const headers = {
+    ...repCorsHeaders(request),
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
+  try {
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers });
+    }
+    if (request.method !== 'POST') {
+      return Response.json({ error: 'Method not allowed' }, { status: 405, headers });
+    }
+    const parsed = await readRequestJsonBody(request);
+    if (!parsed.ok) {
+      return Response.json({ error: parsed.error }, { status: 400, headers });
+    }
+    const raw = parsed.value;
+    const body = (raw && typeof raw === 'object' ? raw : {}) as { device_id?: string; user_id?: string };
+    const deviceId = typeof body.device_id === 'string' ? body.device_id.trim() : '';
+    const userId = typeof body.user_id === 'string' ? body.user_id.trim() : '';
+    if (!deviceId || !userId) {
+      return Response.json({ error: 'device_id e user_id são obrigatórios' }, { status: 400, headers });
+    }
+    const auth = await authenticateRepDeviceRequest(request, deviceId);
+    if (auth instanceof Response) return auth;
+    const { device } = auth;
+    if (device.tipo_conexao !== 'rede') {
+      return Response.json({ ok: false, message: 'Dispositivo deve ser do tipo rede (IP).' }, { status: 400, headers });
+    }
+
+    const row = await fetchUserRowForRepPush(request, userId, device.company_id);
+    if (row instanceof Response) return row;
+
+    const payload: RepEmployeePayload = {
+      nome: (row.nome || row.email || 'Funcionário').trim(),
+      cpf: row.cpf,
+      pis: row.pis_pasep,
+      matricula: row.numero_folha,
+    };
+
+    const result = await pushEmployeeToDeviceServer(device, payload);
+    return Response.json({ ok: result.ok, message: result.message }, { status: 200, headers });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Erro interno no proxy REP (push-employee)';
+    console.error('[api/rep/push-employee]', e);
+    return Response.json({ ok: false, error: message }, { status: 500, headers });
+  }
+}
+
+const REP_EXCHANGE_OPS: RepExchangeOp[] = ['pull_clock', 'push_clock', 'pull_info', 'pull_users'];
+
+async function handleExchange(request: Request): Promise<Response> {
+  const headers = {
+    ...repCorsHeaders(request),
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
+  try {
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers });
+    }
+    if (request.method !== 'POST') {
+      return Response.json({ error: 'Method not allowed' }, { status: 405, headers });
+    }
+    const parsedEx = await readRequestJsonBody(request);
+    if (!parsedEx.ok) {
+      return Response.json({ error: parsedEx.error }, { status: 400, headers });
+    }
+    const rawEx = parsedEx.value;
+    const body = (rawEx && typeof rawEx === 'object' ? rawEx : {}) as {
+      device_id?: string;
+      op?: string;
+      clock?: RepDeviceClockSet;
+    };
+    const deviceId = typeof body.device_id === 'string' ? body.device_id.trim() : '';
+    const opRaw = typeof body.op === 'string' ? body.op.trim() : '';
+    if (!deviceId || !opRaw) {
+      return Response.json({ error: 'device_id e op são obrigatórios' }, { status: 400, headers });
+    }
+    if (!REP_EXCHANGE_OPS.includes(opRaw as RepExchangeOp)) {
+      return Response.json({ error: 'op inválido' }, { status: 400, headers });
+    }
+    const auth = await authenticateRepDeviceRequest(request, deviceId);
+    if (auth instanceof Response) return auth;
+    const { device } = auth;
+    if (device.tipo_conexao !== 'rede') {
+      return Response.json({ ok: false, message: 'Dispositivo deve ser do tipo rede (IP).' }, { status: 400, headers });
+    }
+    const result = await runRepExchange(device, opRaw as RepExchangeOp, body.clock);
+    return Response.json(result, { status: 200, headers });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Erro interno no proxy REP (exchange)';
+    console.error('[api/rep/exchange]', e);
+    return Response.json({ ok: false, error: message }, { status: 500, headers });
+  }
+}
 
 const corsSync: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -321,7 +513,7 @@ async function handleImportAfd(request: Request): Promise<Response> {
 }
 
 /**
- * Despacha slug REP (mantém URLs públicas: status, punches, sync, punch, import-afd).
+ * Despacha slug REP (status, punches, sync, punch, import-afd, push-employee, exchange).
  */
 export async function handleRepSlug(request: Request, slug: string): Promise<Response> {
   switch (slug) {
@@ -335,6 +527,10 @@ export async function handleRepSlug(request: Request, slug: string): Promise<Res
       return handlePunch(request);
     case 'import-afd':
       return handleImportAfd(request);
+    case 'push-employee':
+      return handlePushEmployee(request);
+    case 'exchange':
+      return handleExchange(request);
     default:
       return Response.json({ error: 'Rota REP desconhecida' }, { status: 404, headers: { 'Content-Type': 'application/json' } });
   }

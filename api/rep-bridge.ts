@@ -1,6 +1,6 @@
 /**
  * Proxy REP consolidado (1 Serverless Function).
- * URLs públicas: /api/rep/status, /api/rep/punches, etc. (via rewrite em vercel.json).
+ * URLs públicas: /api/rep/status, /api/rep/punches, /api/rep/push-employee, /api/rep/exchange, etc. (via rewrite em vercel.json).
  * Não usar api/rep/[slug].ts — em alguns deploys Vercel isso resulta em FUNCTION_INVOCATION_FAILED.
  */
 
