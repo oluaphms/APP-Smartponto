@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
@@ -18,6 +18,14 @@ const reactAlias = {
 
 export default defineConfig(({ mode }) => {
   const isProduction = mode === 'production'
+
+  /** Handlers em api/* (middleware dev) leem process.env; loadEnv garante VITE_* do .env/.env.local no processo Node. */
+  const envFiles = loadEnv(mode, projectRoot, '')
+  for (const [key, val] of Object.entries(envFiles)) {
+    if (val !== undefined && val !== '' && (!process.env[key] || process.env[key] === '')) {
+      process.env[key] = val
+    }
+  }
 
   return {
     base: '/',
@@ -74,6 +82,49 @@ export default defineConfig(({ mode }) => {
               res.statusCode = 500;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({ error: 'Falha ao carregar handler da API' }));
+            }
+          });
+        },
+      },
+
+      {
+        name: 'rep-bridge-api-dev',
+        configureServer(server) {
+          server.middlewares.use(async (req, res, next) => {
+            const pathname = req.url?.split('?')[0] ?? '';
+            if (pathname !== '/api/rep/status' && pathname !== '/api/rep/punches') {
+              next();
+              return;
+            }
+            try {
+              const loader =
+                pathname === '/api/rep/status'
+                  ? () => import('./api/rep/status.ts')
+                  : () => import('./api/rep/punches.ts');
+              const { default: handler } = await loader();
+              const host = (req.headers.host as string) || 'localhost:3010';
+              const fullUrl = `http://${host}${req.url ?? ''}`;
+              const response = await handler(
+                new Request(fullUrl, { method: req.method || 'GET', headers: req.headers as HeadersInit })
+              );
+              res.statusCode = response.status;
+              response.headers.forEach((value, key) => {
+                if (key.toLowerCase() === 'transfer-encoding') return;
+                res.setHeader(key, value);
+              });
+              const body = Buffer.from(await response.arrayBuffer());
+              res.end(body);
+            } catch (e) {
+              console.error('[rep-bridge-api-dev]', e);
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              const detail = e instanceof Error ? e.message : String(e);
+              res.end(
+                JSON.stringify({
+                  error: 'Falha ao executar handler REP',
+                  details: detail,
+                })
+              );
             }
           });
         },

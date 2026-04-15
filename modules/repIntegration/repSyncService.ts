@@ -69,7 +69,7 @@ export async function syncDevice(
     .select('*')
     .eq('id', deviceId)
     .eq('ativo', true)
-    .single();
+    .maybeSingle();
 
   if (fetchError || !deviceRow) {
     return { ok: false, imported: 0, error: fetchError?.message || 'Dispositivo não encontrado' };

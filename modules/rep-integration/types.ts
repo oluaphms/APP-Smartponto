@@ -48,9 +48,18 @@ export interface ParsedAfdRecord {
   raw?: string;
 }
 
+export interface RepConnectionTestResult {
+  ok: boolean;
+  message: string;
+  httpStatus?: number;
+  body?: unknown;
+}
+
 export interface RepVendorAdapter {
   name: string;
   fetchPunches(device: RepDevice, since?: Date): Promise<PunchFromDevice[]>;
+  /** API nativa do fabricante (ex.: Control iD iDClass — login.fcgi + get_info.fcgi). */
+  testConnection?(device: RepDevice): Promise<RepConnectionTestResult>;
 }
 
 export interface PunchFromDevice {

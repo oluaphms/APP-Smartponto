@@ -20,6 +20,7 @@ type RepDeviceRow = {
   ultima_sincronizacao: string | null;
   ativo: boolean;
   created_at: string;
+  config_extra?: Record<string, unknown> | null;
 };
 
 const TIPOS_CONEXAO = [
@@ -36,8 +37,11 @@ const AdminRepDevices: React.FC = () => {
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  /** Em HTTPS (produção): nota sobre nuvem vs rede local e agente. */
+  const [repDeploymentNote, setRepDeploymentNote] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [configExtraBaseline, setConfigExtraBaseline] = useState<Record<string, unknown>>({});
   const [form, setForm] = useState({
     nome_dispositivo: '',
     fabricante: '',
@@ -46,6 +50,12 @@ const AdminRepDevices: React.FC = () => {
     porta: 80,
     tipo_conexao: 'rede' as 'rede' | 'arquivo' | 'api',
     ativo: true,
+    repHttps: false,
+    tlsInsecure: false,
+    repStatusPost: false,
+    repLogin: 'admin',
+    repPassword: 'admin',
+    mode671: false,
   });
 
   const loadDevices = async () => {
@@ -64,6 +74,10 @@ const AdminRepDevices: React.FC = () => {
   useEffect(() => {
     if (user?.companyId) loadDevices();
   }, [user?.companyId]);
+
+  useEffect(() => {
+    setRepDeploymentNote(typeof window !== 'undefined' && window.isSecureContext);
+  }, []);
 
   const handleTestConnection = async (id: string) => {
     if (!supabase) return;
@@ -114,6 +128,7 @@ const AdminRepDevices: React.FC = () => {
 
   const openCreate = () => {
     setEditingId(null);
+    setConfigExtraBaseline({});
     setForm({
       nome_dispositivo: '',
       fabricante: '',
@@ -122,12 +137,21 @@ const AdminRepDevices: React.FC = () => {
       porta: 80,
       tipo_conexao: 'rede',
       ativo: true,
+      repHttps: false,
+      tlsInsecure: false,
+      repStatusPost: false,
+      repLogin: 'admin',
+      repPassword: 'admin',
+      mode671: false,
     });
     setModalOpen(true);
   };
 
   const openEdit = (d: RepDeviceRow) => {
     setEditingId(d.id);
+    const ex =
+      d.config_extra && typeof d.config_extra === 'object' ? { ...d.config_extra } : ({} as Record<string, unknown>);
+    setConfigExtraBaseline(ex);
     setForm({
       nome_dispositivo: d.nome_dispositivo,
       fabricante: d.fabricante || '',
@@ -136,6 +160,12 @@ const AdminRepDevices: React.FC = () => {
       porta: d.porta ?? 80,
       tipo_conexao: (d.tipo_conexao as 'rede' | 'arquivo' | 'api') || 'rede',
       ativo: d.ativo,
+      repHttps: ex.https === true || ex.protocol === 'https',
+      tlsInsecure: ex.tls_insecure === true || ex.accept_self_signed === true,
+      repStatusPost: ex.status_use_post === true,
+      repLogin: typeof ex.rep_login === 'string' ? ex.rep_login : 'admin',
+      repPassword: typeof ex.rep_password === 'string' ? ex.rep_password : 'admin',
+      mode671: ex.mode_671 === true,
     });
     setModalOpen(true);
   };
@@ -144,6 +174,15 @@ const AdminRepDevices: React.FC = () => {
     if (!user?.companyId || !form.nome_dispositivo.trim()) return;
     try {
       if (editingId) {
+        const config_extra = {
+          ...configExtraBaseline,
+          https: form.repHttps,
+          tls_insecure: form.tlsInsecure,
+          status_use_post: form.repStatusPost,
+          rep_login: form.repLogin.trim() || 'admin',
+          rep_password: form.repPassword,
+          mode_671: form.mode671,
+        };
         await db.update('rep_devices', editingId, {
           nome_dispositivo: form.nome_dispositivo.trim(),
           fabricante: form.fabricante.trim() || null,
@@ -152,6 +191,7 @@ const AdminRepDevices: React.FC = () => {
           porta: form.porta || null,
           tipo_conexao: form.tipo_conexao,
           ativo: form.ativo,
+          config_extra,
           updated_at: new Date().toISOString(),
         });
         setMessage({ type: 'success', text: 'Dispositivo atualizado.' });
@@ -166,6 +206,14 @@ const AdminRepDevices: React.FC = () => {
           tipo_conexao: form.tipo_conexao,
           ativo: form.ativo,
           status: 'inativo',
+          config_extra: {
+            https: form.repHttps,
+            tls_insecure: form.tlsInsecure,
+            status_use_post: form.repStatusPost,
+            rep_login: form.repLogin.trim() || 'admin',
+            rep_password: form.repPassword,
+            mode_671: form.mode671,
+          },
         });
         setMessage({ type: 'success', text: 'Dispositivo cadastrado.' });
       }
@@ -207,6 +255,22 @@ const AdminRepDevices: React.FC = () => {
           className={`mb-4 px-4 py-2 rounded-lg ${message.type === 'success' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200' : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'}`}
         >
           {message.text}
+        </div>
+      )}
+
+      {repDeploymentNote && (
+        <div
+          className="mb-4 px-4 py-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100 text-sm leading-relaxed"
+          role="status"
+        >
+          <strong className="font-semibold">Arquitetura REP:</strong> o painel usa apenas rotas HTTPS do próprio app (
+          <code className="text-xs bg-amber-100/80 dark:bg-amber-900/50 px-1 rounded">/api/rep/status</code>,{' '}
+          <code className="text-xs bg-amber-100/80 dark:bg-amber-900/50 px-1 rounded">/api/rep/punches</code>
+          ) — sem mixed content nem CORS para o IP do relógio. Em <strong>produção na nuvem</strong> o backend não alcança
+          <code className="text-xs mx-1 bg-amber-100/80 dark:bg-amber-900/50 px-1 rounded">192.168.x.x</code>: use o
+          agente local <code className="text-xs bg-amber-100/80 dark:bg-amber-900/50 px-1 rounded">npm run rep:agent</code>,{' '}
+          <strong>importação AFD/arquivo</strong>, ou rode <code className="text-xs bg-amber-100/80 dark:bg-amber-900/50 px-1 rounded">npm run dev</code> na
+          mesma rede do relógio para o proxy alcançar o aparelho.
         </div>
       )}
 
@@ -462,10 +526,100 @@ const AdminRepDevices: React.FC = () => {
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Porta</label>
                     <input
                       type="number"
+                      min={1}
+                      max={65535}
                       value={form.porta}
-                      onChange={(e) => setForm((f) => ({ ...f, porta: parseInt(e.target.value, 10) || 80 }))}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        const n = Number.isNaN(v) ? 80 : Math.min(65535, Math.max(1, v));
+                        setForm((f) => ({ ...f, porta: n }));
+                      }}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                     />
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      {form.repHttps ? (
+                        <>
+                          Com HTTPS, a porta típica é <strong className="font-medium">443</strong>. Digitar{' '}
+                          <code className="text-xs bg-slate-100 dark:bg-slate-700 px-1 rounded">0443</code> vira 443 — não é erro.
+                          Confira no manual se a <em>API de marcações</em> usa a mesma porta do painel web.
+                        </>
+                      ) : (
+                        <>
+                          Em HTTP, costuma ser <strong className="font-medium">80</strong> ou <strong className="font-medium">8080</strong>.
+                        </>
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.repHttps}
+                        onChange={(e) => setForm((f) => ({ ...f, repHttps: e.target.checked }))}
+                        className="rounded border-slate-300"
+                      />
+                      Usar HTTPS (relógio com TLS)
+                    </label>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 -mt-1 pl-6">
+                      A maioria dos relógios na LAN usa <strong className="font-medium">HTTP</strong> (porta 80 ou 8080). Só marque HTTPS se o manual do aparelho indicar TLS.
+                    </p>
+                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.tlsInsecure}
+                        onChange={(e) => setForm((f) => ({ ...f, tlsInsecure: e.target.checked }))}
+                        className="rounded border-slate-300"
+                      />
+                      Aceitar certificado autoassinado (só rede interna confiável)
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.repStatusPost}
+                        onChange={(e) => setForm((f) => ({ ...f, repStatusPost: e.target.checked }))}
+                        className="rounded border-slate-300"
+                      />
+                      Teste de conexão usa POST (JSON <code className="text-xs bg-slate-100 dark:bg-slate-700 px-1 rounded">{'{}'}</code>)
+                    </label>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 -mt-1 pl-6">
+                      Alguns aparelhos só aceitam POST em <code className="text-xs">/api/status</code>. Se não marcar, o sistema tenta GET e repete com POST se o relógio responder &quot;POST expected&quot;.
+                    </p>
+                    <div className="pt-2 border-t border-slate-200 dark:border-slate-600 mt-2">
+                      <p className="text-xs font-medium text-slate-600 dark:text-slate-300 mb-2">
+                        Control iD (API iDClass no relógio)
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-0.5">Usuário web do REP</label>
+                          <input
+                            type="text"
+                            value={form.repLogin}
+                            onChange={(e) => setForm((f) => ({ ...f, repLogin: e.target.value }))}
+                            className="w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800"
+                            autoComplete="off"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-0.5">Senha</label>
+                          <input
+                            type="password"
+                            value={form.repPassword}
+                            onChange={(e) => setForm((f) => ({ ...f, repPassword: e.target.value }))}
+                            className="w-full px-2 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800"
+                            autoComplete="new-password"
+                          />
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer mt-2">
+                        <input
+                          type="checkbox"
+                          checked={form.mode671}
+                          onChange={(e) => setForm((f) => ({ ...f, mode671: e.target.checked }))}
+                          className="rounded border-slate-300"
+                        />
+                        AFD Portaria 671 (<code className="text-xs">mode=671</code> no download)
+                      </label>
+                    </div>
                   </div>
                 </>
               )}

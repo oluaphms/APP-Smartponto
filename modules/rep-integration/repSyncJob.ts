@@ -5,7 +5,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getPunchesFromDevice, testConnection } from './repDeviceManager';
+import { getPunchesForSync, testConnectionForSync } from './repSyncFetch';
 import { ingestPunchesFromDevice, logRepAction, updateDeviceLastSync } from './repService';
 
 const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutos
@@ -22,7 +22,7 @@ export async function syncRepDevice(
     .select('*')
     .eq('id', deviceId)
     .eq('ativo', true)
-    .single();
+    .maybeSingle();
 
   if (fetchError || !device) {
     return { ok: false, imported: 0, error: fetchError?.message || 'Dispositivo não encontrado' };
@@ -36,7 +36,7 @@ export async function syncRepDevice(
 
   try {
     const since = device.ultima_sincronizacao ? new Date(device.ultima_sincronizacao) : undefined;
-    const punches = await getPunchesFromDevice(device, since);
+    const punches = await getPunchesForSync(supabase, device, since);
 
     const result = await ingestPunchesFromDevice(supabase, device, punches);
     await updateDeviceLastSync(supabase, deviceId, 'ativo');
@@ -112,11 +112,11 @@ export async function testRepDeviceConnection(
     .from('rep_devices')
     .select('*')
     .eq('id', deviceId)
-    .single();
+    .maybeSingle();
 
   if (error || !device) {
     return { ok: false, message: 'Dispositivo não encontrado' };
   }
 
-  return testConnection(device);
+  return testConnectionForSync(supabase, device);
 }

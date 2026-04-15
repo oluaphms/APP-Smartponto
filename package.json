@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "preview:3010": "vite preview --port 3010",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "rep:agent": "node scripts/rep-agent.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.38.0",
