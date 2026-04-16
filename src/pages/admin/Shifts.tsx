@@ -1,11 +1,32 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2, Copy, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, Copy } from 'lucide-react';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
 import { db, isSupabaseConfigured, type Filter } from '../../services/supabaseClient';
 import { LoadingState } from '../../../components/UI';
-import type { WeeklyScheduleDay, DayScheduleType, DSRConfig, ExtrasConfig, TipoMarcacaoConfig } from '../../../types';
+import type {
+  WeeklyScheduleDay,
+  DayScheduleType,
+  DSRConfig,
+  ExtrasConfig,
+  TipoMarcacaoConfig,
+  OpcoesAvancadasHorario,
+} from '../../../types';
+import {
+  createDefaultOpcoesAvancadas,
+  mergeOpcoesAvancadas,
+  createDefaultDSR,
+  mergeDSR,
+  createDefaultExtras,
+  mergeExtras,
+  createDefaultTipoMarcacao,
+  mergeTipoMarcacao,
+} from '../../../types';
+import OpcoesAvancadasModal from './OpcoesAvancadasModal';
+import ConfiguracaoDSRModal from './ConfiguracaoDSRModal';
+import ConfiguracaoHorasExtrasModal from './ConfiguracaoHorasExtrasModal';
+import TipoMarcacaoModal from './TipoMarcacaoModal';
 
 const DAY_LABELS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
 
@@ -88,6 +109,7 @@ interface ShiftRow {
     dsr?: DSRConfig;
     extras?: ExtrasConfig;
     tipoMarcacao?: TipoMarcacaoConfig;
+    opcoes_avancadas?: OpcoesAvancadasHorario;
   };
 }
 
@@ -96,6 +118,10 @@ const AdminShifts: React.FC = () => {
   const [rows, setRows] = useState<ShiftRow[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [advancedModalOpen, setAdvancedModalOpen] = useState(false);
+  const [extrasModalOpen, setExtrasModalOpen] = useState(false);
+  const [tipoMarcacaoModalOpen, setTipoMarcacaoModalOpen] = useState(false);
+  const [dsrModalOpen, setDsrModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
     number: '',
@@ -112,14 +138,13 @@ const AdminShifts: React.FC = () => {
     intervalo_auto_minutos: 60,
     ativo: true,
     weeklySchedule: createDefaultWeeklySchedule(),
-    dsr: { tipo: 'automatico' as const } as DSRConfig,
-    extras: { acumular: 'independentes' as const, controleHoras: 'diario' as const, numeroFaixas: 3 } as ExtrasConfig,
-    tipoMarcacao: { tipo: 'normal' as const } as TipoMarcacaoConfig,
+    dsr: createDefaultDSR(),
+    extras: createDefaultExtras(),
+    tipoMarcacao: createDefaultTipoMarcacao(),
+    opcoesAvancadas: createDefaultOpcoesAvancadas(),
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [opcoesOpen, setOpcoesOpen] = useState({ descanso: false, extras: false, tipo: false });
-
   const toTimeStr = (v: string) => (v && v.length >= 5 ? v.slice(0, 5) : '—');
 
   const load = async () => {
@@ -149,7 +174,7 @@ const AdminShifts: React.FC = () => {
           carga_horaria_minutos: r.carga_horaria_minutos ?? 0,
           is_night_shift: r.is_night_shift ?? r.night_shift ?? false,
           ativo: r.ativo ?? true,
-          config: r.config ?? {},
+          config: (r.config ?? {}) as ShiftRow['config'],
         }))
       );
     } catch (e) {
@@ -181,9 +206,10 @@ const AdminShifts: React.FC = () => {
       intervalo_auto_minutos: 60,
       ativo: true,
       weeklySchedule: ws,
-      dsr: { tipo: 'automatico' },
-      extras: { acumular: 'independentes', controleHoras: 'diario', numeroFaixas: 3 },
-      tipoMarcacao: { tipo: 'normal' },
+      dsr: createDefaultDSR(),
+      extras: createDefaultExtras(),
+      tipoMarcacao: createDefaultTipoMarcacao(),
+      opcoesAvancadas: createDefaultOpcoesAvancadas(),
     });
     setModalOpen(true);
   };
@@ -211,9 +237,10 @@ const AdminShifts: React.FC = () => {
       intervalo_auto_minutos: row.break_minutes ?? row.break_duration ?? 60,
       ativo: row.ativo ?? true,
       weeklySchedule: ws,
-      dsr: row.config?.dsr ?? { tipo: 'automatico' },
-      extras: row.config?.extras ?? { acumular: 'independentes', controleHoras: 'diario', numeroFaixas: 3 },
-      tipoMarcacao: row.config?.tipoMarcacao ?? { tipo: 'normal' },
+      dsr: mergeDSR(createDefaultDSR(), row.config?.dsr),
+      extras: mergeExtras(createDefaultExtras(), row.config?.extras),
+      tipoMarcacao: mergeTipoMarcacao(createDefaultTipoMarcacao(), row.config?.tipoMarcacao),
+      opcoesAvancadas: mergeOpcoesAvancadas(createDefaultOpcoesAvancadas(), row.config?.opcoes_avancadas),
     });
     setModalOpen(true);
   };
@@ -236,9 +263,10 @@ const AdminShifts: React.FC = () => {
       intervalo_auto_minutos: row.break_minutes ?? row.break_duration ?? 60,
       ativo: true,
       weeklySchedule: ws,
-      dsr: row.config?.dsr ?? { tipo: 'automatico' },
-      extras: row.config?.extras ?? { acumular: 'independentes', controleHoras: 'diario', numeroFaixas: 3 },
-      tipoMarcacao: row.config?.tipoMarcacao ?? { tipo: 'normal' },
+      dsr: mergeDSR(createDefaultDSR(), row.config?.dsr),
+      extras: mergeExtras(createDefaultExtras(), row.config?.extras),
+      tipoMarcacao: mergeTipoMarcacao(createDefaultTipoMarcacao(), row.config?.tipoMarcacao),
+      opcoesAvancadas: mergeOpcoesAvancadas(createDefaultOpcoesAvancadas(), row.config?.opcoes_avancadas),
     });
     setModalOpen(true);
   };
@@ -308,6 +336,7 @@ const AdminShifts: React.FC = () => {
           dsr: form.dsr,
           extras: form.extras,
           tipoMarcacao: form.tipoMarcacao,
+          opcoes_avancadas: form.opcoesAvancadas,
         },
       };
       if (editingId) {
@@ -323,6 +352,10 @@ const AdminShifts: React.FC = () => {
         });
         setMessage({ type: 'success', text: 'Horário criado com sucesso.' });
       }
+      setDsrModalOpen(false);
+      setExtrasModalOpen(false);
+      setTipoMarcacaoModalOpen(false);
+      setAdvancedModalOpen(false);
       setModalOpen(false);
       load();
     } catch (e: any) {
@@ -426,9 +459,54 @@ const AdminShifts: React.FC = () => {
       </div>
 
       {modalOpen && (
-        <div className="fixed inset-0 z-[100] overflow-y-auto flex items-start justify-center p-4 bg-slate-900/60 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={() => !saving && setModalOpen(false)}>
+        <div
+          className="fixed inset-0 z-[100] overflow-y-auto flex items-start justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => {
+            if (!saving) {
+              setDsrModalOpen(false);
+              setExtrasModalOpen(false);
+              setTipoMarcacaoModalOpen(false);
+              setAdvancedModalOpen(false);
+              setModalOpen(false);
+            }
+          }}
+        >
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-6xl my-8 p-6 space-y-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">{editingId ? 'Editar Horário' : 'Incluir Horário'}</h3>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">{editingId ? 'Editar Horário' : 'Incluir Horário'}</h3>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDsrModalOpen(true)}
+                  className="text-sm font-medium px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  Descanso
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExtrasModalOpen(true)}
+                  className="text-sm font-medium px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  Extra
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTipoMarcacaoModalOpen(true)}
+                  className="text-sm font-medium px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  Tipo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAdvancedModalOpen(true)}
+                  className="text-sm font-medium px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-indigo-700 dark:text-indigo-300 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  Opções avançadas
+                </button>
+              </div>
+            </div>
 
             {/* Incluir horário: Número, Descrição e Tipo de Jornada */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -575,130 +653,92 @@ const AdminShifts: React.FC = () => {
               </div>
             </div>
 
-            {/* Menu Opções: Descanso, Extras, Tipo de marcação */}
-            <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
-              <button type="button" onClick={() => setOpcoesOpen((o) => ({ ...o, descanso: !o.descanso }))} className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50 text-left font-medium text-slate-800 dark:text-slate-200">
-                Opções – Descanso (DSR)
-                {opcoesOpen.descanso ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
-              </button>
-              {opcoesOpen.descanso && (
-                <div className="p-4 border-t border-slate-200 dark:border-slate-700 space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tipo de DSR</label>
-                    <select value={form.dsr.tipo} onChange={(e) => setForm((f) => ({ ...f, dsr: { ...f.dsr, tipo: e.target.value as 'automatico' | 'variavel' } }))} className={inputClass}>
-                      <option value="automatico">Automático</option>
-                      <option value="variavel">Variável</option>
-                    </select>
-                  </div>
-                  {form.dsr.tipo === 'automatico' && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Limite de Horas faltas</label>
-                        <input type="number" min={0} value={form.dsr.limiteHorasFaltas ?? ''} onChange={(e) => setForm((f) => ({ ...f, dsr: { ...f.dsr, limiteHorasFaltas: e.target.value ? Number(e.target.value) : undefined } }))} className={inputClass} placeholder="Horas" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Valor DSR (horas)</label>
-                        <input type="text" value={form.dsr.valorDSRHoras ?? ''} onChange={(e) => setForm((f) => ({ ...f, dsr: { ...f.dsr, valorDSRHoras: e.target.value } }))} className={inputClass} placeholder="Ex: 08:00" />
-                      </div>
-                      <label className="flex items-center gap-2">
-                        <input type="checkbox" checked={form.dsr.incluirHorasExtrasNoCalculo ?? false} onChange={(e) => setForm((f) => ({ ...f, dsr: { ...f.dsr, incluirHorasExtrasNoCalculo: e.target.checked } }))} />
-                        <span className="text-sm text-slate-700 dark:text-slate-300">Incluir Horas Extras no cálculo</span>
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <input type="checkbox" checked={form.dsr.descontarSemanaSeguinte ?? false} onChange={(e) => setForm((f) => ({ ...f, dsr: { ...f.dsr, descontarSemanaSeguinte: e.target.checked } }))} />
-                        <span className="text-sm text-slate-700 dark:text-slate-300">Descontar também da semana seguinte</span>
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <input type="checkbox" checked={form.dsr.incluirFeriados ?? false} onChange={(e) => setForm((f) => ({ ...f, dsr: { ...f.dsr, incluirFeriados: e.target.checked } }))} />
-                        <span className="text-sm text-slate-700 dark:text-slate-300">Incluir feriados</span>
-                      </label>
-                    </>
-                  )}
-                </div>
-              )}
-
-              <button type="button" onClick={() => setOpcoesOpen((o) => ({ ...o, extras: !o.extras }))} className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50 text-left font-medium text-slate-800 dark:text-slate-200 border-t border-slate-200 dark:border-slate-700">
-                Opções – Extras
-                {opcoesOpen.extras ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
-              </button>
-              {opcoesOpen.extras && (
-                <div className="p-4 border-t border-slate-200 dark:border-slate-700 space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Acumular</label>
-                    <select value={form.extras.acumular} onChange={(e) => setForm((f) => ({ ...f, extras: { ...f.extras, acumular: e.target.value as any } }))} className={inputClass}>
-                      <option value="independentes">Independentes</option>
-                      <option value="uteis_sabados">Úteis + Sábados</option>
-                      <option value="uteis_sabados_domingos">Úteis + Sábados + Domingos</option>
-                      <option value="uteis_sabados_domingos_feriados">Úteis + Sábados + Domingos + Feriados</option>
-                      <option value="sabados_domingos">Sábados + Domingos</option>
-                      <option value="sabados_domingos_feriados">Sábados + Domingos + Feriados</option>
-                      <option value="domingos_feriados">Domingos + Feriados</option>
-                      <option value="uteis_sabados_e_domingos_feriados">(Úteis + Sábados) e (Domingos + Feriados)</option>
-                      <option value="uteis_domingos_e_sabados_feriados">(Úteis + Domingos) e (Sábados + Feriados)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Controle de Horas</label>
-                    <select value={form.extras.controleHoras} onChange={(e) => setForm((f) => ({ ...f, extras: { ...f.extras, controleHoras: e.target.value as any } }))} className={inputClass}>
-                      <option value="diario">Diário</option>
-                      <option value="semanal">Semanal</option>
-                      <option value="mensal">Mensal</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">N. de Faixas</label>
-                    <input type="number" min={1} max={10} value={form.extras.numeroFaixas ?? 3} onChange={(e) => setForm((f) => ({ ...f, extras: { ...f.extras, numeroFaixas: Number(e.target.value) } }))} className={inputClass} />
-                  </div>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={form.extras.multiplicarExtrasPercentual ?? false} onChange={(e) => setForm((f) => ({ ...f, extras: { ...f.extras, multiplicarExtrasPercentual: e.target.checked } }))} />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Multiplicar Extras pelo percentual</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={form.extras.descontarFaltasDasExtras ?? false} onChange={(e) => setForm((f) => ({ ...f, extras: { ...f.extras, descontarFaltasDasExtras: e.target.checked } }))} />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Descontar faltas das extras</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={form.extras.bancoHorasHabilitado ?? false} onChange={(e) => setForm((f) => ({ ...f, extras: { ...f.extras, bancoHorasHabilitado: e.target.checked } }))} />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Habilitar Banco de Horas</span>
-                  </label>
-                </div>
-              )}
-
-              <button type="button" onClick={() => setOpcoesOpen((o) => ({ ...o, tipo: !o.tipo }))} className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/50 text-left font-medium text-slate-800 dark:text-slate-200 border-t border-slate-200 dark:border-slate-700">
-                Opções – Tipo de marcação
-                {opcoesOpen.tipo ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
-              </button>
-              {opcoesOpen.tipo && (
-                <div className="p-4 border-t border-slate-200 dark:border-slate-700 space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Configuração do tipo de marcação</label>
-                    <select value={form.tipoMarcacao.tipo} onChange={(e) => setForm((f) => ({ ...f, tipoMarcacao: { ...f.tipoMarcacao, tipo: e.target.value as any } }))} className={inputClass}>
-                      <option value="pre_assinalado">Pré-Assinalado</option>
-                      <option value="normal">Normal</option>
-                      <option value="tolerancia">Tolerância</option>
-                      <option value="livre">Livre</option>
-                      <option value="extra_anterior">Extra Anterior</option>
-                      <option value="extra_posterior">Extra Posterior</option>
-                      <option value="tolerancia_especifica">Tolerância Específica</option>
-                    </select>
-                  </div>
-                  {form.tipoMarcacao.tipo === 'tolerancia_especifica' && (
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" checked={form.tipoMarcacao.usarToleranciaEspecial ?? false} onChange={(e) => setForm((f) => ({ ...f, tipoMarcacao: { ...f.tipoMarcacao, usarToleranciaEspecial: e.target.checked } }))} />
-                      <span className="text-sm text-slate-700 dark:text-slate-300">Usar Tolerância especial</span>
-                    </label>
-                  )}
-                </div>
-              )}
-            </div>
-
             <div className="flex gap-3 pt-2">
-              <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium">Cancelar</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDsrModalOpen(false);
+                  setExtrasModalOpen(false);
+                  setTipoMarcacaoModalOpen(false);
+                  setAdvancedModalOpen(false);
+                  setModalOpen(false);
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium"
+              >
+                Cancelar
+              </button>
               <button type="button" onClick={handleSave} disabled={saving} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50">Salvar</button>
             </div>
           </div>
         </div>
       )}
+
+      <TipoMarcacaoModal
+        open={tipoMarcacaoModalOpen}
+        onClose={() => setTipoMarcacaoModalOpen(false)}
+        value={form.tipoMarcacao}
+        onApply={(next) => setForm((f) => ({ ...f, tipoMarcacao: next }))}
+      />
+
+      <ConfiguracaoHorasExtrasModal
+        open={extrasModalOpen}
+        onClose={() => setExtrasModalOpen(false)}
+        value={form.extras}
+        onApply={(next) => setForm((f) => ({ ...f, extras: next }))}
+        outrosHorarios={rows
+          .filter((r) => (editingId ? r.id !== editingId : true))
+          .map((r) => ({
+            id: r.id,
+            label: [r.number, r.description || r.name].filter(Boolean).join(' — ') || r.id,
+          }))}
+        getExtrasFromHorario={(id) => {
+          if (!id) return undefined;
+          const src = rows.find((r) => r.id === id);
+          if (!src?.config?.extras) return undefined;
+          return mergeExtras(createDefaultExtras(), src.config.extras);
+        }}
+      />
+
+      <ConfiguracaoDSRModal
+        open={dsrModalOpen}
+        onClose={() => setDsrModalOpen(false)}
+        value={form.dsr}
+        onApply={(next) => setForm((f) => ({ ...f, dsr: next }))}
+        outrosHorarios={rows
+          .filter((r) => (editingId ? r.id !== editingId : true))
+          .map((r) => ({
+            id: r.id,
+            label: [r.number, r.description || r.name].filter(Boolean).join(' — ') || r.id,
+          }))}
+        getDsrFromHorario={(id) => {
+          if (!id) return undefined;
+          const src = rows.find((r) => r.id === id);
+          if (!src?.config?.dsr) return undefined;
+          return mergeDSR(createDefaultDSR(), src.config.dsr);
+        }}
+      />
+
+      <OpcoesAvancadasModal
+        open={advancedModalOpen}
+        onClose={() => setAdvancedModalOpen(false)}
+        value={form.opcoesAvancadas}
+        onChange={(next) => setForm((f) => ({ ...f, opcoesAvancadas: next }))}
+        outrosHorarios={rows
+          .filter((r) => (editingId ? r.id !== editingId : true))
+          .map((r) => ({
+            id: r.id,
+            label: [r.number, r.description || r.name].filter(Boolean).join(' — ') || r.id,
+          }))}
+        onCopiarDeHorario={(id) => {
+          if (!id) return;
+          const src = rows.find((r) => r.id === id);
+          if (!src) return;
+          setForm((f) => ({
+            ...f,
+            opcoesAvancadas: mergeOpcoesAvancadas(createDefaultOpcoesAvancadas(), src.config?.opcoes_avancadas),
+          }));
+        }}
+      />
     </div>
   );
 };

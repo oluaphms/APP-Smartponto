@@ -105,6 +105,7 @@ import {
   AdminShifts,
   AdminColaboradorJornada,
   AdminTimesheet,
+  AdminCalculos,
   CompanyPage,
   DepartmentsPage,
   EmployeeClockIn,
@@ -1156,6 +1157,7 @@ const AppMain: React.FC = () => {
               <Route path="employees" element={<AdminEmployees />} />
               <Route path="import-employees" element={<ImportEmployees />} />
               <Route path="timesheet" element={<AdminTimesheet />} />
+              <Route path="calculos" element={<AdminCalculos />} />
               <Route path="cartao-ponto" element={<AdminCartaoPonto />} />
               <Route path="cartao-ponto-leitura" element={<AdminCartaoPonto />} />
               <Route path="lancamento-eventos" element={<AdminLancamentoEventos />} />

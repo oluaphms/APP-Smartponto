@@ -195,7 +195,18 @@ async function handleExchange(request: Request): Promise<Response> {
       return Response.json({ ok: false, message: 'Dispositivo deve ser do tipo rede (IP).' }, { status: 400, headers });
     }
     const result = await runRepExchange(device, opRaw as RepExchangeOp, body.clock);
-    return Response.json(result, { status: 200, headers });
+    try {
+      return Response.json(result, { status: 200, headers });
+    } catch (ser: unknown) {
+      console.error('[api/rep/exchange] JSON serialize', ser);
+      return Response.json(
+        {
+          ok: false,
+          message: 'Resposta do relógio não pôde ser serializada (dados inválidos).',
+        },
+        { status: 200, headers }
+      );
+    }
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Erro interno no proxy REP (exchange)';
     console.error('[api/rep/exchange]', e);
@@ -242,15 +253,25 @@ async function handleStatus(request: Request): Promise<Response> {
     if (!r.ok && (r.httpStatus === 0 || r.httpStatus === undefined) && r.message) {
       return Response.json({ ok: false, message: r.message }, { status: 200, headers });
     }
-    return Response.json(
-      {
-        ok: r.ok,
-        message: r.message || (r.ok ? 'Conexão OK' : 'Falha'),
-        httpStatus: r.httpStatus ?? (r.ok ? 200 : 0),
-        body: r.body,
-      },
-      { status: 200, headers }
-    );
+    const payload = {
+      ok: r.ok,
+      message: r.message || (r.ok ? 'Conexão OK' : 'Falha'),
+      httpStatus: r.httpStatus ?? (r.ok ? 200 : 0),
+      body: r.body,
+    };
+    try {
+      return Response.json(payload, { status: 200, headers });
+    } catch (ser: unknown) {
+      console.error('[api/rep/status] JSON serialize', ser);
+      return Response.json(
+        {
+          ok: r.ok,
+          message: r.message || (r.ok ? 'Conexão OK' : 'Falha'),
+          httpStatus: r.httpStatus ?? (r.ok ? 200 : 0),
+        },
+        { status: 200, headers }
+      );
+    }
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Erro interno no proxy REP (status)';
     console.error('[api/rep/status]', e);

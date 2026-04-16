@@ -7,6 +7,7 @@ export const ROUTE_LOADERS = {
   '/admin/employees': () => import('../pages/admin/Employees'),
   '/admin/import-employees': () => import('../pages/admin/ImportEmployees'),
   '/admin/timesheet': () => import('../pages/admin/Timesheet'),
+  '/admin/calculos': () => import('../pages/admin/Calculos'),
   '/admin/cartao-ponto': () => import('../pages/admin/CartaoPonto'),
   '/admin/cartao-ponto-leitura': () => import('../pages/admin/CartaoPonto'),
   '/admin/lancamento-eventos': () => import('../pages/admin/LancamentoEventos'),

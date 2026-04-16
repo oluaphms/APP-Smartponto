@@ -25,14 +25,17 @@ async function readJsonOrText(res: Response): Promise<Record<string, unknown>> {
  * React não pode renderizar objetos — sempre produzir string.
  */
 function normalizeApiError(data: Record<string, unknown>, status: number): string {
-  const pick = (v: unknown): string | null => {
+  const pick = (v: unknown, depth = 0): string | null => {
+    if (depth > 5) return null;
     if (v == null) return null;
     if (typeof v === 'string') return v;
     if (typeof v === 'number' || typeof v === 'boolean') return String(v);
     if (typeof v === 'object') {
       const o = v as Record<string, unknown>;
-      if (typeof o.message === 'string') return o.message;
+      if (typeof o.message === 'string' && o.message.trim()) return o.message;
       if (typeof o.error === 'string') return o.error;
+      const nested = pick(o.error, depth + 1) ?? pick(o.details, depth + 1) ?? pick(o.hint, depth + 1);
+      if (nested) return nested;
     }
     return null;
   };
@@ -57,6 +60,10 @@ export function toUiString(v: unknown, fallback = ''): string {
   if (typeof v === 'object') {
     const o = v as Record<string, unknown>;
     if (typeof o.message === 'string') return o.message;
+    /** PostgREST / Supabase: às vezes só há `code` + `details` */
+    if (typeof o.code === 'string' && typeof o.details === 'string') {
+      return `${o.code}: ${o.details}`;
+    }
   }
   try {
     const s = JSON.stringify(v);

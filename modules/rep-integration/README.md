@@ -7,7 +7,7 @@ Integração com relógios de ponto REP: comunicação, importação AFD, sincro
 - **types.ts** – Tipos (RepDevice, RepPunchLog, ParsedAfdRecord, etc.)
 - **repParser.ts** – Parser AFD/TXT/CSV (Portaria 671)
 - **repDeviceManager.ts** – Conexão por IP, teste de conexão, adaptadores por fabricante
-- **repService.ts** – Ingestão de marcações (RPC `rep_ingest_punch`), logs
+- **repService.ts** – Ingestão de marcações (RPC `rep_ingest_punch` com `p_only_staging`, `p_apply_schedule`; promoção `rep_promote_pending_rep_punch_logs`), logs
 - **repSyncJob.ts** – Sincronização automática (a cada 5 min), `syncRepDevices()`
 - **adapters/controlId.ts** – Exemplo de adaptador Control iD
 

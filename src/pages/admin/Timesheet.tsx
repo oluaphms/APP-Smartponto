@@ -19,6 +19,7 @@ import { SkeletonFiltro, TimesheetTableSkeleton } from '../../components/Timeshe
 import { LoggingService } from '../../../services/loggingService';
 import { LogSeverity } from '../../../types';
 import { invalidateAfterTimesheetMonthClose, invalidateCompanyListCaches } from '../../services/queryCache';
+import { readSpecialBarsPref, SPECIAL_BARS_CHANGED } from '../../utils/timesheetLayoutPrefs';
 
 interface HolidayRow {
   id: string;
@@ -159,6 +160,7 @@ const AdminTimesheet: React.FC = () => {
   /** Evita mostrar selects só com "Todos" antes da primeira carga; não resetar ao mudar só o período. */
   const [filterListsHydrated, setFilterListsHydrated] = useState(false);
   const lastLoadedCompanyIdRef = useRef<string | null>(null);
+  const [specialBarsLayout, setSpecialBarsLayout] = useState(false);
 
   const toggleExpandedRow = (key: string) => {
     setExpandedRows((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -172,6 +174,19 @@ const AdminTimesheet: React.FC = () => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const sync = () => setSpecialBarsLayout(readSpecialBarsPref());
+    sync();
+    window.addEventListener('storage', sync);
+    window.addEventListener(SPECIAL_BARS_CHANGED, sync);
+    window.addEventListener('focus', sync);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener(SPECIAL_BARS_CHANGED, sync);
+      window.removeEventListener('focus', sync);
     };
   }, []);
 
@@ -780,7 +795,7 @@ const AdminTimesheet: React.FC = () => {
   if (!user) return <Navigate to="/" replace />;
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6${specialBarsLayout ? ' timesheet-special-bars' : ''}`}>
       <PageHeader title="Espelho de Ponto" />
       {message && (
         <div className={`p-4 rounded-xl ${message.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'} text-sm`}>

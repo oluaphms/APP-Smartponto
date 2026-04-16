@@ -30,6 +30,7 @@ import {
   Upload,
   Scale,
   Banknote,
+  Calculator,
 } from 'lucide-react';
 import type { User } from '../../types';
 import { BrandLogo } from '../../components/BrandLogo';
@@ -51,6 +52,7 @@ const ADMIN_ITEMS = [
   { label: 'Feriados', path: '/admin/feriados', icon: CalendarRange },
   { label: 'Justificativas', path: '/admin/justificativas', icon: FileCheck },
   { label: 'Espelho de Ponto', path: '/admin/timesheet', icon: CalendarDays },
+  { label: 'Cálculos', path: '/admin/calculos', icon: Calculator },
   { label: 'Cartão Ponto', path: '/admin/cartao-ponto', icon: FileText },
   { label: 'Cartão Ponto (Somente Leitura)', path: '/admin/cartao-ponto-leitura', icon: FileText },
   { label: 'Lançamento de Eventos', path: '/admin/lancamento-eventos', icon: CalendarPlus },

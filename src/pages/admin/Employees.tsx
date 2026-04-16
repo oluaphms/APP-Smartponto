@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
-import { UserPlus, Pencil, UserX, Trash2, Eye, EyeOff, UserCheck, Search, Upload, FileDown, X, Camera, User, AlertTriangle, Loader2 } from 'lucide-react';
+import { UserPlus, Pencil, UserX, Trash2, Eye, EyeOff, UserCheck, Search, Upload, FileDown, X, Camera, User, AlertTriangle, Loader2, Info } from 'lucide-react';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
 import { db, auth, isSupabaseConfigured, resetSession } from '../../services/supabaseClient';
@@ -371,6 +371,9 @@ const AdminEmployees: React.FC = () => {
   const [askInvisivel, setAskInvisivel] = useState<string | null>(null);
   const [settingPassword, setSettingPassword] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  /** Painéis “Outras opções” (equivalente ao legado): fora do corpo principal do formulário. */
+  const [employeeModalExtra, setEmployeeModalExtra] = useState<'none' | 'adicional' | 'web' | 'afast'>('none');
+  const estruturaSelectRef = useRef<HTMLSelectElement>(null);
 
   const loadData = async () => {
     if (!effectiveCompanyId || !isSupabaseConfigured) {
@@ -605,6 +608,7 @@ const AdminEmployees: React.FC = () => {
     setEditingId(null);
     setForm(defaultForm());
     setPasswordMessage(null);
+    setEmployeeModalExtra('none');
     setModalOpen(true);
     setError(null);
     setSuccess(null);
@@ -613,6 +617,7 @@ const AdminEmployees: React.FC = () => {
   const openEdit = (row: EmployeeRow) => {
     setEditingId(row.id);
     setPasswordMessage(null);
+    setEmployeeModalExtra('none');
     const cargoCadastrado = cargos.some((c) => c.name === row.cargo);
     const cfg = row.employee_config || {};
     setForm({
@@ -1505,11 +1510,16 @@ const AdminEmployees: React.FC = () => {
             className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
             role="dialog"
             aria-modal="true"
-            onClick={() => !saving && setModalOpen(false)}
+            onClick={() => {
+              if (!saving) {
+                setEmployeeModalExtra('none');
+                setModalOpen(false);
+              }
+            }}
           >
             <div
               ref={scrollModalTopRef}
-              className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-6"
+              className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 space-y-6"
               onClick={(e) => e.stopPropagation()}
             >
               <form
@@ -1525,7 +1535,6 @@ const AdminEmployees: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white">Funcionários | {editingId ? 'Editar' : 'Incluir'}</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Cadastro de funcionários</p>
                   </div>
                 </div>
                 {error && (
@@ -1538,53 +1547,233 @@ const AdminEmployees: React.FC = () => {
                   </div>
                 )}
 
-                <div className="space-y-6">
-                  {/* Dados de Identificação + Fotografia (lado a lado como no print) */}
-                  <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="sm:col-span-2">
-                      <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Dados de Identificação</h4>
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Nº Folha</label>
-                          <input type="text" value={form.numero_folha} onChange={(e) => setForm({ ...form, numero_folha: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ligação com folha de pagamento" />
+                <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(260px,300px)] gap-6 items-start">
+                  <div className="space-y-6 min-w-0">
+                    <section className="space-y-3">
+                      <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Dados de Identificação</h4>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Nº Folha</label>
+                        <input type="text" value={form.numero_folha} onChange={(e) => setForm({ ...form, numero_folha: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Nome <span className="text-red-500">*</span></label>
+                        <input type="text" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                      </div>
+                    </section>
+
+                    <section className="space-y-3">
+                      <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Dados genéricos</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Nº PIS/PASEP</label>
+                          <input type="text" value={form.pis_pasep} onChange={(e) => setForm({ ...form, pis_pasep: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Salário base (R$)</label>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={form.salario_base}
-                            onChange={(e) => setForm({ ...form, salario_base: e.target.value })}
-                            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                            placeholder="Ex.: 3500 ou 3500,50"
-                          />
-                          <p className="text-[10px] text-slate-500 mt-1">Referência para a folha simplificada (admin → Folha de pagamento).</p>
+                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Nº Identificador</label>
+                          <input type="text" value={form.numero_identificador} onChange={(e) => setForm({ ...form, numero_identificador: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Nome <span className="text-red-500">*</span> <span className="text-xs font-normal text-blue-500">(Portaria 1510)</span></label>
-                          <input type="text" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Nome completo (obrigatório, enviado ao REP)" />
+                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">CTPS</label>
+                          <input type="text" value={form.ctps} onChange={(e) => setForm({ ...form, ctps: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Empresa</label>
+                          <input type="text" value={effectiveCompanyId ? 'Empresa atual' : ''} readOnly className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400" />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Estrutura</label>
+                          <div className="flex gap-2 items-stretch">
+                            <select
+                              ref={estruturaSelectRef}
+                              value={form.estrutura_id}
+                              onChange={(e) => setForm({ ...form, estrutura_id: e.target.value })}
+                              className="min-w-0 flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                            >
+                              <option value="">Nenhuma</option>
+                              {estruturas.map((e) => (
+                                <option key={e.id} value={e.id}>
+                                  {e.descricao || e.codigo}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              title="Focar lista"
+                              onClick={() => estruturaSelectRef.current?.focus()}
+                              className="shrink-0 px-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                            >
+                              <Search className="w-4 h-4 mx-auto" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Limpar"
+                              onClick={() => setForm((f) => ({ ...f, estrutura_id: '' }))}
+                              className="shrink-0 px-3 rounded-xl border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"
+                            >
+                              <X className="w-4 h-4 mx-auto" />
+                            </button>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Horário</label>
+                          <select value={form.shift_id} onChange={(e) => setForm({ ...form, shift_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                            <option value="">Nenhum</option>
+                            {workShifts.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
+                            Função <span className="text-red-500">*</span>
+                          </label>
+                          <select value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                            {cargos.map((c) => (
+                              <option key={c.id} value={c.name}>
+                                {c.name}
+                              </option>
+                            ))}
+                            <option value={OUTRO_CARGO_VALUE}>Outro (especificar)</option>
+                          </select>
+                          {form.cargo === OUTRO_CARGO_VALUE && (
+                            <input
+                              type="text"
+                              value={form.cargoOutro}
+                              onChange={(e) => setForm({ ...form, cargoOutro: e.target.value })}
+                              className="mt-2 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                              placeholder="Especificar função"
+                            />
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
+                            Departamento <span className="text-red-500">*</span>
+                          </label>
+                          <select value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                            <option value="">Selecione</option>
+                            {departments.map((d) => (
+                              <option key={d.id} value={d.id}>
+                                {d.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Admissão</label>
+                          <input type="date" value={form.admissao} onChange={(e) => setForm({ ...form, admissao: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Demissão</label>
+                          <input type="date" value={form.demissao} onChange={(e) => setForm({ ...form, demissao: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Motivo de Demissão</label>
+                          <select
+                            value={form.motivo_demissao_id}
+                            onChange={(e) => setForm({ ...form, motivo_demissao_id: e.target.value })}
+                            disabled={!form.demissao}
+                            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-50"
+                          >
+                            <option value="">{form.demissao ? 'Selecione' : 'Preencha Demissão'}</option>
+                            {motivosDemissao.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+
+                  <aside className="space-y-4 lg:sticky lg:top-0">
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Fotografia</h4>
+                      <div className="flex gap-3">
+                        <div className="w-28 h-28 shrink-0 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center">
+                          {form.photo_preview ? <img src={form.photo_preview} alt="Foto" className="w-full h-full object-cover" /> : <User className="w-10 h-10 text-slate-400" />}
+                        </div>
+                        <div className="flex flex-col justify-center gap-2 flex-1 min-w-0">
+                          <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoFile} className="hidden" />
+                          <button type="button" onClick={() => photoInputRef.current?.click()} className="py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">
+                            Alterar
+                          </button>
+                          <button type="button" onClick={() => setForm((f) => ({ ...f, photo_preview: '' }))} className="py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">
+                            Limpar
+                          </button>
                         </div>
                       </div>
                     </div>
                     <div>
-                      <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Fotografia</h4>
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="w-24 h-24 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center">
-                          {form.photo_preview ? <img src={form.photo_preview} alt="Foto" className="w-full h-full object-cover" /> : <User className="w-10 h-10 text-slate-400" />}
-                        </div>
-                        <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoFile} className="hidden" />
-                        <div className="flex gap-2 w-full">
-                          <button type="button" onClick={() => photoInputRef.current?.click()} className="flex-1 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-800">Alterar</button>
-                          <button type="button" onClick={() => setForm((f) => ({ ...f, photo_preview: '' }))} className="flex-1 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-800">Limpar</button>
-                        </div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Observações</label>
+                      <textarea
+                        value={form.observacoes}
+                        onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
+                        rows={6}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Outras opções</p>
+                      <div className="flex flex-col gap-1 text-sm">
+                        <button
+                          type="button"
+                          className={`text-left text-blue-600 dark:text-blue-400 hover:underline ${employeeModalExtra === 'adicional' ? 'font-semibold' : ''}`}
+                          onClick={() => setEmployeeModalExtra((x) => (x === 'adicional' ? 'none' : 'adicional'))}
+                        >
+                          Dados adicionais
+                        </button>
+                        <button
+                          type="button"
+                          className={`text-left text-blue-600 dark:text-blue-400 hover:underline ${employeeModalExtra === 'web' ? 'font-semibold' : ''}`}
+                          onClick={() => setEmployeeModalExtra((x) => (x === 'web' ? 'none' : 'web'))}
+                        >
+                          Dados Módulo Web
+                        </button>
+                        <button
+                          type="button"
+                          className={`text-left text-blue-600 dark:text-blue-400 hover:underline ${employeeModalExtra === 'afast' ? 'font-semibold' : ''}`}
+                          onClick={() => setEmployeeModalExtra((x) => (x === 'afast' ? 'none' : 'afast'))}
+                        >
+                          Afastamento
+                        </button>
                       </div>
                     </div>
-                  </section>
+                    <div className="rounded-xl border border-amber-200/80 dark:border-amber-900/50 bg-amber-50/90 dark:bg-amber-950/30 p-3 flex gap-2 text-xs text-slate-700 dark:text-slate-300">
+                      <Info className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400 mt-0.5" aria-hidden />
+                      <span>Os campos em azul são utilizados para relatórios, arquivos e comprovantes exigidos pela Portaria 1510 do MTE.</span>
+                    </div>
+                  </aside>
+                </div>
 
-                  {/* Dados gerais */}
-                  <section>
-                    <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Dados gerais</h4>
+                {employeeModalExtra === 'adicional' && (
+                  <section className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-4">
+                    <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Dados adicionais</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Salário base (R$)</label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={form.salario_base}
+                          onChange={(e) => setForm({ ...form, salario_base: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                          placeholder="Ex.: 3500 ou 3500,50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Escala</label>
+                        <select value={form.schedule_id} onChange={(e) => setForm({ ...form, schedule_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                          <option value="">Nenhuma</option>
+                          {schedules.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Cidade (naturalidade)</label>
                         <input
@@ -1592,7 +1781,6 @@ const AdminEmployees: React.FC = () => {
                           value={form.naturalidade}
                           onChange={(e) => setForm({ ...form, naturalidade: e.target.value })}
                           className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                          placeholder="Ex.: São Paulo"
                           autoComplete="address-level2"
                         />
                       </div>
@@ -1624,7 +1812,6 @@ const AdminEmployees: React.FC = () => {
                               value={form.endereco_rua}
                               onChange={(e) => setForm({ ...form, endereco_rua: e.target.value })}
                               className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                              placeholder="Logradouro"
                               autoComplete="street-address"
                             />
                           </div>
@@ -1635,8 +1822,6 @@ const AdminEmployees: React.FC = () => {
                               value={form.endereco_numero}
                               onChange={(e) => setForm({ ...form, endereco_numero: e.target.value })}
                               className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                              placeholder="Nº"
-                              autoComplete="off"
                             />
                           </div>
                           <div className="sm:col-span-3">
@@ -1646,7 +1831,6 @@ const AdminEmployees: React.FC = () => {
                               value={form.endereco_bairro}
                               onChange={(e) => setForm({ ...form, endereco_bairro: e.target.value })}
                               className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                              autoComplete="address-level3"
                             />
                           </div>
                           <div className="sm:col-span-3">
@@ -1656,8 +1840,6 @@ const AdminEmployees: React.FC = () => {
                               value={form.endereco_cep}
                               onChange={(e) => setForm({ ...form, endereco_cep: e.target.value })}
                               className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                              placeholder="00000-000"
-                              autoComplete="postal-code"
                               inputMode="numeric"
                             />
                           </div>
@@ -1668,8 +1850,6 @@ const AdminEmployees: React.FC = () => {
                               value={form.endereco_cidade}
                               onChange={(e) => setForm({ ...form, endereco_cidade: e.target.value })}
                               className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                              placeholder="Cidade de residência"
-                              autoComplete="address-level2"
                             />
                           </div>
                           <div className="sm:col-span-3">
@@ -1679,24 +1859,10 @@ const AdminEmployees: React.FC = () => {
                               value={form.endereco_estado}
                               onChange={(e) => setForm({ ...form, endereco_estado: e.target.value })}
                               className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                              placeholder="Ex.: SE"
-                              autoComplete="address-level1"
                               maxLength={32}
                             />
                           </div>
                         </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Nº PIS/PASEP <span className="text-xs font-normal text-slate-500">(recomendado para REP/relatórios)</span></label>
-                        <input type="text" value={form.pis_pasep} onChange={(e) => setForm({ ...form, pis_pasep: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Enviado ao REP e relatórios" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Nº Identificador</label>
-                        <input type="text" value={form.numero_identificador} onChange={(e) => setForm({ ...form, numero_identificador: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Crachá/digital (único no sistema)" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">CTPS</label>
-                        <input type="text" value={form.ctps} onChange={(e) => setForm({ ...form, ctps: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Carteira de Trabalho" />
                       </div>
                       <div className="sm:col-span-2">
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Tipo de vínculo</label>
@@ -1711,7 +1877,6 @@ const AdminEmployees: React.FC = () => {
                             </option>
                           ))}
                         </select>
-                        <p className="text-[10px] text-slate-500 mt-1">Usado em relatórios e integração com folha; CLT é o padrão.</p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Data de nascimento</label>
@@ -1719,115 +1884,55 @@ const AdminEmployees: React.FC = () => {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">RG</label>
-                        <input type="text" value={form.rg} onChange={(e) => setForm({ ...form, rg: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Número do RG" />
+                        <input type="text" value={form.rg} onChange={(e) => setForm({ ...form, rg: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Órgão emissor / UF</label>
-                        <input type="text" value={form.rg_orgao} onChange={(e) => setForm({ ...form, rg_orgao: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ex.: SSP/SP" />
-                      </div>
-                      <div className="sm:col-span-2">
-                        <label className="block text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Empresa <span className="text-xs font-normal text-blue-500">(Portaria 1510)</span></label>
-                        <input type="text" value={effectiveCompanyId ? 'Empresa atual' : ''} readOnly className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Estrutura</label>
-                        <select value={form.estrutura_id} onChange={(e) => setForm({ ...form, estrutura_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                          <option value="">Nenhuma</option>
-                          {estruturas.map((e) => <option key={e.id} value={e.id}>{e.descricao || e.codigo}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Escala</label>
-                        <select value={form.schedule_id} onChange={(e) => setForm({ ...form, schedule_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                          <option value="">Nenhuma</option>
-                          {schedules.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
-                        <p className="text-[10px] text-slate-500 mt-1">Dias da semana / ciclo (cadastro em Escalas).</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Horário</label>
-                        <select value={form.shift_id} onChange={(e) => setForm({ ...form, shift_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                          <option value="">Nenhum</option>
-                          {workShifts.map((s) => (
-                            <option key={s.id} value={s.id}>{s.label}</option>
-                          ))}
-                        </select>
-                        <p className="text-[10px] text-slate-500 mt-1">Turno cadastrado em Horários (entrada/saída).</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Função <span className="text-red-500">*</span></label>
-                        <select value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                          {cargos.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
-                          <option value={OUTRO_CARGO_VALUE}>Outro (especificar)</option>
-                        </select>
-                        {form.cargo === OUTRO_CARGO_VALUE && (
-                          <input type="text" value={form.cargoOutro} onChange={(e) => setForm({ ...form, cargoOutro: e.target.value })} className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ex: Analista" />
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Departamento <span className="text-red-500">*</span></label>
-                        <select value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                          <option value="">Selecione</option>
-                          {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Admissão</label>
-                        <input type="date" value={form.admissao} onChange={(e) => setForm({ ...form, admissao: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                        <input type="text" value={form.rg_orgao} onChange={(e) => setForm({ ...form, rg_orgao: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Término do contrato / estágio</label>
                         <input type="date" value={form.contrato_fim} onChange={(e) => setForm({ ...form, contrato_fim: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
-                        <p className="text-[10px] text-slate-500 mt-1">Prazo determinado, fim de estágio ou experiência (opcional).</p>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Demissão</label>
-                        <input type="date" value={form.demissao} onChange={(e) => setForm({ ...form, demissao: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">CPF</label>
+                        <input type="text" value={form.cpf} onChange={(e) => setForm({ ...form, cpf: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
                       </div>
-                      <div className="sm:col-span-2">
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Motivo de Demissão</label>
-                        <select value={form.motivo_demissao_id} onChange={(e) => setForm({ ...form, motivo_demissao_id: e.target.value })} disabled={!form.demissao} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-50">
-                          <option value="">Selecione (habilitado quando Demissão preenchida)</option>
-                          {motivosDemissao.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Telefone</label>
+                        <input type="text" autoComplete="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
                       </div>
-                      <div className="sm:col-span-2">
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Observações</label>
-                        <textarea value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} rows={2} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Observações sobre o funcionário" />
-                      </div>
-                    </div>
-                  </section>
-
-                  {/* Acesso (e-mail e senha provisória - criação; na edição: definir senha provisória) */}
-                  <section>
-                    <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Acesso ao sistema</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="sm:col-span-2">
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">E-mail</label>
-                        <input type="email" autoComplete="username" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="email@empresa.com" disabled={!!editingId} />
-                      </div>
-                      {!editingId && (
-                        <div className="sm:col-span-2">
-                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Senha provisória <span className="text-red-500">*</span></label>
-                          <div className="relative">
-                            <input
-                              type={showPassword ? 'text' : 'password'}
-                              value={form.password}
-                              onChange={(e) => setForm({ ...form, password: e.target.value })}
-                              className="w-full pl-3 pr-10 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                              placeholder="Senha para o funcionário fazer o primeiro login (vazio = 123456)"
-                              autoComplete="new-password"
-                            />
-                            <button type="button" onClick={() => setShowPassword((p) => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}>{showPassword ? <Eye size={18} /> : <EyeOff size={18} />}</button>
-                          </div>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">O funcionário fará login com o e-mail acima e esta senha provisória. Se não informar, use 123456. Recomende que ele altere a senha em Configurações após o primeiro acesso.</p>
-                        </div>
-                      )}
-                      {editingId && form.email?.trim() && (
-                        <div className="sm:col-span-2 space-y-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3">
-                          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Senha provisória (login do funcionário)</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">Para o colaborador importado ou que nunca logou: defina a senha provisória 123456 para ele acessar com o e-mail acima.</p>
-                          <div className="flex flex-wrap items-center gap-2">
+                      <div className="sm:col-span-2 space-y-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                        <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Acesso ao sistema</p>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">E-mail {!editingId && <span className="text-red-500">*</span>}</label>
+                        <input
+                          type="email"
+                          autoComplete="username"
+                          value={form.email}
+                          onChange={(e) => setForm({ ...form, email: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                          disabled={!!editingId}
+                        />
+                        {!editingId && (
+                          <>
+                            <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1 mt-2">Senha provisória</label>
+                            <div className="relative">
+                              <input
+                                type={showPassword ? 'text' : 'password'}
+                                value={form.password}
+                                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                                className="w-full pl-3 pr-10 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                autoComplete="new-password"
+                              />
+                              <button type="button" onClick={() => setShowPassword((p) => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}>
+                                {showPassword ? <Eye size={18} /> : <EyeOff size={18} />}
+                              </button>
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Em branco, será usada a senha 123456.</p>
+                          </>
+                        )}
+                        {editingId && form.email?.trim() && (
+                          <div className="space-y-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3 mt-2">
                             <button
                               type="button"
                               disabled={settingPassword}
@@ -1842,29 +1947,26 @@ const AdminEmployees: React.FC = () => {
                             >
                               {settingPassword ? 'Definindo...' : 'Definir senha provisória 123456'}
                             </button>
+                            {passwordMessage && (
+                              <p className={`text-xs ${passwordMessage.startsWith('Senha') ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{passwordMessage}</p>
+                            )}
                           </div>
-                          {passwordMessage && (
-                            <p className={`text-xs ${passwordMessage.startsWith('Senha') ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                              {passwordMessage}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">CPF</label>
-                        <input type="text" value={form.cpf} onChange={(e) => setForm({ ...form, cpf: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="CPF" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Telefone</label>
-                        <input type="text" autoComplete="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Telefone" />
+                        )}
                       </div>
                     </div>
                   </section>
+                )}
 
-                  {/* Afastamento */}
-                  <section>
-                    <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Afastamento</h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">Registrar afastamento para um dia ou período (ex.: férias).</p>
+                {employeeModalExtra === 'web' && (
+                  <section className="rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+                    <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Dados Módulo Web</h4>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Configurações específicas do módulo web do colaborador podem ser tratadas em versões futuras; por ora não há campos adicionais aqui.</p>
+                  </section>
+                )}
+
+                {employeeModalExtra === 'afast' && (
+                  <section className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+                    <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Afastamento</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Período (início)</label>
@@ -1876,22 +1978,17 @@ const AdminEmployees: React.FC = () => {
                       </div>
                       <div className="sm:col-span-2">
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Justificativa</label>
-                        <input type="text" value={form.afastamento_justificativa} onChange={(e) => setForm({ ...form, afastamento_justificativa: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ex: Férias, Falta, Médico" />
+                        <input type="text" value={form.afastamento_justificativa} onChange={(e) => setForm({ ...form, afastamento_justificativa: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
                       </div>
                       <div className="sm:col-span-2">
                         <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Motivo</label>
-                        <input type="text" value={form.afastamento_motivo} onChange={(e) => setForm({ ...form, afastamento_motivo: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" placeholder="Ex: Atestado devido a diagnóstico médico" />
+                        <input type="text" value={form.afastamento_motivo} onChange={(e) => setForm({ ...form, afastamento_motivo: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white" />
                       </div>
                     </div>
                   </section>
-                </div>
+                )}
 
-                <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                  <span className="inline-flex w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-900/40 items-center justify-center text-amber-600 dark:text-amber-400 font-bold">!</span>
-                  Os campos em azul são utilizados para relatórios, arquivos e comprovantes exigidos pela Portaria 1510 do MTE.
-                </p>
-                <div className="flex gap-3 pt-2 border-t border-slate-200 dark:border-slate-700">
-                  <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium">Cancelar</button>
+                <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-slate-200 dark:border-slate-700">
                   <button
                     type="submit"
                     disabled={saving}
@@ -1903,8 +2000,18 @@ const AdminEmployees: React.FC = () => {
                         <span>Salvando...</span>
                       </>
                     ) : (
-                      <span className="transition-transform duration-200 group-hover:translate-x-0.5">Salvar</span>
+                      <span className="transition-transform duration-200 group-hover:translate-x-0.5">Concluir</span>
                     )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmployeeModalExtra('none');
+                      setModalOpen(false);
+                    }}
+                    className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium"
+                  >
+                    Cancelar
                   </button>
                 </div>
               </form>

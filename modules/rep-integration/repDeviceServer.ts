@@ -295,21 +295,30 @@ export async function probeRepDeviceStatus(device: RepDevice): Promise<{
  * Teste de conexão: adaptador do fabricante (ex. Control iD iDClass) ou GET/POST genérico em /api/status.
  */
 export async function runRepConnectionTest(device: RepDevice): Promise<RepConnectionTestResult> {
-  const adapter = getVendorAdapter(device);
-  if (adapter?.testConnection) {
-    return adapter.testConnection(device);
+  try {
+    const adapter = getVendorAdapter(device);
+    if (adapter?.testConnection) {
+      return await adapter.testConnection(device);
+    }
+    const r = await probeRepDeviceStatus(device);
+    if (r.message && !r.ok && r.status === 0) {
+      return { ok: false, message: r.message, httpStatus: 0 };
+    }
+    if (r.ok) return { ok: true, message: 'Conexão OK', httpStatus: r.status, body: r.body };
+    return {
+      ok: false,
+      message: formatRepDeviceFailureMessage(r),
+      httpStatus: r.status,
+      body: r.body,
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      message: `${msg}${device.ip ? cloudCannotReachLanHint(device.ip) : ''}`.trim(),
+      httpStatus: 0,
+    };
   }
-  const r = await probeRepDeviceStatus(device);
-  if (r.message && !r.ok && r.status === 0) {
-    return { ok: false, message: r.message, httpStatus: 0 };
-  }
-  if (r.ok) return { ok: true, message: 'Conexão OK', httpStatus: r.status, body: r.body };
-  return {
-    ok: false,
-    message: formatRepDeviceFailureMessage(r),
-    httpStatus: r.status,
-    body: r.body,
-  };
 }
 
 export async function testConnectionServer(device: RepDevice): Promise<{ ok: boolean; message: string }> {
@@ -343,28 +352,36 @@ export async function runRepExchange(
   op: RepExchangeOp,
   clock?: RepDeviceClockSet
 ): Promise<{ ok: boolean; message?: string; data?: unknown; users?: RepUserFromDevice[] }> {
-  const adapter = getVendorAdapter(device);
-  const unsupported = {
-    ok: false as const,
-    message:
-      'Esta operação não está disponível para o fabricante deste relógio (implementado para Control iD iDClass).',
-  };
-  if (!adapter) return unsupported;
+  try {
+    const adapter = getVendorAdapter(device);
+    const unsupported = {
+      ok: false as const,
+      message:
+        'Esta operação não está disponível para o fabricante deste relógio (implementado para Control iD iDClass).',
+    };
+    if (!adapter) return unsupported;
 
-  if (op === 'pull_clock' && adapter.pullClock) {
-    return adapter.pullClock(device);
-  }
-  if (op === 'push_clock' && adapter.pushClock) {
-    if (!clock) {
-      return { ok: false, message: 'Informe data e hora para gravar no relógio.' };
+    if (op === 'pull_clock' && adapter.pullClock) {
+      return await adapter.pullClock(device);
     }
-    return adapter.pushClock(device, clock);
+    if (op === 'push_clock' && adapter.pushClock) {
+      if (!clock) {
+        return { ok: false, message: 'Informe data e hora para gravar no relógio.' };
+      }
+      return await adapter.pushClock(device, clock);
+    }
+    if (op === 'pull_info' && adapter.pullDeviceInfo) {
+      return await adapter.pullDeviceInfo(device);
+    }
+    if (op === 'pull_users' && adapter.pullUsersFromDevice) {
+      return await adapter.pullUsersFromDevice(device);
+    }
+    return unsupported;
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      message: `${msg}${device.ip ? cloudCannotReachLanHint(device.ip) : ''}`.trim(),
+    };
   }
-  if (op === 'pull_info' && adapter.pullDeviceInfo) {
-    return adapter.pullDeviceInfo(device);
-  }
-  if (op === 'pull_users' && adapter.pullUsersFromDevice) {
-    return adapter.pullUsersFromDevice(device);
-  }
-  return unsupported;
 }

@@ -9,6 +9,7 @@ import { buildDayMirrorSummary } from '../../utils/timesheetMirror';
 import { extractLatLng } from '../../utils/reverseGeocode';
 import { ExpandableStreetCell, ExpandableTextCell } from '../../components/ClickableFullContent';
 import { TimesheetTableSkeleton } from '../../components/TimesheetTableSkeleton';
+import { readSpecialBarsPref, SPECIAL_BARS_CHANGED } from '../../utils/timesheetLayoutPrefs';
 
 const EmployeeTimesheet: React.FC = () => {
   const { user, loading } = useCurrentUser();
@@ -21,6 +22,20 @@ const EmployeeTimesheet: React.FC = () => {
   const [loadingData, setLoadingData] = useState(true);
   /** Detalhe “localização por batida” visível por data (clique na coluna Data). */
   const [detailOpenByDate, setDetailOpenByDate] = useState<Record<string, boolean>>({});
+  const [specialBarsLayout, setSpecialBarsLayout] = useState(false);
+
+  useEffect(() => {
+    const sync = () => setSpecialBarsLayout(readSpecialBarsPref());
+    sync();
+    window.addEventListener('storage', sync);
+    window.addEventListener(SPECIAL_BARS_CHANGED, sync);
+    window.addEventListener('focus', sync);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener(SPECIAL_BARS_CHANGED, sync);
+      window.removeEventListener('focus', sync);
+    };
+  }, []);
 
   useEffect(() => {
     if (!user || !isSupabaseConfigured) {
@@ -117,7 +132,7 @@ const EmployeeTimesheet: React.FC = () => {
   if (!user) return <Navigate to="/" replace />;
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6${specialBarsLayout ? ' timesheet-special-bars' : ''}`}>
       <PageHeader title="Espelho de Ponto" />
 
       <div className="flex flex-wrap gap-4 items-end p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 print:hidden">

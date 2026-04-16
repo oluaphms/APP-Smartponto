@@ -15,8 +15,11 @@ import {
   Download,
   Upload,
   ArrowLeftRight,
+  ClipboardCheck,
 } from 'lucide-react';
 import { testRepDeviceConnection, syncRepDevice } from '../../../modules/rep-integration/repSyncJob';
+import { promotePendingRepPunchLogs } from '../../../modules/rep-integration/repService';
+import { LS_TIMESHEET_SPECIAL_BARS, readSpecialBarsPref, SPECIAL_BARS_CHANGED } from '../../utils/timesheetLayoutPrefs';
 import {
   pushEmployeeToDeviceViaApi,
   repExchangeViaApi,
@@ -60,6 +63,17 @@ const TIPOS_CONEXAO = [
   { value: 'api', label: 'API do fabricante' },
 ];
 
+const LS_REP_STAGING = 'chrono_rep_receive_staging';
+const LS_REP_ALLOCATE = 'chrono_rep_receive_allocate';
+const LS_REP_SKIP_BLOCKED = 'chrono_rep_receive_skip_blocked';
+
+function readLsBool(key: string, defaultVal: boolean): boolean {
+  if (typeof window === 'undefined') return defaultVal;
+  const v = localStorage.getItem(key);
+  if (v === null) return defaultVal;
+  return v === '1';
+}
+
 /** Fuso no formato Control iD Portaria 671 (ex.: -0300). */
 function formatTimezoneOffset671(d: Date): string {
   const offsetMin = -d.getTimezoneOffset();
@@ -90,6 +104,7 @@ const AdminRepDevices: React.FC = () => {
   const [loadingList, setLoadingList] = useState(true);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [promotingId, setPromotingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pushingId, setPushingId] = useState<string | null>(null);
   const [employees, setEmployees] = useState<EmployeeForRep[]>([]);
@@ -105,8 +120,14 @@ const AdminRepDevices: React.FC = () => {
   const [sendReceiveOpen, setSendReceiveOpen] = useState(false);
   const [srDeviceId, setSrDeviceId] = useState('');
   const [srLog, setSrLog] = useState('');
+  /** Salvar só em rep_punch_logs até consolidar */
+  const [srStaging, setSrStaging] = useState(false);
+  /** Marcar atraso na entrada vs escala ao importar */
+  const [srAllocate, setSrAllocate] = useState(false);
   /** Se marcado, não oferece no envio ao relógio inativos/demitidos/invisíveis. */
   const [srSkipBlocked, setSrSkipBlocked] = useState(true);
+  /** Espelho de ponto com barras destacadas (layout alternativo) */
+  const [srSpecialBars, setSrSpecialBars] = useState(false);
   const [srPushUserId, setSrPushUserId] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [configExtraBaseline, setConfigExtraBaseline] = useState<Record<string, unknown>>({});
@@ -180,6 +201,13 @@ const AdminRepDevices: React.FC = () => {
     setRepDeploymentNote(typeof window !== 'undefined' && window.isSecureContext);
   }, []);
 
+  useEffect(() => {
+    setSrStaging(readLsBool(LS_REP_STAGING, false));
+    setSrAllocate(readLsBool(LS_REP_ALLOCATE, false));
+    setSrSkipBlocked(readLsBool(LS_REP_SKIP_BLOCKED, true));
+    setSrSpecialBars(readSpecialBarsPref());
+  }, []);
+
   const redeDevices = useMemo(
     () => devices.filter((d) => d.tipo_conexao === 'rede'),
     [devices]
@@ -200,8 +228,9 @@ const AdminRepDevices: React.FC = () => {
     if (!d) return true;
     if (syncingId === d.id || pushingId === d.id) return true;
     if (exchangeBusy && exchangeBusy.startsWith(`${d.id}:`)) return true;
+    if (promotingId === d.id) return true;
     return false;
-  }, [srSelectedDevice, syncingId, pushingId, exchangeBusy]);
+  }, [srSelectedDevice, syncingId, pushingId, exchangeBusy, promotingId]);
 
   const appendSrLog = useCallback((line: string) => {
     const ts = new Date().toLocaleTimeString('pt-BR', {
@@ -264,10 +293,25 @@ const AdminRepDevices: React.FC = () => {
     setSyncingId(d.id);
     setMessage(null);
     try {
-      const r = await syncRepDevice(supabase, d.id);
+      const r = await syncRepDevice(supabase, d.id, {
+        onlyStaging: srStaging,
+        applySchedule: srAllocate,
+      });
       if (r.ok) {
-        appendSrLog(`Concluído: ${r.imported} marcação(ões) importada(s).`);
-        setMessage({ type: 'success', text: `Sincronizado. ${r.imported} marcações importadas.` });
+        const staged = r.staged ?? 0;
+        const imp = r.imported ?? 0;
+        const parts: string[] = [];
+        if (imp) parts.push(`${imp} registro(s) na folha (time_records)`);
+        if (staged) parts.push(`${staged} na fila temporária (rep_punch_logs)`);
+        const summary = parts.length ? parts.join('; ') : 'Nenhuma marcação nova.';
+        appendSrLog(`Concluído: ${summary}`);
+        setMessage({
+          type: 'success',
+          text:
+            staged && !imp
+              ? `${staged} marcação(ões) na fila temporária. Use «Consolidar pendentes» para gravar na folha.`
+              : `Sincronizado. ${summary}`,
+        });
       } else {
         const errLine = toUiString(r.error, 'Erro ao sincronizar');
         appendSrLog(`Falha: ${errLine}`);
@@ -279,6 +323,40 @@ const AdminRepDevices: React.FC = () => {
       setMessage({ type: 'error', text: (e as Error).message });
     } finally {
       setSyncingId(null);
+    }
+  };
+
+  const srRunPromoteStaging = async () => {
+    const d = srSelectedDevice;
+    if (!d || d.tipo_conexao !== 'rede') {
+      appendSrLog('Selecione um equipamento de rede.');
+      return;
+    }
+    if (!supabase || !user?.companyId) return;
+    setPromotingId(d.id);
+    setMessage(null);
+    appendSrLog(`Consolidando pendentes do relógio «${d.nome_dispositivo}»…`);
+    try {
+      const pr = await promotePendingRepPunchLogs(supabase, user.companyId, d.id);
+      if (!pr.success) {
+        const err = pr.error || 'Falha ao consolidar';
+        appendSrLog(`Falha: ${err}`);
+        setMessage({ type: 'error', text: err });
+        return;
+      }
+      const promoted = pr.promoted ?? 0;
+      const skipped = pr.skippedNoUser ?? 0;
+      appendSrLog(`Consolidado: ${promoted} registro(s) na folha; ${skipped} pendente(s) sem funcionário identificado.`);
+      setMessage({
+        type: 'success',
+        text: `${promoted} marcação(ões) gravadas na folha.${skipped ? ` ${skipped} ignorada(s) (sem cadastro).` : ''}`,
+      });
+      await loadDevices();
+    } catch (e) {
+      appendSrLog(`Erro: ${(e as Error).message}`);
+      setMessage({ type: 'error', text: (e as Error).message });
+    } finally {
+      setPromotingId(null);
     }
   };
 
@@ -563,7 +641,7 @@ const AdminRepDevices: React.FC = () => {
         <div
           className={`mb-4 px-4 py-2 rounded-lg ${message.type === 'success' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200' : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'}`}
         >
-          {message.text}
+          {toUiString(message.text, 'Erro')}
         </div>
       )}
 
@@ -815,22 +893,49 @@ const AdminRepDevices: React.FC = () => {
 
               <div className="rounded-xl border border-slate-200 dark:border-slate-600 p-3 space-y-3 bg-slate-50/80 dark:bg-slate-900/30">
                 <p className="text-xs font-medium text-slate-600 dark:text-slate-300">Opções</p>
-                <label className="flex gap-2 items-start opacity-70 cursor-not-allowed">
-                  <input type="checkbox" disabled className="mt-0.5 rounded border-slate-300" />
+                <label className="flex gap-2 items-start cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={srStaging}
+                    onChange={(e) => {
+                      const v = e.target.checked;
+                      setSrStaging(v);
+                      try {
+                        localStorage.setItem(LS_REP_STAGING, v ? '1' : '0');
+                      } catch {
+                        /* ignore */
+                      }
+                    }}
+                    className="mt-0.5 rounded border-slate-300"
+                  />
                   <span className="text-sm text-slate-700 dark:text-slate-300">
                     Salvar batidas em tabela temporária
                     <span className="block text-[11px] text-slate-500 dark:text-slate-400 font-normal mt-0.5">
-                      No Chrono Digital as marcações importadas são gravadas direto nos registros de ponto; não há fila
-                      temporária separada.
+                      Importa só para <code className="text-[10px]">rep_punch_logs</code>; use «Consolidar pendentes» para
+                      gerar <code className="text-[10px]">time_records</code> na folha.
                     </span>
                   </span>
                 </label>
-                <label className="flex gap-2 items-start opacity-70 cursor-not-allowed">
-                  <input type="checkbox" disabled className="mt-0.5 rounded border-slate-300" />
+                <label className="flex gap-2 items-start cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={srAllocate}
+                    onChange={(e) => {
+                      const v = e.target.checked;
+                      setSrAllocate(v);
+                      try {
+                        localStorage.setItem(LS_REP_ALLOCATE, v ? '1' : '0');
+                      } catch {
+                        /* ignore */
+                      }
+                    }}
+                    className="mt-0.5 rounded border-slate-300"
+                  />
                   <span className="text-sm text-slate-700 dark:text-slate-300">
                     Alocar batidas
                     <span className="block text-[11px] text-slate-500 dark:text-slate-400 font-normal mt-0.5">
-                      Associação automática a escalas será evoluída em versões futuras.
+                      Na <strong>entrada</strong>, marca atraso (<code className="text-[10px]">is_late</code>) conforme
+                      escala semanal e tolerância do turno (cadastro em Escalas / Horários).
                     </span>
                   </span>
                 </label>
@@ -838,7 +943,15 @@ const AdminRepDevices: React.FC = () => {
                   <input
                     type="checkbox"
                     checked={srSkipBlocked}
-                    onChange={(e) => setSrSkipBlocked(e.target.checked)}
+                    onChange={(e) => {
+                      const v = e.target.checked;
+                      setSrSkipBlocked(v);
+                      try {
+                        localStorage.setItem(LS_REP_SKIP_BLOCKED, v ? '1' : '0');
+                      } catch {
+                        /* ignore */
+                      }
+                    }}
                     className="mt-0.5 rounded border-slate-300"
                   />
                   <span className="text-sm text-slate-700 dark:text-slate-300">
@@ -849,12 +962,27 @@ const AdminRepDevices: React.FC = () => {
                     </span>
                   </span>
                 </label>
-                <label className="flex gap-2 items-start opacity-70 cursor-not-allowed">
-                  <input type="checkbox" disabled className="mt-0.5 rounded border-slate-300" />
+                <label className="flex gap-2 items-start cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={srSpecialBars}
+                    onChange={(e) => {
+                      const v = e.target.checked;
+                      setSrSpecialBars(v);
+                      try {
+                        localStorage.setItem(LS_TIMESHEET_SPECIAL_BARS, v ? '1' : '0');
+                        window.dispatchEvent(new Event(SPECIAL_BARS_CHANGED));
+                      } catch {
+                        /* ignore */
+                      }
+                    }}
+                    className="mt-0.5 rounded border-slate-300"
+                  />
                   <span className="text-sm text-slate-700 dark:text-slate-300">
                     Barras padrão especial
                     <span className="block text-[11px] text-slate-500 dark:text-slate-400 font-normal mt-0.5">
-                      Indisponível; o cartão de ponto segue o layout padrão do Chrono Digital.
+                      Ativa no Espelho de Ponto colunas com barra lateral colorida por tipo de marcação (preferência
+                      salva neste navegador).
                     </span>
                   </span>
                 </label>
@@ -863,7 +991,9 @@ const AdminRepDevices: React.FC = () => {
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 <strong className="font-medium text-slate-600 dark:text-slate-300">Receber</strong> importa as marcações do
                 relógio para o sistema. <strong className="font-medium text-slate-600 dark:text-slate-300">Enviar</strong>{' '}
-                grava a data e hora deste computador no aparelho.
+                grava a data e hora deste computador no aparelho.{' '}
+                <strong className="font-medium text-slate-600 dark:text-slate-300">Consolidar</strong> grava na folha as
+                batidas que ficaram só na fila temporária.
               </p>
 
               <div className="flex flex-wrap gap-2">
@@ -886,6 +1016,17 @@ const AdminRepDevices: React.FC = () => {
                 >
                   <Upload size={16} className="mr-1.5" />
                   Enviar
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 min-w-[120px]"
+                  disabled={srActionsLocked || redeDevices.length === 0 || !user?.companyId}
+                  onClick={srRunPromoteStaging}
+                  title="Grava na folha as marcações que estão só em rep_punch_logs"
+                >
+                  <ClipboardCheck size={16} className="mr-1.5" />
+                  Consolidar pendentes
                 </Button>
                 <Button type="button" variant="secondary" className="min-w-[88px]" onClick={() => setSendReceiveOpen(false)}>
                   Fechar
@@ -1020,9 +1161,11 @@ const AdminRepDevices: React.FC = () => {
                   ) : (
                     usersModal.users.map((u, i) => (
                       <tr key={i} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/30">
-                        <td className="px-3 py-2 text-slate-800 dark:text-slate-100">{u.nome || '—'}</td>
-                        <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{u.cpf || u.pis || '—'}</td>
-                        <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{u.matricula || '—'}</td>
+                        <td className="px-3 py-2 text-slate-800 dark:text-slate-100">{toUiString(u.nome || '—')}</td>
+                        <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
+                          {toUiString(u.cpf || u.pis || '—')}
+                        </td>
+                        <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{toUiString(u.matricula || '—')}</td>
                       </tr>
                     ))
                   )}

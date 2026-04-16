@@ -263,9 +263,17 @@ export interface WeeklyScheduleDay {
 /** Configuração do Descanso Semanal Remunerado (DSR) */
 export interface DSRConfig {
   tipo: 'automatico' | 'variavel';
+  /** Legado numérico (horas); preferir `limiteHorasFaltasHHmm` quando existir. */
   limiteHorasFaltas?: number;
+  /** Limite de horas falta no formato HH:mm (ex.: 06:00). */
+  limiteHorasFaltasHHmm?: string;
   valorDSRHoras?: string;
   incluirHorasExtrasNoCalculo?: boolean;
+  /** Onde exibir horas extras quando “Incluir Horas Extras no cálculo” está ativo. */
+  horasExtrasNoCalculoDestino?: 'coluna_dsr' | 'coluna_separada';
+  /** “Dias úteis por semana” + campo numérico */
+  diasUteisPorSemanaAtivo?: boolean;
+  diasUteisPorSemana?: number;
   descontarSemanaSeguinte?: boolean;
   incluirFeriados?: boolean;
   feriadoComo?: 'dsr_domingo' | 'dsr_dia' | 'hora_normal_dia' | 'hora_normal_descanso';
@@ -281,23 +289,159 @@ export interface DSRConfig {
   faixasVariavel?: { ate: number; desconto: string }[];
 }
 
+export function createDefaultDSR(): DSRConfig {
+  return {
+    tipo: 'automatico',
+    limiteHorasFaltasHHmm: '06:00',
+    valorDSRHoras: '00:00',
+    incluirHorasExtrasNoCalculo: false,
+    horasExtrasNoCalculoDestino: 'coluna_dsr',
+    diasUteisPorSemanaAtivo: false,
+    diasUteisPorSemana: undefined,
+    descontarSemanaSeguinte: false,
+    incluirFeriados: false,
+    feriadoComo: 'dsr_domingo',
+    feriadoDomingoDescontarUmDSR: false,
+  };
+}
+
+export function mergeDSR(base: DSRConfig, patch: Partial<DSRConfig> | null | undefined): DSRConfig {
+  if (!patch) return base;
+  return {
+    ...base,
+    ...patch,
+    faixasVariavel: patch.faixasVariavel ?? base.faixasVariavel,
+  };
+}
+
 /** Configuração de horas extras */
+/** Faixa “Acima de … horas” → coluna (Dias úteis, Dia especial, etc.) */
+export interface ExtrasFaixaHoraColuna {
+  id: string;
+  acimaDe: number;
+  coluna: string;
+}
+
+export interface ExtrasPainelFaixas {
+  controleHoras: 'diario' | 'semanal' | 'mensal';
+  numeroFaixas: number;
+  faixas: ExtrasFaixaHoraColuna[];
+}
+
+export type ExtrasAcumular =
+  | 'independentes'
+  | 'uteis_sabados'
+  | 'uteis_sabados_domingos'
+  | 'uteis_sabados_domingos_feriados'
+  | 'sabados_domingos'
+  | 'sabados_domingos_feriados'
+  | 'domingos_feriados'
+  | 'uteis_sabados_e_domingos_feriados'
+  | 'uteis_domingos_e_sabados_feriados'
+  /** Legado: Úteis + Sáb + Dom. + Fer. + Folga */
+  | 'uteis_sab_dom_fer_folga';
+
+export interface ExtrasDivisoesNoturnas {
+  separarSomatoriaAposMeiaNoite?: boolean;
+  naoDividirExtrasFeriados?: boolean;
+  naoDividirExtrasDomingos?: boolean;
+  dividirJornadasFolgaMeiaNoite?: boolean;
+  naoDividirEmFeriados?: boolean;
+  naoDividirEmFolgas?: boolean;
+  naoReiniciarDivisoesDiurnasNoturnas?: boolean;
+}
+
 export interface ExtrasConfig {
-  acumular: 'independentes' | 'uteis_sabados' | 'uteis_sabados_domingos' | 'uteis_sabados_domingos_feriados' | 'sabados_domingos' | 'sabados_domingos_feriados' | 'domingos_feriados' | 'uteis_sabados_e_domingos_feriados' | 'uteis_domingos_e_sabados_feriados';
+  acumular: ExtrasAcumular;
   multiplicarExtrasPercentual?: boolean;
-  arredondarHorasExtras?: number; // minutos
+  arredondarHorasExtras?: number; // minutos (legado numérico)
+  /** Gerais — “Arredondar horas extras” como flag explícita */
+  arredondarAtivo?: boolean;
+  arredondarRazaoMinutos?: number;
+  arredondarModo?: string;
   naoArredondarHorasNoturnas?: boolean;
   descontarFaltasDasExtras?: boolean;
+  descontarFaltasModo?: string;
   prioridadeDescontoFaltas?: 'maior' | 'menor';
   interjornadasMenorQueHoras?: number;
+  interjornadasAtivo?: boolean;
+  interjornadasHoras?: string;
+  interjornadasColunaSeparada?: boolean;
   separarExtrasNoturnasNormais?: boolean;
   separarExtrasIntervalosNormais?: boolean;
   agruparExtrasMesmaPorcentagem?: boolean;
+  usarHorasSomenteGrupoExtras?: boolean;
   controleHoras?: 'diario' | 'semanal' | 'mensal';
   numeroFaixas?: number;
   faixas?: { de: number; ate: number; percentual: number }[];
   bancoHorasHabilitado?: boolean;
   bancoHorasTipo?: 'extras' | 'faltas' | 'atrasos';
+  /** Subpainéis do diálogo “Configuração de Horas Extras” */
+  diasUteis?: ExtrasPainelFaixas;
+  diaEspecial?: ExtrasPainelFaixas & { usarEspecialPara?: string };
+  noturnasDiasUteis?: ExtrasPainelFaixas;
+  intervaloDiasUteis?: ExtrasPainelFaixas;
+  divisoesNoturnas?: ExtrasDivisoesNoturnas;
+}
+
+export function createDefaultPainelFaixas(): ExtrasPainelFaixas {
+  return {
+    controleHoras: 'diario',
+    numeroFaixas: 1,
+    faixas: [{ id: 'default-f1', acimaDe: 0, coluna: '' }],
+  };
+}
+
+export function createDefaultExtras(): ExtrasConfig {
+  return {
+    acumular: 'uteis_sab_dom_fer_folga',
+    controleHoras: 'diario',
+    numeroFaixas: 3,
+    multiplicarExtrasPercentual: false,
+    arredondarAtivo: false,
+    arredondarRazaoMinutos: undefined,
+    arredondarModo: '',
+    naoArredondarHorasNoturnas: false,
+    descontarFaltasDasExtras: false,
+    descontarFaltasModo: '',
+    interjornadasAtivo: false,
+    interjornadasHoras: '',
+    interjornadasColunaSeparada: false,
+    separarExtrasNoturnasNormais: false,
+    separarExtrasIntervalosNormais: false,
+    agruparExtrasMesmaPorcentagem: true,
+    usarHorasSomenteGrupoExtras: false,
+    bancoHorasHabilitado: false,
+    bancoHorasTipo: 'extras',
+    diasUteis: createDefaultPainelFaixas(),
+    diaEspecial: { ...createDefaultPainelFaixas(), usarEspecialPara: 'nao_usar' },
+    noturnasDiasUteis: createDefaultPainelFaixas(),
+    intervaloDiasUteis: createDefaultPainelFaixas(),
+    divisoesNoturnas: {},
+  };
+}
+
+export function mergeExtras(base: ExtrasConfig, patch: Partial<ExtrasConfig> | null | undefined): ExtrasConfig {
+  if (!patch) return base;
+  const defP = createDefaultPainelFaixas();
+  return {
+    ...base,
+    ...patch,
+    diasUteis: patch.diasUteis
+      ? { ...(base.diasUteis ?? defP), ...patch.diasUteis, faixas: patch.diasUteis.faixas ?? base.diasUteis?.faixas }
+      : base.diasUteis,
+    diaEspecial: patch.diaEspecial
+      ? { ...(base.diaEspecial ?? { ...defP, usarEspecialPara: 'nao_usar' }), ...patch.diaEspecial, faixas: patch.diaEspecial.faixas ?? base.diaEspecial?.faixas }
+      : base.diaEspecial,
+    noturnasDiasUteis: patch.noturnasDiasUteis
+      ? { ...(base.noturnasDiasUteis ?? defP), ...patch.noturnasDiasUteis, faixas: patch.noturnasDiasUteis.faixas ?? base.noturnasDiasUteis?.faixas }
+      : base.noturnasDiasUteis,
+    intervaloDiasUteis: patch.intervaloDiasUteis
+      ? { ...(base.intervaloDiasUteis ?? defP), ...patch.intervaloDiasUteis, faixas: patch.intervaloDiasUteis.faixas ?? base.intervaloDiasUteis?.faixas }
+      : base.intervaloDiasUteis,
+    divisoesNoturnas: { ...base.divisoesNoturnas, ...patch.divisoesNoturnas },
+    faixas: patch.faixas ?? base.faixas,
+  };
 }
 
 /** Tipo de marcação do horário (CLT ou outra orientação) */
@@ -305,6 +449,223 @@ export interface TipoMarcacaoConfig {
   tipo: 'pre_assinalado' | 'normal' | 'tolerancia' | 'livre' | 'extra_anterior' | 'extra_posterior' | 'tolerancia_especifica';
   usarToleranciaEspecial?: boolean;
   toleranciaEspecial?: { entrada: number; saida: number }[];
+}
+
+export function createDefaultTipoMarcacao(): TipoMarcacaoConfig {
+  return {
+    tipo: 'normal',
+    usarToleranciaEspecial: false,
+  };
+}
+
+export function mergeTipoMarcacao(
+  base: TipoMarcacaoConfig,
+  patch: Partial<TipoMarcacaoConfig> | null | undefined
+): TipoMarcacaoConfig {
+  if (!patch) return base;
+  return {
+    ...base,
+    ...patch,
+    toleranciaEspecial: patch.toleranciaEspecial ?? base.toleranciaEspecial,
+  };
+}
+
+/** Aba do diálogo legado “Opções Avançadas” (cadastro de horário). */
+export type OpcoesAvancadasTabId =
+  | 'tolerancias'
+  | 'importacao_batidas'
+  | 'tela_calculos'
+  | 'modo_calculo'
+  | 'colunas_dias'
+  | 'noturno'
+  | 'horas_in_itinere'
+  | 'horas_sobre_aviso';
+
+export interface ToleranciasAvancadasConfig {
+  fixarToleranciaExtrasFaltasMin: number;
+  dezMinutosDiariosArt58: number;
+  marcarAdiantadoComoExtra: boolean;
+  ignorarLimiteMinimoSeExtrasAcimaTolerancia: boolean;
+  marcarAtrasadoComoFalta: boolean;
+  ignorarLimiteMinimoSeFaltasAcimaTolerancia: boolean;
+  descontarToleranciaHorasExtras: boolean;
+  descontarToleranciaHorasFaltas: boolean;
+  usarToleranciaRefeicoes: boolean;
+  limiteMinimoExtrasDia: number;
+  limiteMinimoFaltasDia: number;
+}
+
+export interface ImportacaoBatidasAvancadasConfig {
+  usarSentidoCrachaAlocar: boolean;
+  alocarHorario24Horas: boolean;
+}
+
+export interface TelaCalculosAvancadaConfig {
+  sinalizarAlmocosCurtosVermelho: boolean;
+  naoCalcularHoraNoturna: boolean;
+  calcularFaltasSoDiaInteiro: boolean;
+  naoDescontarFaltasDeNormais: boolean;
+  preencherFaltaDiaBranco: boolean;
+  separarHorasBancoHoras: boolean;
+  separarNoturnasNormais: boolean;
+  usarCalculoHorasReduzidasNormais: boolean;
+  permitirFolgasSemana: number;
+  multiplicarHorasEsperaPercent: number;
+}
+
+export interface ModoCalculoAvancadoConfig {
+  colunasRefeicao: string;
+  horarioModoCompensacao: boolean;
+  horarioMensalistas: boolean;
+  considerarFeriadosHoraExtra: boolean;
+  incluirIntervaloAdicionalNoturno: boolean;
+  usarTempoPlusMinusCargaSuperiorPct: boolean;
+  cargaSuperiorPercentual: number;
+  calcularNoturnasIndependeCompensado: boolean;
+  calcularBatidasIntermediariasAuto: boolean;
+  naoCalcularFaltaBatidasIntermediarias: boolean;
+  desconsiderarNeutroComBatidasNoDia: boolean;
+}
+
+export interface ColunaDiaAvancadaItem {
+  id: string;
+  coluna: string;
+  nome: string;
+  casas: number;
+  arredondamento: string;
+  aplicarRazao?: boolean;
+  razaoMinPorH?: number;
+  toleranciaMin?: number;
+}
+
+export interface NoturnoAvancadoConfig {
+  periodoEspecialAdicionalNoturno: boolean;
+  inicio: string;
+  fim: string;
+  separarNoturnasDomingosFeriados: boolean;
+}
+
+export interface InItinereFaixaRow {
+  id: string;
+  acimaDe: string;
+  horasDia: string;
+  inItinere: string;
+}
+
+export interface HorasInItinereAvancadoConfig {
+  calcularInItinere: boolean;
+  numeroFaixas: number;
+  faixas: InItinereFaixaRow[];
+  somarAoHorarioNormal: boolean;
+  calcularSoHorasIninterruptas: boolean;
+}
+
+export interface HoraSobreAvisoRow {
+  id: string;
+  diaSemana: string;
+  inicio: string;
+  fim: string;
+}
+
+/** Opções avançadas do horário (JSON em `work_shifts.config.opcoes_avancadas`). */
+export interface OpcoesAvancadasHorario {
+  tolerancias: ToleranciasAvancadasConfig;
+  importacaoBatidas: ImportacaoBatidasAvancadasConfig;
+  telaCalculos: TelaCalculosAvancadaConfig;
+  modoCalculo: ModoCalculoAvancadoConfig;
+  colunasDias: { itens: ColunaDiaAvancadaItem[] };
+  noturno: NoturnoAvancadoConfig;
+  horasInItinere: HorasInItinereAvancadoConfig;
+  horasSobreAviso: { linhas: HoraSobreAvisoRow[] };
+  copiarDeHorarioId: string | null;
+}
+
+export function createDefaultOpcoesAvancadas(): OpcoesAvancadasHorario {
+  return {
+    tolerancias: {
+      fixarToleranciaExtrasFaltasMin: 5,
+      dezMinutosDiariosArt58: 10,
+      marcarAdiantadoComoExtra: false,
+      ignorarLimiteMinimoSeExtrasAcimaTolerancia: false,
+      marcarAtrasadoComoFalta: false,
+      ignorarLimiteMinimoSeFaltasAcimaTolerancia: false,
+      descontarToleranciaHorasExtras: false,
+      descontarToleranciaHorasFaltas: false,
+      usarToleranciaRefeicoes: false,
+      limiteMinimoExtrasDia: 10,
+      limiteMinimoFaltasDia: 10,
+    },
+    importacaoBatidas: { usarSentidoCrachaAlocar: false, alocarHorario24Horas: false },
+    telaCalculos: {
+      sinalizarAlmocosCurtosVermelho: false,
+      naoCalcularHoraNoturna: false,
+      calcularFaltasSoDiaInteiro: false,
+      naoDescontarFaltasDeNormais: false,
+      preencherFaltaDiaBranco: false,
+      separarHorasBancoHoras: false,
+      separarNoturnasNormais: false,
+      usarCalculoHorasReduzidasNormais: false,
+      permitirFolgasSemana: 0,
+      multiplicarHorasEsperaPercent: 100,
+    },
+    modoCalculo: {
+      colunasRefeicao: 'saida1_entrada2',
+      horarioModoCompensacao: false,
+      horarioMensalistas: false,
+      considerarFeriadosHoraExtra: true,
+      incluirIntervaloAdicionalNoturno: false,
+      usarTempoPlusMinusCargaSuperiorPct: false,
+      cargaSuperiorPercentual: 0,
+      calcularNoturnasIndependeCompensado: false,
+      calcularBatidasIntermediariasAuto: false,
+      naoCalcularFaltaBatidasIntermediarias: false,
+      desconsiderarNeutroComBatidasNoDia: false,
+    },
+    colunasDias: { itens: [] },
+    noturno: {
+      periodoEspecialAdicionalNoturno: false,
+      inicio: '22:00',
+      fim: '05:00',
+      separarNoturnasDomingosFeriados: false,
+    },
+    horasInItinere: {
+      calcularInItinere: false,
+      numeroFaixas: 1,
+      faixas: [{ id: 'default-faixa-1', acimaDe: '00:00', horasDia: '00:00', inItinere: '00:00' }],
+      somarAoHorarioNormal: false,
+      calcularSoHorasIninterruptas: false,
+    },
+    horasSobreAviso: { linhas: [] },
+    copiarDeHorarioId: null,
+  };
+}
+
+/** Mescla defaults com trecho vindo do banco (migrations antigas / JSON parcial). */
+export function mergeOpcoesAvancadas(
+  base: OpcoesAvancadasHorario,
+  patch: Partial<OpcoesAvancadasHorario> | null | undefined,
+): OpcoesAvancadasHorario {
+  if (!patch) return base;
+  return {
+    ...base,
+    ...patch,
+    tolerancias: { ...base.tolerancias, ...patch.tolerancias },
+    importacaoBatidas: { ...base.importacaoBatidas, ...patch.importacaoBatidas },
+    telaCalculos: { ...base.telaCalculos, ...patch.telaCalculos },
+    modoCalculo: { ...base.modoCalculo, ...patch.modoCalculo },
+    colunasDias: {
+      itens: patch.colunasDias?.itens ?? base.colunasDias.itens,
+    },
+    noturno: { ...base.noturno, ...patch.noturno },
+    horasInItinere: {
+      ...base.horasInItinere,
+      ...patch.horasInItinere,
+      faixas: patch.horasInItinere?.faixas ?? base.horasInItinere.faixas,
+    },
+    horasSobreAviso: {
+      linhas: patch.horasSobreAviso?.linhas ?? base.horasSobreAviso.linhas,
+    },
+  };
 }
 
 /** Tipo de escala */
@@ -335,6 +696,7 @@ export interface Horario {
     dsr?: DSRConfig;
     extras?: ExtrasConfig;
     tipoMarcacao?: TipoMarcacaoConfig;
+    opcoes_avancadas?: OpcoesAvancadasHorario;
   };
 }
 

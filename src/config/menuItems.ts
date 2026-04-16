@@ -14,6 +14,7 @@ export const adminMenuItems: MenuItemConfig[] = [
   { nameKey: 'menu.departments', icon: 'business_center', route: '/admin/departments' },
   { nameKey: 'menu.cargos', icon: 'work', route: '/admin/job-titles' },
   { nameKey: 'menu.espelhoPonto', icon: 'event_note', route: '/admin/timesheet' },
+  { nameKey: 'menu.calculos', icon: 'calculate', route: '/admin/calculos' },
   { nameKey: 'menu.monitoramento', icon: 'insights', route: '/admin/monitoring' },
   { nameKey: 'menu.escalas', icon: 'calendar_today', route: '/admin/schedules' },
   { nameKey: 'menu.horarios', icon: 'schedule', route: '/admin/shifts' },

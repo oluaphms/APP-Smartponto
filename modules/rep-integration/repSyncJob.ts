@@ -6,7 +6,12 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getPunchesForSync, testConnectionForSync } from './repSyncFetch';
-import { ingestPunchesFromDevice, logRepAction, updateDeviceLastSync } from './repService';
+import {
+  ingestPunchesFromDevice,
+  logRepAction,
+  updateDeviceLastSync,
+  type IngestPunchesFromDeviceOptions,
+} from './repService';
 
 const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutos
 
@@ -15,8 +20,9 @@ const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutos
  */
 export async function syncRepDevice(
   supabase: SupabaseClient,
-  deviceId: string
-): Promise<{ ok: boolean; imported: number; error?: string }> {
+  deviceId: string,
+  ingestOptions?: IngestPunchesFromDeviceOptions
+): Promise<{ ok: boolean; imported: number; staged?: number; error?: string }> {
   const { data: device, error: fetchError } = await supabase
     .from('rep_devices')
     .select('*')
@@ -38,17 +44,25 @@ export async function syncRepDevice(
     const since = device.ultima_sincronizacao ? new Date(device.ultima_sincronizacao) : undefined;
     const punches = await getPunchesForSync(supabase, device, since);
 
-    const result = await ingestPunchesFromDevice(supabase, device, punches);
+    const result = await ingestPunchesFromDevice(supabase, device, punches, ingestOptions);
     await updateDeviceLastSync(supabase, deviceId, 'ativo');
 
     await logRepAction(supabase, deviceId, 'sync', result.errors.length ? 'parcial' : 'sucesso', undefined, {
       imported: result.imported,
+      staged: result.staged,
       duplicated: result.duplicated,
       userNotFound: result.userNotFound,
       errors: result.errors,
+      onlyStaging: ingestOptions?.onlyStaging,
+      applySchedule: ingestOptions?.applySchedule,
     });
 
-    return { ok: true, imported: result.imported, error: result.errors[0] };
+    return {
+      ok: true,
+      imported: result.imported,
+      staged: result.staged,
+      error: result.errors[0],
+    };
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Erro ao sincronizar';
     await updateDeviceLastSync(supabase, deviceId, 'erro');
