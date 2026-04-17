@@ -605,6 +605,21 @@ const AppMain: React.FC = () => {
     setLoginError(null);
 
     try {
+      // Pré-check rápido para reduzir espera percebida quando o projeto Supabase está pausado.
+      // Se der falso rapidamente, já mostramos a tela de reconexão sem esperar o signIn completo.
+      const FAST_PRECHECK_TIMEOUT_MS = 2500;
+      const precheckResult = await Promise.race([
+        checkSupabaseConnection().then((ok) => (ok ? 'ok' : 'down')),
+        new Promise<'unknown'>((resolve) => setTimeout(() => resolve('unknown'), FAST_PRECHECK_TIMEOUT_MS)),
+      ]);
+      if (precheckResult === 'down') {
+        setConnectionUnavailable(true);
+        setLoginError(
+          'Não foi possível alcançar o servidor agora. O projeto pode estar pausado (Supabase free tier). Verifique em supabase.com/dashboard e use "Limpar sessão e tentar de novo".'
+        );
+        return;
+      }
+
       // Não chamar signOut aqui: o Supabase substitui a sessão no signIn e o signOut assíncrono
       // gerava evento "sem sessão" depois do login (voltava para a tela de login) e atrasava o fluxo.
 
@@ -628,6 +643,7 @@ const AppMain: React.FC = () => {
         result = await Promise.race([loginPromise, timeoutPromise]);
       } catch (timeoutErr: any) {
         logSupabaseError(timeoutErr, 'login');
+        setConnectionUnavailable(true);
         setLoginError(timeoutErr?.message || 'Tempo esgotado. Tente novamente.');
         // Limpar sessão local para o próximo "Entrar" funcionar sem precisar clicar em "Limpar sessão"
         try {
@@ -639,6 +655,14 @@ const AppMain: React.FC = () => {
       }
 
       if (result.error) {
+        const normalizedError = String(result.error || '').toLowerCase();
+        if (
+          normalizedError.includes('tempo esgotado') ||
+          normalizedError.includes('timeout') ||
+          normalizedError.includes('network')
+        ) {
+          setConnectionUnavailable(true);
+        }
         setLoginError(result.error);
         return;
       }
