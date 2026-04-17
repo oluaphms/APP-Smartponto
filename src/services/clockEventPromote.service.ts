@@ -31,10 +31,11 @@ function eventTypeToRepTipo(eventType: string): string {
   const t = (eventType || '').toLowerCase().trim();
   if (t.startsWith('saida') || t.startsWith('saída')) return 'S';
   if (t.startsWith('entrada')) return 'E';
-  if (t.startsWith('batida') || t.startsWith('pausa')) return 'P';
-  const c = (eventType || 'E').toUpperCase().charAt(0);
-  if (c === 'S' || c === 'E' || c === 'P') return c;
-  return 'E';
+  if (t.startsWith('pausa')) return 'P';
+  if (t.startsWith('batida')) return 'B';  -- Genérico: será interpretado pelo backend baseado na escala
+  const c = (eventType || 'B').toUpperCase().charAt(0);  -- Padrão 'B' (batida genérica) ao invés de 'E'
+  if (c === 'S' || c === 'E' || c === 'P' || c === 'B') return c;
+  return 'B';  -- Padrão: deixa o backend interpretar pela escala
 }
 
 function employeeFields(employeeId: string): { pis: string | null; cpf: string | null; matricula: string | null } {

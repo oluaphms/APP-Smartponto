@@ -48,18 +48,9 @@ function parseHenryAfdLine(line: string, device: DeviceConfig, tz: string): Punc
 
   if (Number.isNaN(date.getTime())) return null;
 
-  // Henry pode ter indicador no final ou usar tabela de conversão
-  let eventType: Punch['event_type'] = 'batida';
-  const lastChar = clean.charAt(clean.length - 1).toUpperCase();
-  
-  // Henry normalmente usa: E=Entrada, S=Saída, I=Intervalo, F=Fim Intervalo
-  if (lastChar === 'E') {
-    eventType = 'entrada';
-  } else if (lastChar === 'S') {
-    eventType = 'saída';
-  } else if (lastChar === 'I') {
-    eventType = 'pausa';
-  }
+  // O arquivo AFD da Portaria 1510 não contém indicador de tipo (entrada/saída)
+  // O tipo será determinado pelo backend baseado na escala/horário do funcionário
+  const eventType: Punch['event_type'] = 'batida';
 
   return {
     employee_id: pis.replace(/\D/g, '').slice(0, 11) || pis,
@@ -74,7 +65,6 @@ function parseHenryAfdLine(line: string, device: DeviceConfig, tz: string): Punc
       data_afd: data,
       hora_afd: hora,
       pis,
-      indicador: lastChar,
       timezone: tz,
       source: 'henry_afd',
       brand: 'Henry',

@@ -51,16 +51,9 @@ function parseAfdLine(line: string, device: DeviceConfig, tz: string): Punch | n
 
   if (Number.isNaN(date.getTime())) return null;
 
-  // Determinar tipo de evento
-  let eventType: Punch['event_type'] = 'batida';
-  
-  // Verificar se há indicador de entrada/saída no final da linha ou no contexto
-  const lastChar = clean.charAt(clean.length - 1).toUpperCase();
-  if (lastChar === 'E' || lastChar === 'I') {
-    eventType = 'entrada';
-  } else if (lastChar === 'S' || lastChar === 'O') {
-    eventType = 'saída';
-  }
+  // O arquivo AFD da Portaria 1510 não contém indicador de tipo (entrada/saída)
+  // O tipo será determinado pelo backend baseado na escala/horário do funcionário
+  const eventType: Punch['event_type'] = 'batida';
 
   return {
     employee_id: pis.replace(/\D/g, '').slice(0, 11) || pis,

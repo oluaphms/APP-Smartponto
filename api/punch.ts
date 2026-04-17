@@ -75,7 +75,8 @@ setInterval(() => {
 const PunchSchema = z.object({
   employee_id: z.string().min(1),
   occurred_at: z.string().datetime(),
-  event_type: z.enum(['entrada', 'saída', 'saida', 'pausa', 'E', 'S', 'P']),
+  // Aceita tipos específicos ou 'batida' genérica (será interpretada pelo backend)
+  event_type: z.enum(['entrada', 'saída', 'saida', 'pausa', 'batida', 'E', 'S', 'P', 'B']),
   dedupe_hash: z.string().min(1),
   raw: z.record(z.any()).optional().default({}),
 });
@@ -95,10 +96,12 @@ function normalizeEventType(type: string): string {
   if (t === 'saida') return 'saída';
   if (t === 'entrada') return 'entrada';
   if (t === 'pausa') return 'pausa';
+  if (t === 'batida') return 'batida';  -- Deixa o backend interpretar
   if (t === 'e') return 'entrada';
   if (t === 's') return 'saída';
   if (t === 'p') return 'pausa';
-  return 'entrada';
+  if (t === 'b') return 'batida';  -- Deixa o backend interpretar
+  return 'batida';  -- Padrão: deixa o backend interpretar pela escala
 }
 
 export default async function handler(request: Request): Promise<Response> {

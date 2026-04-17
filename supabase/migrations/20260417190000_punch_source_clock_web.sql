@@ -9,7 +9,8 @@ COMMENT ON COLUMN public.clock_event_logs.source IS
 COMMENT ON COLUMN public.time_records.source IS
   'Principal: clock (agente+relógio via espelho), web (app REP). Legados: rep, mobile, desktop, api, importacao, kiosk.';
 
--- Tabela opcional usada por api/punches.ts
+-- Nota: a tabela punches é criada em migração posterior (20260417200000)
+-- Esta migração adiciona a coluna source se a tabela já existir (legado)
 DO $$
 BEGIN
   IF EXISTS (
