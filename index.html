@@ -81,39 +81,25 @@
     <a href="#main-content" class="skip-link">Pular para o conteúdo principal</a>
     <div id="root"></div>
 <script>
-  // CRÍTICO: Limpar Service Workers ANTES de qualquer requisição ser feita
-  // Este script DEVE executar antes do script type="module" abaixo
+  // CRÍTICO: desregistrar SWs legados ANTES do type="module" (evita HTML em cache servido como JS).
+  // Não usar location.reload() aqui: corrida com o primeiro carregamento dos chunks no Vercel.
   (function() {
     'use strict';
     if ('serviceWorker' in navigator) {
-      // Executar sincronamente se possível, ou o mais rápido possível
       navigator.serviceWorker.getRegistrations().then(function(registrations) {
-        if (registrations.length > 0) {
-          console.log('[CLEANUP] Found', registrations.length, 'Service Worker(s), unregistering...');
-          Promise.all(registrations.map(r => r.unregister())).then(function() {
-            console.log('[CLEANUP] All Service Workers unregistered');
-            // Limpar caches também
-            if ('caches' in window) {
-              caches.keys().then(function(names) {
-                if (names.length > 0) {
-                  console.log('[CLEANUP] Clearing', names.length, 'cache(s)');
-                  Promise.all(names.map(n => caches.delete(n))).then(function() {
-                    console.log('[CLEANUP] All caches cleared');
-                    // Recarregar apenas se havia SWs ou caches
-                    if (registrations.length > 0 || names.length > 0) {
-                      console.log('[CLEANUP] Reloading page to ensure clean state...');
-                      window.location.reload();
-                    }
-                  });
-                }
-              });
-            }
-          }).catch(function(err) {
-            console.error('[CLEANUP] Error unregistering SWs:', err);
+        if (registrations.length === 0) return;
+        console.log('[CLEANUP] Found', registrations.length, 'Service Worker(s), unregistering...');
+        return Promise.all(registrations.map(function(r) { return r.unregister(); }));
+      }).then(function() {
+        if ('caches' in window) {
+          return caches.keys().then(function(names) {
+            if (names.length === 0) return;
+            console.log('[CLEANUP] Clearing', names.length, 'cache(s)');
+            return Promise.all(names.map(function(n) { return caches.delete(n); }));
           });
         }
       }).catch(function(err) {
-        console.error('[CLEANUP] Error getting SW registrations:', err);
+        console.error('[CLEANUP] Error:', err);
       });
     }
   })();

@@ -16,6 +16,40 @@ try {
 } catch (e) {
   console.warn('[Sentry] init falhou (ignorado no dev):', e);
 }
+
+// Após deploy, chunks antigos podem 404; um reload recupera. Evita loop com sessionStorage.
+const CHUNK_RELOAD_FLAG = '__cd_chunk_reload_once';
+if (typeof window !== 'undefined') {
+  window.addEventListener(
+    'unhandledrejection',
+    function (event: PromiseRejectionEvent) {
+      const r = event.reason;
+      const msg =
+        typeof r === 'object' && r !== null && 'message' in r
+          ? String((r as Error).message)
+          : String(r);
+      if (
+        !/Failed to fetch dynamically imported module|Loading chunk \d+ failed|Importing a module script failed/i.test(
+          msg
+        )
+      ) {
+        return;
+      }
+      if (sessionStorage.getItem(CHUNK_RELOAD_FLAG) === '1') {
+        sessionStorage.removeItem(CHUNK_RELOAD_FLAG);
+        return;
+      }
+      sessionStorage.setItem(CHUNK_RELOAD_FLAG, '1');
+      event.preventDefault();
+      window.location.reload();
+    },
+    { passive: false }
+  );
+  window.addEventListener('load', function () {
+    sessionStorage.removeItem(CHUNK_RELOAD_FLAG);
+  });
+}
+
 ThemeService.init();
 i18n.init();
 
