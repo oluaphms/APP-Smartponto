@@ -31,18 +31,26 @@
   window.ENV.SUPABASE_URL = supabaseUrl;
   window.ENV.SUPABASE_ANON_KEY = supabaseAnonKey;
 
-  // Log para debug
-  console.group('[Supabase Config]');
-  console.log('Environment:', activeEnv);
-  console.log('URL:', supabaseUrl || '(vazia)');
-  console.log('Source:', supabaseUrl ? 'window/localStorage' : 'import.meta.env (fallback no app)');
-  console.log('Online:', typeof navigator === 'undefined' ? true : navigator.onLine);
-  console.groupEnd();
-  console.log('[env-config.js] ✅ Variáveis de ambiente injetadas no window');
-  console.log('[env-config.js] SUPABASE_URL:', supabaseUrl ? supabaseUrl.slice(0, 40) + '...' : '(vazia)');
-  console.log('[env-config.js] SUPABASE_ANON_KEY:', supabaseAnonKey ? 'OK' : '(vazia)');
+  var isLocalDev =
+    typeof location !== 'undefined' &&
+    /^(localhost|127\.0\.0\.1)$/i.test(String(location.hostname || ''));
+
+  if (isLocalDev) {
+    console.group('[Supabase Config]');
+    console.log('Environment:', activeEnv);
+    console.log('URL:', supabaseUrl || '(vazia)');
+    console.log('Source:', supabaseUrl ? 'window/localStorage' : 'import.meta.env (fallback no app)');
+    console.log('Online:', typeof navigator === 'undefined' ? true : navigator.onLine);
+    console.groupEnd();
+  }
+
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn('[ENV] window.ENV vazio; fallback para import.meta.env será usado pelo app.');
+    // Em produção o Vite injeta VITE_* no bundle; env-config.js vazio é esperado.
+    if (isLocalDev) {
+      console.info('[env-config] window.ENV sem URL/chave; o app usa import.meta.env (.env / build).');
+    }
+  } else if (isLocalDev) {
+    console.info('[env-config] Credenciais definidas em runtime (localStorage/window.ENV).');
   }
 })();
 

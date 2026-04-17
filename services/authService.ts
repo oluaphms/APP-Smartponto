@@ -387,7 +387,7 @@ class AuthService {
     return p;
   }
 
-  private async supabaseUserToAppUserImpl(supabaseUser: any): Promise<User | null> {
+  private async supabaseUserToAppUserImpl(supabaseUser: any, attempt = 0): Promise<User | null> {
     try {
       const email = (supabaseUser.email || '').trim().toLowerCase();
       if (!email) return null;
@@ -532,6 +532,12 @@ class AuthService {
       return newUser;
     } catch (error: any) {
       const msg = error?.message ?? error?.code ?? String(error);
+      const isGoTrueLockContention =
+        typeof msg === 'string' &&
+        (/lock.*sb-/i.test(msg) ||
+          /not released within/i.test(msg) ||
+          /orphaned lock/i.test(msg) ||
+          /forcefully acquiring/i.test(msg));
       const isTimeout =
         typeof msg === 'string' &&
         (msg.includes('Tempo esgotado') ||
@@ -540,8 +546,27 @@ class AuthService {
           msg.includes('stole') ||
           msg.includes('Lock broken') ||
           /timeout/i.test(msg));
+      const looksLikeSessionStorageRace =
+        typeof msg === 'string' && (/lock/i.test(msg) || /indexeddb/i.test(msg) || /stole/i.test(msg));
+
+      if ((isGoTrueLockContention || (isTimeout && looksLikeSessionStorageRace)) && attempt < 2) {
+        await new Promise((r) => setTimeout(r, 120 * (attempt + 1)));
+        return this.supabaseUserToAppUserImpl(supabaseUser, attempt + 1);
+      }
+
+      if (isTimeout && attempt < 1) {
+        await new Promise((r) => setTimeout(r, 280));
+        return this.supabaseUserToAppUserImpl(supabaseUser, attempt + 1);
+      }
+
       if (isTimeout) {
-        if (typeof console !== 'undefined' && console.warn) {
+        if (looksLikeSessionStorageRace || isGoTrueLockContention) {
+          if (import.meta.env?.DEV && typeof console !== 'undefined' && console.debug) {
+            console.debug(
+              '[Auth] Sessão/GoTrue em contenção ou timeout; usando dados mínimos do Auth até sincronizar.',
+            );
+          }
+        } else if (typeof console !== 'undefined' && console.warn) {
           console.warn(
             '[Auth] Perfil em public.users demorou ou indisponível; usando dados mínimos do Auth. Próxima sincronização pode preencher empresa e permissões.',
           );
