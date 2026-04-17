@@ -34,37 +34,81 @@ function extra(device: RepDevice): Record<string, unknown> {
 
 function credentials(device: RepDevice): { login: string; password: string } {
   const ex = extra(device);
+  const loginRaw = String(ex.rep_login ?? ex.login ?? 'admin').trim();
+  const passRaw = String(ex.rep_password ?? ex.password ?? 'admin').trim();
   return {
-    login: String(ex.rep_login ?? ex.login ?? 'admin'),
-    password: String(ex.rep_password ?? ex.password ?? 'admin'),
+    login: loginRaw || 'admin',
+    password: passRaw,
   };
+}
+
+function loginBodyFromDevice(device: RepDevice, login: string, password: string): string {
+  const ex = extra(device);
+  const raw = ex.controlid_login_body;
+  if (raw != null && typeof raw === 'object' && !Array.isArray(raw)) {
+    const o = { ...(raw as Record<string, unknown>), login, password };
+    return JSON.stringify(o);
+  }
+  if (typeof raw === 'string' && raw.trim().startsWith('{')) {
+    try {
+      const o = JSON.parse(raw) as Record<string, unknown>;
+      return JSON.stringify({ ...o, login, password });
+    } catch {
+      /* fallback abaixo */
+    }
+  }
+  return JSON.stringify({ login, password });
 }
 
 async function controlIdLogin(device: RepDevice): Promise<{ session: string } | { error: string }> {
   const { login, password } = credentials(device);
-  const res = await deviceFetch(device, '/login.fcgi', {
-    method: 'POST',
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ login, password }),
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    return { error: `Login Control iD: HTTP ${res.status} — ${text.slice(0, 240)}` };
+  const debug = (process.env.CONTROLID_LOGIN_DEBUG || '').trim() === '1';
+  if (debug) {
+    console.debug('[Control iD][login] usuário (tamanho)', login.length, '| senha (tamanho)', password.length);
   }
-  let data: unknown;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    return { error: 'Login Control iD: resposta não é JSON. Confirme HTTPS, porta (443) e credenciais.' };
+
+  const tryBodies: string[] = [loginBodyFromDevice(device, login, password)];
+  if (!extra(device).controlid_login_body) {
+    tryBodies.push(JSON.stringify({ login, passwd: password }));
+    tryBodies.push(JSON.stringify({ user: login, password }));
   }
-  const o = data as Record<string, unknown>;
-  const session = o.session;
-  if (typeof session !== 'string' || !session) {
-    return {
-      error: `Login Control iD: campo "session" ausente. Resposta: ${JSON.stringify(data).slice(0, 240)}`,
-    };
+
+  let lastText = '';
+  let lastStatus = 0;
+  for (const body of tryBodies) {
+    const res = await deviceFetch(device, '/login.fcgi', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json; charset=utf-8',
+        Expect: '',
+      },
+      body,
+    });
+    lastText = await res.text();
+    lastStatus = res.status;
+    if (res.ok) {
+      const text = lastText;
+      let data: unknown;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        return { error: 'Login Control iD: resposta não é JSON. Confirme HTTPS, porta (443) e credenciais.' };
+      }
+      const o = data as Record<string, unknown>;
+      const session = o.session;
+      if (typeof session !== 'string' || !session) {
+        return {
+          error: `Login Control iD: campo "session" ausente. Resposta: ${JSON.stringify(data).slice(0, 240)}`,
+        };
+      }
+      return { session };
+    }
+    if (res.status !== 401) {
+      return { error: `Login Control iD: HTTP ${res.status} — ${lastText.slice(0, 240)}` };
+    }
   }
-  return { session };
+  return { error: `Login Control iD: HTTP ${lastStatus} — ${lastText.slice(0, 240)}` };
 }
 
 /** Heurística: conteúdo AFD (NSR + DDMMAAAA + HHMMSS ou NSR+tipo+data), não JSON de status. */
