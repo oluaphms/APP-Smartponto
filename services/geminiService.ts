@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { DailySummary } from "../types";
-import { getGeminiApiKey, getGeminiModelId } from "./geminiEnv";
+import { getGeminiApiKey, getGeminiModelId, validateGeminiApiKey } from "./geminiEnv";
 
 function errorText(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -47,14 +47,20 @@ function parseInsightJsonFromText(text: string): { insight: string; score: numbe
 // Analyze time tracking data to provide productivity and work-life balance insights
 export const getWorkInsights = async (summaries: DailySummary[]) => {
   const apiKey = getGeminiApiKey();
-  if (!apiKey) {
+
+  // Validação inicial da chave
+  const validation = validateGeminiApiKey(apiKey);
+  if (!validation.valid) {
+    if (import.meta.env?.DEV) {
+      console.warn('[Gemini] Validação da chave falhou:', validation.error);
+    }
     return {
-      insight:
-        "Defina VITE_GEMINI_API_KEY no ambiente de build para insights por IA, ou continue registrando o ponto normalmente.",
+      insight: validation.error || "API de IA não configurada. Obtenha uma chave em https://aistudio.google.com/apikey",
       score: 8,
     };
   }
-  const ai = new GoogleGenAI({ apiKey });
+
+  const ai = new GoogleGenAI({ apiKey: apiKey! });
   const model = getGeminiModelId();
 
   const plainPrompt = `Analise os seguintes registros de ponto dos últimos dias e forneça um insight curto (máximo 3 frases) sobre produtividade, pontualidade e equilíbrio vida-trabalho para o funcionário. Retorne APENAS um objeto JSON válido neste formato exato: {"insight":"...","score":8} com score entre 0 e 10. Sem markdown, sem explicações adicionais.
@@ -134,11 +140,17 @@ consultar o manual ou o administrador. Mantenha tom profissional e prestativo. R
 // Chat com IA para RH: envia mensagem e retorna resposta do modelo
 export const sendHRChatMessage = async (userMessage: string, history: { role: 'user' | 'model'; text: string }[] = []): Promise<string> => {
   const apiKey = getGeminiApiKey();
-  if (!apiKey) {
-    return "A API da IA não está configurada. Defina VITE_GEMINI_API_KEY no ambiente de build (Vercel) e faça um novo deploy.";
+
+  // Validação inicial da chave
+  const validation = validateGeminiApiKey(apiKey);
+  if (!validation.valid) {
+    if (import.meta.env?.DEV) {
+      console.warn('[Gemini Chat] Validação da chave falhou:', validation.error);
+    }
+    return validation.error || "API de IA não configurada. Obtenha uma chave em https://aistudio.google.com/apikey";
   }
 
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey: apiKey! });
   const model = getGeminiModelId();
 
   const contents = [
