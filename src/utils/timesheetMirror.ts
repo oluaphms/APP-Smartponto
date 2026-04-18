@@ -1,150 +1,197 @@
 /**
- * Espelho de ponto: quatro marcações típicas do dia
- * Entrada (início) → Pausa (início intervalo) → Entrada (retorno) → Saída (final).
+ * Utilitários para construir o espelho de ponto (timesheet mirror)
+ * Processa time_records e organiza por dia/funcionário
  */
 
-export type PunchKind = 'entrada' | 'saída' | 'pausa' | 'other';
-
-export function normalizePunchType(type: string | undefined | null): PunchKind {
-  const x = String(type || '').toLowerCase().trim();
-  if (x === 'saida' || x === 'saída') return 'saída';
-  if (x === 'entrada') return 'entrada';
-  if (x === 'pausa') return 'pausa';
-  return 'other';
+export interface TimeRecord {
+  id: string;
+  user_id: string;
+  created_at: string;
+  type: 'entrada' | 'saida' | 'intervalo_saida' | 'intervalo_volta';
+  manual_reason?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  is_manual?: boolean;
+  adjusted?: boolean;
 }
 
-export function formatMirrorTime(iso: string | undefined | null): string {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return '—';
-  }
+export interface DayMirror {
+  date: string;
+  entradaInicio: string | null;
+  saidaIntervalo: string | null;
+  voltaIntervalo: string | null;
+  saidaFinal: string | null;
+  workedMinutes: number;
+  records: TimeRecord[];
 }
-
-export interface DayMirrorSummary {
-  /** Primeira entrada do dia (início da jornada) */
-  entradaInicio: string;
-  /** Início do intervalo (marcação tipo pausa) */
-  saidaIntervalo: string;
-  /** Primeira entrada após a pausa (retorno) */
-  voltaIntervalo: string;
-  /** Última saída do dia (encerramento) */
-  saidaFinal: string;
-  workedHours: string;
-  status: string;
-  hasLateEntry?: boolean;
-  hasAbsence?: boolean;
-}
-
-type MirrorRecord = { type: string; created_at: string };
 
 /**
- * Interpreta marcações do dia em ordem cronológica (não sobrescreve entradas).
+ * Extrai apenas a hora (HH:mm) de uma data ISO
  */
-export function buildDayMirrorSummary(records: MirrorRecord[]): DayMirrorSummary {
-  const sorted = [...records].sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+function extractTime(isoString: string): string {
+  const date = new Date(isoString);
+  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+/**
+ * Extrai a data (YYYY-MM-DD) de uma string ISO
+ */
+function extractDate(isoString: string): string {
+  return isoString.slice(0, 10);
+}
+
+/**
+ * Verifica se um registro é manual (tem manual_reason ou is_manual=true)
+ */
+export function isManualRecord(record: TimeRecord): boolean {
+  return !!(record.manual_reason && record.manual_reason.trim()) || record.is_manual === true;
+}
+
+/**
+ * Ordena registros por horário
+ */
+function sortRecordsByTime(records: TimeRecord[]): TimeRecord[] {
+  return [...records].sort((a, b) => 
+    new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   );
+}
 
-  let entradaInicio = '';
-  let saidaIntervalo = '';
-  let voltaIntervalo = '';
-  let saidaFinal = '';
-
-  let firstEntradaIdx = -1;
-  let firstPausaIdx = -1;
-
-  for (let i = 0; i < sorted.length; i++) {
-    const ty = normalizePunchType(sorted[i].type);
-    if (ty === 'entrada' && firstEntradaIdx < 0) {
-      firstEntradaIdx = i;
-      entradaInicio = formatMirrorTime(sorted[i].created_at);
-    }
-    if (ty === 'pausa' && firstPausaIdx < 0) {
-      firstPausaIdx = i;
-      saidaIntervalo = formatMirrorTime(sorted[i].created_at);
-    }
-  }
-
-  if (firstPausaIdx >= 0) {
-    for (let i = firstPausaIdx + 1; i < sorted.length; i++) {
-      if (normalizePunchType(sorted[i].type) === 'entrada') {
-        voltaIntervalo = formatMirrorTime(sorted[i].created_at);
+/**
+ * Constrói o resumo diário a partir dos registros de um dia
+ */
+function buildDaySummary(records: TimeRecord[]): DayMirror {
+  const sorted = sortRecordsByTime(records);
+  const date = extractDate(sorted[0]?.created_at || new Date().toISOString());
+  
+  let entradaInicio: string | null = null;
+  let saidaIntervalo: string | null = null;
+  let voltaIntervalo: string | null = null;
+  let saidaFinal: string | null = null;
+  
+  // Interpreta a sequência de batidas baseado na ordem e tipo
+  for (const record of sorted) {
+    const time = extractTime(record.created_at);
+    
+    switch (record.type) {
+      case 'entrada':
+        if (!entradaInicio) {
+          entradaInicio = time;
+        } else if (!voltaIntervalo && saidaIntervalo) {
+          // Segunda entrada após intervalo
+          voltaIntervalo = time;
+        }
         break;
-      }
+      case 'saida':
+        if (entradaInicio && !saidaIntervalo && !voltaIntervalo) {
+          // Possível saída para intervalo ou saída final
+          saidaIntervalo = time;
+        } else if (voltaIntervalo || (!saidaIntervalo && entradaInicio)) {
+          // Saída final
+          saidaFinal = time;
+        }
+        break;
+      case 'intervalo_saida':
+        saidaIntervalo = time;
+        break;
+      case 'intervalo_volta':
+        voltaIntervalo = time;
+        break;
     }
   }
-
-  for (let i = sorted.length - 1; i >= 0; i--) {
-    if (normalizePunchType(sorted[i].type) === 'saída') {
-      saidaFinal = formatMirrorTime(sorted[i].created_at);
-      break;
+  
+  // Calcula minutos trabalhados
+  let workedMinutes = 0;
+  if (entradaInicio && saidaFinal) {
+    const entrada = new Date(`${date}T${entradaInicio}`);
+    const saida = new Date(`${date}T${saidaFinal}`);
+    workedMinutes = Math.round((saida.getTime() - entrada.getTime()) / 60000);
+    
+    // Subtrai intervalo
+    if (saidaIntervalo && voltaIntervalo) {
+      const intervaloSaida = new Date(`${date}T${saidaIntervalo}`);
+      const intervaloVolta = new Date(`${date}T${voltaIntervalo}`);
+      workedMinutes -= Math.round((intervaloVolta.getTime() - intervaloSaida.getTime()) / 60000);
     }
   }
-
-  const workedHours = computeWorkedHours(sorted, firstEntradaIdx, firstPausaIdx);
-
-  // Detectar falta (sem batida de entrada)
-  const hasAbsence = firstEntradaIdx < 0;
-
-  // Detectar batida fora do horário (entrada após 09:00 ou saída antes de 17:00)
-  let hasLateEntry = false;
-  if (firstEntradaIdx >= 0) {
-    const entradaTime = new Date(sorted[firstEntradaIdx].created_at);
-    const entradaHour = entradaTime.getHours();
-    const entradaMin = entradaTime.getMinutes();
-    // Considerar fora do horário se entrada após 09:00
-    if (entradaHour > 9 || (entradaHour === 9 && entradaMin > 0)) {
-      hasLateEntry = true;
-    }
-  }
-
+  
   return {
+    date,
     entradaInicio,
     saidaIntervalo,
     voltaIntervalo,
     saidaFinal,
-    workedHours,
-    status: 'OK',
-    hasLateEntry,
-    hasAbsence,
+    workedMinutes: Math.max(0, workedMinutes),
+    records: sorted,
   };
 }
 
-function computeWorkedHours(
-  sorted: MirrorRecord[],
-  firstEntradaIdx: number,
-  firstPausaIdx: number,
-): string {
-  if (firstEntradaIdx < 0) return '';
-  const firstEnt = new Date(sorted[firstEntradaIdx].created_at);
-  let lastSaida: Date | null = null;
-  for (let i = sorted.length - 1; i >= 0; i--) {
-    if (normalizePunchType(sorted[i].type) === 'saída') {
-      lastSaida = new Date(sorted[i].created_at);
-      break;
+/**
+ * Agrupa registros por data
+ */
+function groupRecordsByDate(records: TimeRecord[]): Map<string, TimeRecord[]> {
+  const groups = new Map<string, TimeRecord[]>();
+  
+  for (const record of records) {
+    const date = extractDate(record.created_at);
+    if (!groups.has(date)) {
+      groups.set(date, []);
+    }
+    groups.get(date)!.push(record);
+  }
+  
+  return groups;
+}
+
+/**
+ * Constrói o espelho de ponto completo para um funcionário
+ */
+export function buildDayMirrorSummary(
+  records: TimeRecord[],
+  startDate: string,
+  endDate: string
+): Map<string, DayMirror> {
+  const byDate = groupRecordsByDate(records);
+  const result = new Map<string, DayMirror>();
+  
+  // Preenche todos os dias no período
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const dateStr = d.toISOString().slice(0, 10);
+    const dayRecords = byDate.get(dateStr) || [];
+    
+    if (dayRecords.length > 0) {
+      result.set(dateStr, buildDaySummary(dayRecords));
+    } else {
+      // Dia sem registros
+      result.set(dateStr, {
+        date: dateStr,
+        entradaInicio: null,
+        saidaIntervalo: null,
+        voltaIntervalo: null,
+        saidaFinal: null,
+        workedMinutes: 0,
+        records: [],
+      });
     }
   }
-  if (!lastSaida) return '';
-  let mins = (lastSaida.getTime() - firstEnt.getTime()) / 60000;
+  
+  return result;
+}
 
-  if (firstPausaIdx >= 0) {
-    let retornoIdx = -1;
-    for (let i = firstPausaIdx + 1; i < sorted.length; i++) {
-      if (normalizePunchType(sorted[i].type) === 'entrada') {
-        retornoIdx = i;
-        break;
-      }
-    }
-    if (retornoIdx >= 0) {
-      const tPausa = new Date(sorted[firstPausaIdx].created_at);
-      const tRetorno = new Date(sorted[retornoIdx].created_at);
-      mins -= (tRetorno.getTime() - tPausa.getTime()) / 60000;
-    }
-  }
+/**
+ * Formata minutos para exibição (HH:mm)
+ */
+export function formatMinutes(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${h}:${m.toString().padStart(2, '0')}`;
+}
 
-  const h = Math.floor(Math.max(0, mins) / 60);
-  const m = Math.round(Math.max(0, mins) % 60);
-  return `${h}h ${m}m`;
+/**
+ * Verifica se um dia tem pelo menos uma batida manual
+ */
+export function hasManualRecord(dayMirror: DayMirror): boolean {
+  return dayMirror.records.some(isManualRecord);
 }
