@@ -5,7 +5,7 @@
 
 import { db } from './supabaseClient';
 
-export type AdminTimesheetEmployee = { id: string; nome: string; department_id?: string };
+export type AdminTimesheetEmployee = { id: string; nome: string; department_id?: string; role?: string };
 export type AdminTimesheetDepartment = { id: string; name: string };
 export type AdminHolidayRow = { id: string; date: string; name: string };
 
@@ -71,27 +71,34 @@ export async function buscarEspelhoAdmin(
         { column: 'created_at', operator: 'gte', value: periodStartTs },
         { column: 'created_at', operator: 'lte', value: periodEndTs },
       ],
-      { column: 'created_at', ascending: false },
-      1000,
+      { column: 'created_at', ascending: true },
+      8000,
     ) as Promise<any[]>,
     db.select('departments', [{ column: 'company_id', operator: 'eq', value: companyId }]) as Promise<any[]>,
     db.select('employee_shift_schedule', [{ column: 'company_id', operator: 'eq', value: companyId }]).catch(() => []) as Promise<any[]>,
-    db.select('feriados', [{ column: 'company_id', operator: 'eq', value: companyId }]).catch(() => []) as Promise<any[]>,
+    db
+      .select('holidays', [{ column: 'company_id', operator: 'eq', value: companyId }])
+      .catch(() =>
+        db.select('feriados', [{ column: 'company_id', operator: 'eq', value: companyId }]).catch(() => []),
+      ) as Promise<any[]>,
   ]);
 
-  const employees: AdminTimesheetEmployee[] = (usersRows ?? []).map((u: any) => ({
-    id: u.id,
-    nome: u.nome || u.email,
-    department_id: u.department_id,
-  }));
+  const employees: AdminTimesheetEmployee[] = (usersRows ?? [])
+    .filter((u: any) => u.role !== 'admin' && u.role !== 'super_admin')
+    .map((u: any) => ({
+      id: u.id,
+      nome: u.nome || u.email,
+      department_id: u.department_id,
+      role: u.role,
+    }));
   const departments: AdminTimesheetDepartment[] = (departmentsRows ?? []).map((d: any) => ({
     id: d.id,
     name: d.name,
   }));
   const holidays: AdminHolidayRow[] = (holidaysRows ?? []).map((h: any) => ({
     id: h.id,
-    date: (h.data || h.date || '').slice(0, 10),
-    name: h.descricao || h.name || 'Feriado',
+    date: String(h.date || h.data || '').slice(0, 10),
+    name: h.name || h.descricao || 'Feriado',
   }));
 
   return {

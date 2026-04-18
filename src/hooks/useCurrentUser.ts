@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
 export interface User {
@@ -10,14 +10,10 @@ export interface User {
   department_id?: string;
 }
 
-// Cache simples em memória
 let cachedUser: User | null = null;
-let cacheTimestamp: number = 0;
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
+let cacheTimestamp = 0;
+const CACHE_DURATION = 5 * 60 * 1000;
 
-/**
- * Lê o usuário do cache (usado por componentes que não precisam de reatividade)
- */
 export function readCachedUser(): User | null {
   if (cachedUser && Date.now() - cacheTimestamp < CACHE_DURATION) {
     return cachedUser;
@@ -25,85 +21,78 @@ export function readCachedUser(): User | null {
   return null;
 }
 
-/**
- * Hook para obter o usuário atual com reatividade
- */
 export function useCurrentUser() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const loadingProfileRef = useRef(false);
 
   const loadUser = useCallback(async () => {
     if (!isSupabaseConfigured) {
-      console.log('[useCurrentUser] Supabase não configurado');
       setLoading(false);
       return;
     }
-
+    if (loadingProfileRef.current) return;
+    loadingProfileRef.current = true;
     try {
-      console.log('[useCurrentUser] Buscando sessão...');
-      const { data: { session }, error } = await supabase.auth.getSession();
-      
-      if (error) {
-        console.error('[useCurrentUser] Erro ao buscar sessão:', error);
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (error || !session?.user) {
         setUser(null);
         cachedUser = null;
-        setLoading(false);
-        return;
-      }
-      
-      if (!session?.user) {
-        console.log('[useCurrentUser] Sem sessão ativa');
-        setUser(null);
-        cachedUser = null;
-        setLoading(false);
         return;
       }
 
-      console.log('[useCurrentUser] Usuário autenticado:', session.user.id);
-      
-      // Busca o perfil do usuário
       const { data: profile, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('id', session.user.id)
         .single();
 
-      if (profileError) {
-        console.error('[useCurrentUser] Erro ao buscar perfil:', profileError);
+      if (profileError || !profile) {
         setUser(null);
         cachedUser = null;
       } else {
-        console.log('[useCurrentUser] Perfil carregado:', profile);
-        setUser(profile);
-        cachedUser = profile;
+        setUser(profile as User);
+        cachedUser = profile as User;
         cacheTimestamp = Date.now();
       }
-    } catch (err) {
-      console.error('[useCurrentUser] Erro inesperado:', err);
+    } catch {
       setUser(null);
       cachedUser = null;
     } finally {
+      loadingProfileRef.current = false;
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadUser();
-
-    if (isSupabaseConfigured) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        console.log('[useCurrentUser] Auth state changed:', _event);
-        if (session?.user) {
-          loadUser();
-        } else {
-          setUser(null);
-          cachedUser = null;
-          setLoading(false);
-        }
-      });
-
-      return () => subscription.unsubscribe();
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return;
     }
+
+    void loadUser();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // INITIAL_SESSION já coberto pelo loadUser() acima — evita 2× getSession + 2× select em users
+      if (event === 'INITIAL_SESSION') return;
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        cachedUser = null;
+        setLoading(false);
+        return;
+      }
+      if (session?.user) {
+        void loadUser();
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, [loadUser]);
 
   return { user, loading, refresh: loadUser };
