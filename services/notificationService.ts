@@ -9,6 +9,19 @@ import { db, isSupabaseConfigured, supabase, type Filter } from './supabaseClien
 let lastNotifSlowWarnAt = 0;
 const NOTIF_SLOW_WARN_INTERVAL_MS = 45_000;
 
+/** Várias montagens (Layout + NotificationCenter + badges) disparavam `getAll` em paralelo — mesma corrida no throttle e 2× carga no auth/REST. */
+const getAllInflight = new Map<string, Promise<InAppNotification[]>>();
+
+function isTimeoutError(e: unknown): boolean {
+  const msg = String((e as { message?: string })?.message ?? e ?? '');
+  return (
+    msg.includes('Tempo esgotado') ||
+    msg.includes('Tempo esgotado ao carregar dados') ||
+    msg.includes('Supabase timeout') ||
+    /timeout/i.test(msg)
+  );
+}
+
 const STORAGE_KEY = 'smartponto_notifications';
 const MAX_LOCAL = 100;
 
@@ -80,58 +93,85 @@ export const NotificationService = {
    * Por padrão exclui as já lidas (read = true) para não poluir o sino.
    */
   async getAll(userId: string, includeResolved = false): Promise<InAppNotification[]> {
-    if (isSupabaseConfigured()) {
-      try {
+    const inflightKey = `${userId}:${includeResolved ? '1' : '0'}`;
+    const inflight = getAllInflight.get(inflightKey);
+    if (inflight) return inflight;
+
+    const p = (async (): Promise<InAppNotification[]> => {
+      const loadFromLocal = (): InAppNotification[] => {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return [];
+          const parsed = JSON.parse(raw).map((n: any) => ({
+            ...n,
+            createdAt: new Date(n.createdAt),
+            status: n.status ?? (n.read ? 'read' : 'pending'),
+          })) as InAppNotification[];
+          return parsed.filter((n) => n.userId === userId && !n.read);
+        } catch {
+          return [];
+        }
+      };
+
+      if (isSupabaseConfigured()) {
         const filters: Filter[] = [
           { column: 'user_id', operator: 'eq', value: userId },
-          // Mostrar apenas notificações não lidas (read = false)
           { column: 'read', operator: 'eq', value: false },
         ];
-        const rows = await db.select(
-          'notifications',
-          filters,
-          { column: 'created_at', ascending: false },
-          100,
-        );
-        return (rows ?? []).map(rowToNotif);
-      } catch (e: any) {
-        const msg = String(e?.message ?? e ?? '');
-        const isTimeout =
-          msg.includes('Tempo esgotado') ||
-          msg.includes('Tempo esgotado ao carregar dados') ||
-          msg.includes('Supabase timeout') ||
-          /timeout/i.test(msg);
-        if (e?.name !== 'AbortError' && !msg.includes('Lock broken') && !msg.includes('stole')) {
-          if (isTimeout) {
-            const now = Date.now();
-            if (now - lastNotifSlowWarnAt >= NOTIF_SLOW_WARN_INTERVAL_MS) {
-              lastNotifSlowWarnAt = now;
-              // Fallback esperado em rede lenta; não poluir o console (nível Verbose no DevTools).
-              console.debug(
-                '[notifications] Lista indisponível (rede lenta ou lock); usando notificações locais se houver.',
-              );
+
+        const fetchOnce = () =>
+          db.select(
+            'notifications',
+            filters,
+            { column: 'created_at', ascending: false },
+            100,
+          ) as Promise<any[]>;
+
+        try {
+          let rows: any[];
+          try {
+            rows = await fetchOnce();
+          } catch (e1: any) {
+            const msg = String(e1?.message ?? e1 ?? '');
+            if (e1?.name === 'AbortError' || msg.includes('Lock broken') || msg.includes('stole')) {
+              throw e1;
             }
-          } else {
-            console.error('Get notifications Supabase failed:', msg);
+            if (isTimeoutError(e1)) {
+              await new Promise((r) => setTimeout(r, 600));
+              rows = await fetchOnce();
+            } else {
+              throw e1;
+            }
+          }
+          return (rows ?? []).map(rowToNotif);
+        } catch (e: any) {
+          const msg = String(e?.message ?? e ?? '');
+          if (e?.name !== 'AbortError' && !msg.includes('Lock broken') && !msg.includes('stole')) {
+            if (isTimeoutError(e)) {
+              const now = Date.now();
+              if (now - lastNotifSlowWarnAt >= NOTIF_SLOW_WARN_INTERVAL_MS) {
+                lastNotifSlowWarnAt = now;
+                if (import.meta.env.DEV && typeof console !== 'undefined') {
+                  console.debug(
+                    '[notifications] Lista indisponível (rede lenta ou lock); usando notificações locais se houver.',
+                  );
+                }
+              }
+            } else {
+              console.error('Get notifications Supabase failed:', msg);
+            }
           }
         }
       }
-    }
 
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw).map((n: any) => ({
-        ...n,
-        createdAt: new Date(n.createdAt),
-        status: n.status ?? (n.read ? 'read' : 'pending'),
-      })) as InAppNotification[];
-      return parsed.filter(
-        (n) => n.userId === userId && !n.read,
-      );
-    } catch {
-      return [];
-    }
+      return loadFromLocal();
+    })();
+
+    getAllInflight.set(inflightKey, p);
+    void p.finally(() => {
+      if (getAllInflight.get(inflightKey) === p) getAllInflight.delete(inflightKey);
+    });
+    return p;
   },
 
   async getUnreadCount(userId: string): Promise<number> {

@@ -25,7 +25,9 @@ export const AppInitializer: React.FC<AppInitializerProps> = ({ children }) => {
     let mounted = true;
     const init = async () => {
       const envName =
-        (typeof window !== 'undefined' && (window as any).ENV?.ENVIRONMENT) || 'dev';
+        (typeof window !== 'undefined' && (window as any).ENV?.ENVIRONMENT) ||
+        import.meta.env.MODE ||
+        'dev';
       const envMap =
         (typeof window !== 'undefined' && (window as any).ENV?.SUPABASES) || {};
       const envConfig = envMap?.[envName] || null;
