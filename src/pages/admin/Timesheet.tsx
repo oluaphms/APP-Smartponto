@@ -19,8 +19,9 @@ import {
   getDayStatus,
 } from '../../utils/timesheetMirror';
 import { closeTimesheet, isTimesheetClosed } from '../../services/timeProcessingService';
-import { invalidateAfterTimesheetMonthClose } from '../../services/queryCache';
+import { invalidateAfterPunch, invalidateAfterTimesheetMonthClose } from '../../services/queryCache';
 import { enumerateLocalCalendarDays } from '../../utils/localDateTimeToIso';
+import { sameUserId } from '../../utils/userIdMatch';
 
 /** Data local YYYY-MM-DD (evita UTC deslocar o “hoje” no max do input). */
 function localDateKey(d = new Date()): string {
@@ -138,7 +139,7 @@ const AdminTimesheet: React.FC = () => {
 
   const displayRecords = useMemo(() => {
     if (!filterUserId) return [];
-    return records.filter((r) => r.user_id === filterUserId);
+    return records.filter((r) => sameUserId(r.user_id, filterUserId));
   }, [records, filterUserId]);
 
   const empMirror = useMemo(() => {
@@ -164,20 +165,74 @@ const AdminTimesheet: React.FC = () => {
     latitude?: number;
     longitude?: number;
   }) => {
-    if (!companyId) return;
+    const cid = String(companyId ?? '').trim();
+    if (!cid) return;
+
+    const buildMergeRow = (id: string, createdIso: string): TimeRecord => ({
+      id,
+      user_id: data.user_id,
+      created_at: createdIso,
+      type: data.type as TimeRecord['type'],
+      manual_reason: data.manual_reason,
+      latitude: data.latitude,
+      longitude: data.longitude,
+      is_manual: true,
+    });
+
     try {
-      const { error } = await supabase.from('time_records').insert({
-        ...data,
-        id: crypto.randomUUID(),
-        company_id: companyId,
-        is_manual: true,
-        /** NOT NULL no Postgres — batida criada pelo RH/admin no espelho (igual RPC `insert_time_record_for_user` / firestoreService). */
-        method: 'admin',
+      const { data: rpcData, error: rpcError } = await supabase.rpc('insert_time_record_for_user', {
+        p_user_id: data.user_id,
+        p_company_id: cid,
+        p_type: data.type,
+        p_method: 'admin',
+        p_source: 'admin',
+        p_timestamp: data.created_at,
+        p_latitude: data.latitude ?? null,
+        p_longitude: data.longitude ?? null,
+        p_manual_reason: data.manual_reason ?? null,
       });
-      if (error) throw error;
+
+      let mergeRow: TimeRecord | null = null;
+      let mergeId: string | null = null;
+
+      if (!rpcError && rpcData && typeof rpcData === 'object' && rpcData !== null && 'record_id' in rpcData) {
+        const r = rpcData as { record_id: string; timestamp?: string | number | null };
+        mergeId = String(r.record_id);
+        let createdIso = data.created_at;
+        if (typeof r.timestamp === 'string') {
+          createdIso = r.timestamp;
+        } else if (r.timestamp != null && (typeof r.timestamp === 'number' || r.timestamp instanceof Date)) {
+          createdIso = new Date(r.timestamp).toISOString();
+        }
+        mergeRow = buildMergeRow(mergeId, createdIso);
+      } else {
+        if (rpcError && import.meta.env.DEV) {
+          console.warn('[Espelho admin] insert_time_record_for_user:', rpcError);
+        }
+        mergeId = crypto.randomUUID();
+        const { error: insErr } = await supabase.from('time_records').insert({
+          ...data,
+          id: mergeId,
+          company_id: cid,
+          is_manual: true,
+          method: 'admin',
+        });
+        if (insErr) throw insErr;
+        mergeRow = buildMergeRow(mergeId, data.created_at);
+      }
+
       toast.addToast('success', 'Batida adicionada com sucesso.');
       setShowAddModal(false);
       await loadEspelho();
+      if (mergeRow && mergeId) {
+        setRecords((prev) => {
+          if (prev.some((r) => r.id === mergeId)) return prev;
+          return [...prev, mergeRow!].sort(
+            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+          );
+        });
+      }
+      invalidateAfterPunch(data.user_id, cid);
     } catch (err) {
       console.error(err);
       toast.addToast('error', 'Erro ao adicionar batida.');
