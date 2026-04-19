@@ -56,7 +56,7 @@ const AdminColunasMix: React.FC = () => {
   const [modalError, setModalError] = useState<string | null>(null);
 
   const load = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) {
+    if (!user?.companyId || !isSupabaseConfigured()) {
       setLoadingData(false);
       return;
     }
@@ -129,7 +129,7 @@ const AdminColunasMix: React.FC = () => {
   const handleSave = async (e?: React.MouseEvent) => {
     e?.preventDefault();
     e?.stopPropagation();
-    if (!user?.companyId || !isSupabaseConfigured) {
+    if (!user?.companyId || !isSupabaseConfigured()) {
       setModalError('Configuração ou empresa não identificada.');
       return;
     }

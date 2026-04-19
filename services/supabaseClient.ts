@@ -16,7 +16,14 @@ export {
   clearBrokenSession,
   isOnline
 } from './supabase';
-export { getSupabaseClient, getSupabaseClientOrThrow, testSupabaseConnection, withSupabaseTimeout, resetSession } from '../src/lib/supabaseClient';
+export {
+  getSupabaseClient,
+  getSupabaseClientOrThrow,
+  getSupabase,
+  testSupabaseConnection,
+  withSupabaseTimeout,
+  resetSession,
+} from '../src/lib/supabaseClient';
 
 // Criar aliases para db e storage (compatibilidade com código antigo)
 import type { SupabaseClient } from '@supabase/supabase-js';

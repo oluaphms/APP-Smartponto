@@ -2,8 +2,8 @@
  * Chave da API Gemini no cliente Vite: use VITE_GEMINI_API_KEY.
  * Em Node/scripts: GEMINI_API_KEY ou API_KEY.
  *
- * Modelo: use VITE_GEMINI_MODEL (ex.: gemini-2.0-flash-exp). O padrão é 'gemini-2.0-flash-exp',
- * que é compatível com a API Google AI Studio (v1beta). Nomes incorretos geram 400/404.
+ * Modelo: use VITE_GEMINI_MODEL. Padrão `gemini-1.5-flash` (amplamente disponível na v1beta).
+ * Modelos experimentais (ex. gemini-2.0-flash-exp) podem retornar 404 quando descontinuados.
  * NOTA: A API v1beta requer nomes de modelo específicos. Evite usar 'models/' prefix no VITE_GEMINI_MODEL.
  */
 export function getGeminiModelId(): string {
@@ -17,8 +17,20 @@ export function getGeminiModelId(): string {
     const m = process.env.VITE_GEMINI_MODEL;
     if (m && String(m).trim()) return String(m).trim();
   }
-  // Usando modelo com suffixo -exp que é mais compatível com a API v1beta
-  return 'gemini-2.0-flash-exp';
+  return 'gemini-1.5-flash';
+}
+
+/**
+ * Insights automáticos no dashboard (App.tsx): **desligado por padrão**.
+ * Defina `VITE_ENABLE_AI_INSIGHTS=true` para habilitar uma única chamada quando houver registros.
+ * IA continua disponível em telas sob demanda (ex.: chat RH) quando a chave existe.
+ */
+export function isAiDashboardInsightsAutoEnabled(): boolean {
+  try {
+    return String(import.meta.env?.VITE_ENABLE_AI_INSIGHTS || '').toLowerCase() === 'true';
+  } catch {
+    return false;
+  }
 }
 
 /** Verifica se a chave parece ser um placeholder ou inválida */

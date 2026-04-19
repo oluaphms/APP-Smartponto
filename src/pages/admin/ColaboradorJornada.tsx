@@ -75,7 +75,7 @@ const ColaboradorJornada: React.FC = () => {
   const [colaboradorSearch, setColaboradorSearch] = useState('');
 
   const load = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     setLoadingData(true);
     try {
       const [vinculos, users, shifts, schedules] = await Promise.all([
@@ -175,7 +175,7 @@ const ColaboradorJornada: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     if (!form.colaborador_id) {
       setMessage({ type: 'error', text: 'Selecione um colaborador.' });
       return;

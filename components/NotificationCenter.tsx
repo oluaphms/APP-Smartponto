@@ -21,7 +21,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ userId, onClose
     setIsLoading(true);
     try {
       // Tentar carregar do Supabase primeiro
-      if (isSupabaseConfigured) {
+      if (isSupabaseConfigured()) {
         try {
           const all = await NotificationService.getAll(userId);
           console.log('Notificações carregadas do Supabase:', all.length);

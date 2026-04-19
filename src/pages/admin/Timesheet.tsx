@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { isSupabaseConfigured, supabase } from '../../services/supabaseClient';
-import { buscarEspelhoAdmin } from '../../../services/api';
+import { buscarEspelhoAdmin, buscarFiltrosEspelhoAdmin } from '../../../services/api';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { useToast } from '../../components/ToastProvider';
 import PageHeader from '../../components/PageHeader';
@@ -20,6 +20,14 @@ import {
 } from '../../utils/timesheetMirror';
 import { closeTimesheet, isTimesheetClosed } from '../../services/timeProcessingService';
 import { invalidateAfterTimesheetMonthClose } from '../../services/queryCache';
+
+/** Data local YYYY-MM-DD (evita UTC deslocar o “hoje” no max do input). */
+function localDateKey(d = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 type AdminEmployee = { id: string; nome: string; department_id?: string; role?: string };
 
@@ -43,13 +51,18 @@ const AdminTimesheet: React.FC = () => {
   const [records, setRecords] = useState<TimeRecord[]>([]);
   const [holidays, setHolidays] = useState<{ id: string; date: string; name: string }[]>([]);
   const [loadingEspelho, setLoadingEspelho] = useState(false);
+  const [loadingFiltros, setLoadingFiltros] = useState(false);
 
   const [filterUserId, setFilterUserId] = useState('');
   const [filterDepartmentId, setFilterDepartmentId] = useState('');
-  const [periodStart, setPeriodStart] = useState(() =>
-    new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
-  );
-  const [periodEnd, setPeriodEnd] = useState(() => new Date().toISOString().slice(0, 10));
+  const [periodStart, setPeriodStart] = useState('');
+  const [periodEnd, setPeriodEnd] = useState('');
+  const todayMax = useMemo(() => localDateKey(), []);
+
+  const periodValid =
+    Boolean(periodStart && periodEnd && periodStart <= periodEnd && periodEnd <= todayMax && periodStart <= todayMax);
+
+  const companyId = user?.companyId || user?.company_id;
 
   const [closingMonth, setClosingMonth] = useState(() => {
     const n = new Date();
@@ -65,11 +78,40 @@ const AdminTimesheet: React.FC = () => {
 
   const holidayDates = useMemo(() => new Set(holidays.map((h) => h.date).filter(Boolean)), [holidays]);
 
+  /** Catálogo (colaboradores + departamentos) — não depende do período; evita selects vazios. */
+  const loadFiltrosEspelho = useCallback(async () => {
+    if (!companyId || !isSupabaseConfigured()) return;
+    setLoadingFiltros(true);
+    try {
+      const f = await buscarFiltrosEspelhoAdmin(companyId);
+      setEmployees(f.employees);
+      setDepartments(f.departments);
+    } catch (e) {
+      console.error(e);
+      toast.addToast('error', 'Não foi possível carregar colaboradores e departamentos.');
+    } finally {
+      setLoadingFiltros(false);
+    }
+  }, [companyId, toast]);
+
+  useEffect(() => {
+    void loadFiltrosEspelho();
+  }, [loadFiltrosEspelho]);
+
   const loadEspelho = useCallback(async () => {
-    if (!user?.company_id || !isSupabaseConfigured) return;
+    if (!companyId || !isSupabaseConfigured()) {
+      setLoadingEspelho(false);
+      return;
+    }
+    if (!periodValid) {
+      setRecords([]);
+      setHolidays([]);
+      setLoadingEspelho(false);
+      return;
+    }
     setLoadingEspelho(true);
     try {
-      const data = await buscarEspelhoAdmin(user.company_id, periodStart, periodEnd);
+      const data = await buscarEspelhoAdmin(companyId, periodStart, periodEnd);
       setEmployees(data.employees ?? []);
       setDepartments(data.departments ?? []);
       setRecords((data.records ?? []) as TimeRecord[]);
@@ -80,7 +122,7 @@ const AdminTimesheet: React.FC = () => {
     } finally {
       setLoadingEspelho(false);
     }
-  }, [user?.company_id, periodStart, periodEnd, toast]);
+  }, [companyId, periodStart, periodEnd, periodValid, toast]);
 
   useEffect(() => {
     void loadEspelho();
@@ -98,12 +140,13 @@ const AdminTimesheet: React.FC = () => {
     return records.filter((r) => r.user_id === filterUserId);
   }, [records, filterUserId]);
 
-  const empMirror = useMemo(
-    () => buildDayMirrorSummary(displayRecords, periodStart, periodEnd),
-    [displayRecords, periodStart, periodEnd],
-  );
+  const empMirror = useMemo(() => {
+    if (!periodValid) return new Map<string, DayMirror>();
+    return buildDayMirrorSummary(displayRecords, periodStart, periodEnd);
+  }, [displayRecords, periodStart, periodEnd, periodValid]);
 
   const periodDates = useMemo(() => {
+    if (!periodValid) return [];
     const dates: string[] = [];
     const start = new Date(periodStart + 'T00:00:00');
     const end = new Date(periodEnd + 'T00:00:00');
@@ -111,7 +154,7 @@ const AdminTimesheet: React.FC = () => {
       dates.push(d.toISOString().slice(0, 10));
     }
     return dates;
-  }, [periodStart, periodEnd]);
+  }, [periodStart, periodEnd, periodValid]);
 
   const formatDateBR = (dateStr: string) => {
     const [y, m, day] = dateStr.split('-');
@@ -126,11 +169,11 @@ const AdminTimesheet: React.FC = () => {
     latitude?: number;
     longitude?: number;
   }) => {
-    if (!user?.company_id) return;
+    if (!companyId) return;
     try {
       const { error } = await supabase.from('time_records').insert({
         ...data,
-        company_id: user.company_id,
+        company_id: companyId,
         is_manual: true,
       });
       if (error) throw error;
@@ -144,7 +187,7 @@ const AdminTimesheet: React.FC = () => {
   };
 
   const handleExportCSV = () => {
-    if (!filterUserId) return;
+    if (!filterUserId || !periodValid) return;
     const emp = employees.find((e) => e.id === filterUserId);
     const rows: string[] = [
       'Data,Colaborador,Entrada,Saída Intervalo,Volta Intervalo,Saída,Horas trabalhadas,Status',
@@ -186,7 +229,7 @@ const AdminTimesheet: React.FC = () => {
   };
 
   const handleCloseMonth = async () => {
-    if (!user?.company_id || !filterUserId) {
+    if (!companyId || !filterUserId) {
       toast.addToast('error', 'Selecione um colaborador para fechar a folha.');
       return;
     }
@@ -194,13 +237,13 @@ const AdminTimesheet: React.FC = () => {
     if (!y || !m) return;
     setClosingLoading(true);
     try {
-      const already = await isTimesheetClosed(user.company_id, m, y);
+      const already = await isTimesheetClosed(companyId, m, y);
       if (already) {
         toast.addToast('info', 'Este mês já consta como fechado.');
         return;
       }
-      await closeTimesheet(user.company_id, m, y, filterUserId);
-      invalidateAfterTimesheetMonthClose(user.company_id);
+      await closeTimesheet(companyId, m, y, filterUserId);
+      invalidateAfterTimesheetMonthClose(companyId);
       toast.addToast('success', 'Folha fechada com sucesso.');
       await loadEspelho();
     } catch (e) {
@@ -281,7 +324,7 @@ const AdminTimesheet: React.FC = () => {
         <div className="px-4 pt-4 pb-2 border-b border-slate-100 dark:border-slate-800">
           <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filtros</h2>
         </div>
-        {loadingEspelho && employees.length === 0 ? (
+        {loadingFiltros && employees.length === 0 ? (
           <SkeletonFiltro />
         ) : (
           <div className="p-4 flex flex-wrap gap-4 items-end">
@@ -323,6 +366,7 @@ const AdminTimesheet: React.FC = () => {
               <input
                 type="date"
                 value={periodStart}
+                max={todayMax}
                 onChange={(e) => setPeriodStart(e.target.value)}
                 className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
               />
@@ -332,10 +376,21 @@ const AdminTimesheet: React.FC = () => {
               <input
                 type="date"
                 value={periodEnd}
+                max={todayMax}
                 onChange={(e) => setPeriodEnd(e.target.value)}
                 className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
               />
             </div>
+            {!periodValid && (periodStart || periodEnd) && (
+              <p className="w-full text-xs text-amber-700 dark:text-amber-300">
+                Informe início e fim, com início ≤ fim, e datas não posteriores a hoje.
+              </p>
+            )}
+            {!periodStart && !periodEnd && (
+              <p className="w-full text-xs text-slate-500 dark:text-slate-400">
+                Selecione o período para carregar os registros do espelho.
+              </p>
+            )}
           </div>
         )}
       </section>
@@ -353,7 +408,7 @@ const AdminTimesheet: React.FC = () => {
             variant="outline"
             size="sm"
             className="inline-flex items-center gap-2"
-            disabled={!filterUserId || loadingEspelho}
+            disabled={!filterUserId || !periodValid || loadingEspelho}
             onClick={handleExportPDF}
           >
             <FileDown className="w-4 h-4" />
@@ -364,7 +419,7 @@ const AdminTimesheet: React.FC = () => {
             variant="outline"
             size="sm"
             className="inline-flex items-center gap-2"
-            disabled={!filterUserId || loadingEspelho}
+            disabled={!filterUserId || !periodValid || loadingEspelho}
             onClick={handleExportExcel}
           >
             <FileSpreadsheet className="w-4 h-4" />
@@ -433,7 +488,15 @@ const AdminTimesheet: React.FC = () => {
       </div>
 
       {/* Tabela */}
-      {!filterUserId ? (
+      {!periodValid && !periodStart && !periodEnd ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 p-12 text-center text-slate-500 dark:text-slate-400">
+          Selecione o período (início e fim) para visualizar o espelho de ponto.
+        </div>
+      ) : !periodValid ? (
+        <div className="rounded-2xl border border-dashed border-amber-200 dark:border-amber-900/50 p-12 text-center text-amber-800 dark:text-amber-200 text-sm">
+          Ajuste o período: início e fim obrigatórios, início ≤ fim, e sem datas futuras.
+        </div>
+      ) : !filterUserId ? (
         <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 p-12 text-center text-slate-500 dark:text-slate-400">
           Selecione o colaborador
         </div>
@@ -506,7 +569,7 @@ const AdminTimesheet: React.FC = () => {
         onClose={() => setShowAddModal(false)}
         onSubmit={handleAddRecord}
         employees={filteredEmployees}
-        companyId={user.company_id}
+        companyId={companyId}
       />
       <ManualRecordModal
         isOpen={showManualModal}

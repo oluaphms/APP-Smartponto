@@ -35,7 +35,7 @@ export default function AdminFiscalizacao() {
   const companyId = user?.companyId;
 
   const handleValidateIntegrity = useCallback(async () => {
-    if (!companyId || !isSupabaseConfigured) return;
+    if (!companyId || !isSupabaseConfigured()) return;
     setIntegrityLoading(true);
     setIntegrity(null);
     try {
@@ -50,7 +50,7 @@ export default function AdminFiscalizacao() {
 
   const handleExport = useCallback(
     async (type: 'afd' | 'aej') => {
-      if (!isSupabaseConfigured || !auth) return;
+      if (!isSupabaseConfigured() || !auth) return;
       setExportLoading(type);
       try {
         const session = await auth.getSession();

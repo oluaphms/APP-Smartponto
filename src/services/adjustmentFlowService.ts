@@ -66,7 +66,7 @@ export const AdjustmentFlowService = {
    * 4. Notifica o colaborador
    */
   async approve({ request, adminId, adminName, companyId }: ApproveParams): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) throw new Error('Supabase não configurado.');
+    if (!isSupabaseConfigured()) throw new Error('Supabase não configurado.');
 
     const now = new Date().toISOString();
 
@@ -174,7 +174,7 @@ export const AdjustmentFlowService = {
    * 3. Notifica o colaborador
    */
   async reject({ request, adminId, adminName, companyId, rejectionReason }: RejectParams): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) throw new Error('Supabase não configurado.');
+    if (!isSupabaseConfigured()) throw new Error('Supabase não configurado.');
 
     const now = new Date().toISOString();
 

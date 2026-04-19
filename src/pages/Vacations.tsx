@@ -36,7 +36,7 @@ const VacationsPage: React.FC = () => {
   const isAdminView = user?.role === 'admin' || user?.role === 'hr';
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     const load = async () => {
       setIsLoadingData(true);
@@ -82,7 +82,7 @@ const VacationsPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !isSupabaseConfigured || !form.start_date || !form.end_date) return;
+    if (!user || !isSupabaseConfigured() || !form.start_date || !form.end_date) return;
 
     try {
       const id = crypto.randomUUID();
@@ -130,7 +130,7 @@ const VacationsPage: React.FC = () => {
   };
 
   const handleStatusChange = async (row: VacationRow, status: 'approved' | 'rejected') => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     try {
       await db.update('vacations', row.id, {

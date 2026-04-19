@@ -42,7 +42,7 @@ const RealTimeInsightsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     const load = async () => {
       setIsLoadingData(true);
@@ -108,7 +108,7 @@ const RealTimeInsightsPage: React.FC = () => {
   }, [user]);
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured || !supabase) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     const channel = supabase
       .channel('realtime-activity-sessions')
@@ -165,7 +165,7 @@ const RealTimeInsightsPage: React.FC = () => {
   ).size;
 
   const handlePauseTracking = async (session: ActivitySessionRow) => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured()) return;
     console.log('Pause tracking for', session.id);
   };
 

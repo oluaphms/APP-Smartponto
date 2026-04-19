@@ -29,7 +29,7 @@ const DepartmentsPage: React.FC = () => {
   const [modalError, setModalError] = useState<string | null>(null);
 
   const load = async () => {
-    if (!user || !isSupabaseConfigured) {
+    if (!user || !isSupabaseConfigured()) {
       setLoadingData(false);
       return;
     }
@@ -80,7 +80,7 @@ const DepartmentsPage: React.FC = () => {
   const handleSave = async (e?: React.MouseEvent) => {
     e?.preventDefault();
     e?.stopPropagation();
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured()) {
       setModalError('Supabase não configurado. Configure as variáveis de ambiente e reinicie.');
       return;
     }

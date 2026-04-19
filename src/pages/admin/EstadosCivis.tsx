@@ -26,7 +26,7 @@ const AdminEstadosCivis: React.FC = () => {
   const [modalError, setModalError] = useState<string | null>(null);
 
   const load = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) {
+    if (!user?.companyId || !isSupabaseConfigured()) {
       setLoadingData(false);
       return;
     }
@@ -70,7 +70,7 @@ const AdminEstadosCivis: React.FC = () => {
   const handleSave = async (e?: React.MouseEvent) => {
     e?.preventDefault();
     e?.stopPropagation();
-    if (!isSupabaseConfigured || !user?.companyId) {
+    if (!isSupabaseConfigured() || !user?.companyId) {
       setModalError('Configuração ou empresa não identificada.');
       return;
     }

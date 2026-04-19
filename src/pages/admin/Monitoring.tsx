@@ -5,7 +5,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { db, supabase, isSupabaseConfigured } from '../../services/supabaseClient';
+import { db, supabase, isSupabaseConfigured, getSupabaseClient } from '../../services/supabaseClient';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
 import MonitoringMap from '../../components/MonitoringMap';
@@ -109,7 +109,7 @@ const AdminMonitoring: React.FC = () => {
   const [todayRecords, setTodayRecords] = useState<TimeRecordRow[]>([]);
 
   const refresh = useCallback(async () => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     setLoadingData(true);
     try {
       const start = todayStart();
@@ -177,7 +177,7 @@ const AdminMonitoring: React.FC = () => {
   }, [refresh]);
 
   useEffect(() => {
-    if (!supabase || !user?.companyId) return;
+    if (!getSupabaseClient() || !user?.companyId) return;
     let debounce: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel('admin_monitoring_unified')

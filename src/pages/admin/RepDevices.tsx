@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
-import { db, supabase, isSupabaseConfigured } from '../../services/supabaseClient';
+import { db, supabase, isSupabaseConfigured, getSupabaseClient } from '../../services/supabaseClient';
 import { LoadingState, Button } from '../../../components/UI';
 import {
   Activity,
@@ -203,7 +203,7 @@ const AdminRepDevices: React.FC = () => {
   });
 
   const loadDevices = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     setLoadingList(true);
     try {
       const list = (await db.select('rep_devices', [{ column: 'company_id', operator: 'eq', value: user.companyId }])) as RepDeviceRow[];
@@ -216,7 +216,7 @@ const AdminRepDevices: React.FC = () => {
   };
 
   const loadHubDevices = useCallback(async () => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     setHubLoading(true);
     setHubError(null);
     try {
@@ -244,7 +244,7 @@ const AdminRepDevices: React.FC = () => {
   }, [user?.companyId, loadHubDevices]);
 
   const loadEmployeesForRep = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     try {
       const rows = (await db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }])) as {
         id: string;
@@ -347,7 +347,7 @@ const AdminRepDevices: React.FC = () => {
   };
 
   const handleTestConnection = async (id: string) => {
-    if (!supabase) return;
+    if (!getSupabaseClient()) return;
     setTestingId(id);
     setMessage(null);
     try {
@@ -392,7 +392,7 @@ const AdminRepDevices: React.FC = () => {
       appendSrLog('Selecione um equipamento de rede.');
       return;
     }
-    if (!supabase) return;
+    if (!getSupabaseClient()) return;
     appendSrLog(`Recebendo marcações de "${d.nome_dispositivo}"…`);
     if (receiveScope === 'today_only') {
       appendSrLog('Escopo: apenas marcações com data/hora no dia de hoje (calendário deste computador).');
@@ -485,7 +485,7 @@ const AdminRepDevices: React.FC = () => {
       appendSrLog('Selecione um equipamento de rede.');
       return;
     }
-    if (!supabase || !user?.companyId) return;
+    if (!getSupabaseClient() || !user?.companyId) return;
     setPromotingId(d.id);
     setMessage(null);
     appendSrLog(`Consolidando pendentes do relógio «${d.nome_dispositivo}»…`);
@@ -519,7 +519,7 @@ const AdminRepDevices: React.FC = () => {
       appendSrLog('Selecione um equipamento de rede.');
       return;
     }
-    if (!supabase) return;
+    if (!getSupabaseClient()) return;
     const mode671 = d.config_extra?.mode_671 === true;
     setExchangeBusy(`${d.id}:push_clock`);
     setMessage(null);
@@ -558,7 +558,7 @@ const AdminRepDevices: React.FC = () => {
       appendSrLog('Selecione um equipamento de rede.');
       return;
     }
-    if (!supabase) return;
+    if (!getSupabaseClient()) return;
     const mode671 = d.config_extra?.mode_671 === true;
     setExchangeBusy(`${d.id}:${op}`);
     setMessage(null);
@@ -623,7 +623,7 @@ const AdminRepDevices: React.FC = () => {
       return;
     }
     const userId = srPushUserId;
-    if (!supabase || !userId) {
+    if (!getSupabaseClient() || !userId) {
       appendSrLog('Selecione um funcionário para enviar ao relógio.');
       return;
     }
@@ -663,7 +663,7 @@ const AdminRepDevices: React.FC = () => {
   /** Teste de conexão a partir do modal (atualiza status do REP em caso de sucesso). */
   const srRunStatusInModal = async () => {
     const d = srSelectedDevice;
-    if (!d || !supabase) {
+    if (!d || !getSupabaseClient()) {
       appendSrLog('Selecione um equipamento de rede.');
       return;
     }
@@ -691,7 +691,7 @@ const AdminRepDevices: React.FC = () => {
 
   const srRunPushAllEligibleEmployees = async () => {
     const d = srSelectedDevice;
-    if (!d || !supabase) {
+    if (!d || !getSupabaseClient()) {
       appendSrLog('Selecione um equipamento de rede.');
       return;
     }
@@ -816,7 +816,7 @@ const AdminRepDevices: React.FC = () => {
           config_extra,
           updated_at: new Date().toISOString(),
         });
-        if (supabase) {
+        if (getSupabaseClient()) {
           const mirrorRow: RepDeviceRowForMirror = {
             id: editingId,
             company_id: user.companyId,
@@ -866,7 +866,7 @@ const AdminRepDevices: React.FC = () => {
             mode_671: form.mode671,
           },
         })) as RepDeviceRow;
-        if (supabase && inserted?.id) {
+        if (getSupabaseClient() && inserted?.id) {
           const ex =
             inserted.config_extra && typeof inserted.config_extra === 'object'
               ? (inserted.config_extra as Record<string, unknown>)

@@ -8,7 +8,7 @@ import ModalForm from '../components/ModalForm';
 import { Button, LoadingState } from '../../components/UI';
 import { formatRequestType, formatWorkflowStatus } from '../../lib/i18n';
 import { useLanguage } from '../contexts/LanguageContext';
-import { db, isSupabaseConfigured, supabase, type Filter } from '../services/supabaseClient';
+import { db, isSupabaseConfigured, supabase, getSupabaseClient, type Filter } from '../services/supabaseClient';
 import { NotificationService } from '../../services/notificationService';
 import { LoggingService } from '../../services/loggingService';
 import { LogSeverity } from '../../types';
@@ -69,7 +69,7 @@ const RequestsPage: React.FC = () => {
   const isAdminView = user?.role === 'admin' || user?.role === 'hr';
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     const load = async () => {
       setIsLoadingData(true);
@@ -126,7 +126,7 @@ const RequestsPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const reason = form.reason.trim();
-    if (!user || !isSupabaseConfigured) {
+    if (!user || !isSupabaseConfigured()) {
       toast.addToast('error', 'Sistema indisponível. Tente novamente.');
       return;
     }
@@ -260,7 +260,7 @@ const RequestsPage: React.FC = () => {
   };
 
   const handleStatusChange = async (row: RequestRow, status: 'approved' | 'rejected') => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     const companyId = row.company_id ?? user.companyId;
     if (!companyId) {
@@ -271,7 +271,7 @@ const RequestsPage: React.FC = () => {
     if (status === 'approved' && row.type === 'adjustment') {
       const adj = getAdjustmentMeta(row);
       if (adj) {
-        if (!supabase) {
+        if (!getSupabaseClient()) {
           toast.addToast('error', 'Cliente indisponível. Tente novamente.');
           return;
         }
@@ -366,7 +366,7 @@ const RequestsPage: React.FC = () => {
   };
 
   const handleDeleteRequest = async (row: RequestRow) => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
     if (!window.confirm('Excluir esta solicitação permanentemente? Esta ação não pode ser desfeita.')) return;
     try {
       await db.delete('requests', row.id);

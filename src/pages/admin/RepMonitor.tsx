@@ -31,7 +31,7 @@ const AdminRepMonitor: React.FC = () => {
   const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
 
     const load = async () => {
       setLoadingData(true);

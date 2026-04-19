@@ -6,15 +6,34 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import type { LockFunc } from '@supabase/auth-js';
 import { isDnsError, markSupabaseAsDown } from '../services/supabaseCircuitBreaker';
 import { getSupabaseInfraFatal } from './supabaseInfraGuard';
 import { assertEnv } from './assertEnv';
 
 let supabaseInstance: SupabaseClient | null = null;
-let initializationAttempted = false;
+/** Só true após falha “permanente” (URL inválida / createClient falhou). assertEnv falhar ainda permite nova tentativa. */
+let initFailedPermanent = false;
 
 function sanitizeSupabaseUrl(rawUrl: string): string {
   return String(rawUrl || '').trim().replace(/\/+$/, '');
+}
+
+/**
+ * Fila única para operações internas do GoTrue (getSession, refresh, persistência).
+ * Evita `NavigatorLockAcquireTimeoutError` quando muitos componentes chamam auth em paralelo
+ * (o padrão usa Web Locks API e “rouba” o lock entre si).
+ */
+function createInProcessAuthLock(): LockFunc {
+  let tail: Promise<unknown> = Promise.resolve();
+  return (_name, _acquireTimeout, fn) => {
+    const run = tail.then(() => fn());
+    tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  };
 }
 
 /**
@@ -30,9 +49,7 @@ export function getSupabaseClient(): SupabaseClient | null {
     return null;
   }
   if (supabaseInstance) return supabaseInstance;
-  if (initializationAttempted) return null;
-
-  initializationAttempted = true;
+  if (initFailedPermanent) return null;
 
   let env: { url: string; key: string };
   try {
@@ -46,6 +63,7 @@ export function getSupabaseClient(): SupabaseClient | null {
 
   if (!url.startsWith('https://') || !url.includes('.supabase.co')) {
     console.error('[SUPABASE] URL inválida');
+    initFailedPermanent = true;
     return null;
   }
 
@@ -53,8 +71,10 @@ export function getSupabaseClient(): SupabaseClient | null {
     supabaseInstance = createClient(url, key, {
       auth: {
         persistSession: true,
-        autoRefreshToken: false,
+        autoRefreshToken: true,
         detectSessionInUrl: false,
+        lock: createInProcessAuthLock(),
+        lockAcquireTimeout: 20000,
       },
       global: {
         fetch: async (input, init) => {
@@ -82,9 +102,13 @@ export function getSupabaseClient(): SupabaseClient | null {
     return supabaseInstance;
   } catch (error) {
     console.error('[SUPABASE] Erro ao criar cliente:', error);
+    initFailedPermanent = true;
     return null;
   }
 }
+
+/** Alias pedido pelo padrão do projeto — sempre retorna o singleton atual. */
+export const getSupabase = getSupabaseClient;
 
 /**
  * Obter cliente Supabase com garantia (lança erro se variáveis ausentes).
@@ -101,7 +125,7 @@ export function getSupabaseClientOrThrow(): SupabaseClient {
 
 export function resetSupabaseClient(): void {
   supabaseInstance = null;
-  initializationAttempted = false;
+  initFailedPermanent = false;
 }
 
 export async function resetSession(): Promise<void> {

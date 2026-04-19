@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { db, supabase, isSupabaseConfigured } from '../../services/supabaseClient';
+import { db, supabase, isSupabaseConfigured, getSupabaseClient } from '../../services/supabaseClient';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
 import MonitoringMap from '../../components/MonitoringMap';
@@ -25,7 +25,7 @@ const EmployeeMonitoring: React.FC = () => {
   const [loadingData, setLoadingData] = useState(true);
 
   const load = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     setLoadingData(true);
     try {
       const [usersRows, recordsRows] = await Promise.all([
@@ -79,7 +79,7 @@ const EmployeeMonitoring: React.FC = () => {
   }, [user?.companyId]);
 
   useEffect(() => {
-    if (!supabase || !user?.companyId) return;
+    if (!getSupabaseClient() || !user?.companyId) return;
     const channel = supabase
       .channel('time_records_monitoring_employee')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'time_records', filter: `company_id=eq.${user.companyId}` }, () => {

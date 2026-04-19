@@ -33,7 +33,7 @@ const TimeBalancePage: React.FC = () => {
   >([]);
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     const load = async () => {
       setIsLoadingData(true);

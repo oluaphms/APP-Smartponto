@@ -332,7 +332,7 @@ export const PontoService = {
     // Tentar buscar usuários do Firestore
     let allUsers: User[] = [];
     try {
-      if (isSupabaseConfigured) {
+      if (isSupabaseConfigured()) {
         const rows = await db.select('users', [
           { column: 'company_id', operator: 'eq', value: companyId },
           { column: 'role', operator: 'eq', value: 'employee' },

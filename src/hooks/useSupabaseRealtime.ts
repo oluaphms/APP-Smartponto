@@ -26,7 +26,7 @@ export function useSupabaseRealtime<TPayload = any>({
   onPayload,
 }: RealtimeOptions<TPayload>) {
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured()) return;
     let unsubscribe: (() => void) | undefined;
 
     try {

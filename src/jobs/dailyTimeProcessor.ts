@@ -29,7 +29,7 @@ export async function runDailyTimeProcessor(dateStr?: string): Promise<DailyProc
   const errors: string[] = [];
   let processed = 0;
 
-  if (!isSupabaseConfigured) {
+  if (!isSupabaseConfigured()) {
     return { date, processed: 0, errors: ['Supabase não configurado'] };
   }
 

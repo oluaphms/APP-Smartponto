@@ -64,7 +64,7 @@ const AdminPontoDiario: React.FC = () => {
   const [diasDirty, setDiasDirty] = useState<Record<string, DayMeta>>({});
 
   useEffect(() => {
-    if (!user?.companyId || !isSupabaseConfigured) {
+    if (!user?.companyId || !isSupabaseConfigured()) {
       setLoadingData(false);
       return;
     }
@@ -190,7 +190,7 @@ const AdminPontoDiario: React.FC = () => {
   }, [filteredEmployees, records, data, diasMeta, diasDirty]);
 
   const handleSaveMeta = async () => {
-    if (readOnly || !user?.companyId || !isSupabaseConfigured) return;
+    if (readOnly || !user?.companyId || !isSupabaseConfigured()) return;
     const keys = Object.keys(diasDirty);
     if (!keys.length) {
       setMessage({ type: 'error', text: 'Nenhuma alteração para salvar.' });

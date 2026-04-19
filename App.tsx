@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './src/lib/queryClient';
@@ -11,6 +11,7 @@ import PunchModal from './components/PunchModal';
 import Onboarding from './components/Onboarding';
 import { Button, Badge, LoadingState, SuccessOverlay, Input } from './components/UI';
 import { getWorkInsights } from './services/geminiService';
+import { isAiDashboardInsightsAutoEnabled } from './services/geminiEnv';
 import { PontoService, getRecordCreatedAtDate } from './services/pontoService';
 import { useRecords } from './src/hooks/useRecords';
 import { authService } from './services/authService';
@@ -110,7 +111,6 @@ import {
   DepartmentsPage,
   EmployeeClockIn,
   EmployeeDashboard,
-  EmployeeHolerite,
   EmployeeMonitoring,
   EmployeeProfile,
   EmployeeSettings,
@@ -196,6 +196,8 @@ const AppMain: React.FC = () => {
   const [user, setUser] = useState<User | null>(() => readCachedUser());
   const [activeTab, setActiveTab] = useState('dashboard');
   const [insights, setInsights] = useState<{ insight: string, score: number } | null>(null);
+  /** Evita múltiplas chamadas à API quando `fetchInsights` é recriado ou o efeito reexecuta. */
+  const insightsAutoFetchDoneRef = useRef(false);
   const [punchType, setPunchType] = useState<LogType | null>(null);
   const [showMethodSelection, setShowMethodSelection] = useState(false);
   const [pendingPunchType, setPendingPunchType] = useState<LogType | null>(null);
@@ -243,6 +245,8 @@ const AppMain: React.FC = () => {
   });
 
   const { records, isLoading: isPunching, error, setError, addRecord } = useRecords(user?.id, user?.companyId);
+  const recordsRef = useRef(records);
+  recordsRef.current = records;
   const { settings: globalSettings } = useSettings();
   const { setLanguage } = useLanguage();
   const location = useLocation();
@@ -416,22 +420,43 @@ const AppMain: React.FC = () => {
   }, [user]);
 
   const fetchInsights = useCallback(async () => {
-    if (records.length >= 2 && !insights) {
-      const summary: DailySummary = {
-        date: new Date().toISOString(),
-        totalHours: 8,
-        records: records.slice(0, 10)
-      };
+    if (!isAiDashboardInsightsAutoEnabled()) return;
+    const list = recordsRef.current;
+    if (list.length < 2) return;
+    if (insightsAutoFetchDoneRef.current) return;
+
+    insightsAutoFetchDoneRef.current = true;
+    const summary: DailySummary = {
+      date: new Date().toISOString(),
+      totalHours: 8,
+      records: list.slice(0, 10),
+    };
+    try {
       const result = await getWorkInsights([summary]);
       setInsights(result);
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn('[Dashboard] IA indisponível (ignorado):', e);
+      }
+      setInsights({
+        insight: 'Insights por IA indisponíveis. O restante do sistema segue normal.',
+        score: 8,
+      });
     }
-  }, [records, insights]);
+  }, []);
 
   useEffect(() => {
-    if (activeTab === 'dashboard' && records.length > 0) {
-      fetchInsights();
+    if (!isAiDashboardInsightsAutoEnabled()) return;
+    if (activeTab !== 'dashboard' || records.length < 2) return;
+    void fetchInsights();
+  }, [activeTab, records.length, fetchInsights]);
+
+  useEffect(() => {
+    if (records.length < 2) {
+      insightsAutoFetchDoneRef.current = false;
+      setInsights(null);
     }
-  }, [activeTab, fetchInsights]);
+  }, [records.length]);
 
   useEffect(() => {
     if (!user || !user.preferences?.notifications) {
@@ -636,7 +661,8 @@ const AppMain: React.FC = () => {
       // Delega a resolução do identificador (email, nome, CPF) para o AuthService,
       // que já trata e normaliza o valor (incluindo fallback de domínio quando necessário).
       const loginPromise = authService.signInWithEmail(loginData.identifier, loginData.password);
-      const LOGIN_TIMEOUT_MS = 60000; // 60 segundos (rede lenta / primeiro acesso)
+      /** Teto para não segurar o botão "Entrar" quase 1 minuto; login já tem fallback de perfil em ~20s no AuthService. */
+      const LOGIN_TIMEOUT_MS = 30_000;
       const timeoutPromise = new Promise<{ user: any; error: string | null }>((_, reject) =>
         setTimeout(
           () =>
@@ -816,11 +842,11 @@ const AppMain: React.FC = () => {
     setUser(null);
     setCompany(null);
     setInsights(null);
+    insightsAutoFetchDoneRef.current = false;
     setLoginStep('choice');
     setLoginRole(null);
     setLoginData({ identifier: '', password: '' });
     setLoginError(null);
-    navigate('/', { replace: true });
 
     // Limpa caches para não vazar dados entre sessões (memória + React Query)
     queryCache.clear();
@@ -848,7 +874,12 @@ const AppMain: React.FC = () => {
     } catch (error) {
       console.error('Erro ao fazer logout:', error);
     }
-  }, [navigate]);
+
+    // Recarga completa: garante cliente Supabase e UI sem sessão antiga em memória
+    if (typeof window !== 'undefined') {
+      window.location.replace(`${window.location.origin}/`);
+    }
+  }, []);
 
   useSessionTimeout(
     globalSettings?.session_timeout_minutes ?? 60,
@@ -1375,7 +1406,7 @@ const AppMain: React.FC = () => {
               <Route path="profile" element={<EmployeeProfile />} />
               <Route path="settings" element={<EmployeeSettings />} />
               <Route path="time-balance" element={<TimeBalancePage />} />
-              <Route path="holerite" element={<EmployeeHolerite />} />
+              <Route path="holerite" element={<Navigate to="/employee/dashboard" replace />} />
             </Route>
             {/* Atalhos legados (sidebar antiga / links salvos): enviam para a área correta */}
             <Route path="/time-balance" element={<Navigate to={isAdminOrHr ? '/admin/bank-hours' : '/employee/time-balance'} replace />} />

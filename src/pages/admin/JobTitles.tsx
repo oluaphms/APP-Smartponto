@@ -26,7 +26,7 @@ const AdminJobTitles: React.FC = () => {
   const [modalError, setModalError] = useState<string | null>(null);
 
   const load = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) {
+    if (!user?.companyId || !isSupabaseConfigured()) {
       setLoadingData(false);
       return;
     }
@@ -70,7 +70,7 @@ const AdminJobTitles: React.FC = () => {
   const handleSave = async (e?: React.MouseEvent) => {
     e?.preventDefault();
     e?.stopPropagation();
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured()) {
       setModalError('Supabase não configurado. Configure as variáveis de ambiente e reinicie.');
       return;
     }

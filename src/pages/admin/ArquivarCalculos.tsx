@@ -32,7 +32,7 @@ const AdminArquivarCalculos: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const load = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) {
+    if (!user?.companyId || !isSupabaseConfigured()) {
       setLoadingData(false);
       return;
     }
@@ -66,7 +66,7 @@ const AdminArquivarCalculos: React.FC = () => {
   }, [user?.companyId]);
 
   const handleArquivar = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     if (!dataLimite) {
       setMessage({ type: 'error', text: 'Informe uma data limite.' });
       return;
@@ -103,7 +103,7 @@ const AdminArquivarCalculos: React.FC = () => {
   };
 
   const handleExcluirUltimo = async () => {
-    if (!rows.length || !isSupabaseConfigured) return;
+    if (!rows.length || !isSupabaseConfigured()) return;
     const ultimo = rows[0];
     if (!confirm('Excluir o último período arquivado?')) return;
     try {
@@ -116,7 +116,7 @@ const AdminArquivarCalculos: React.FC = () => {
   };
 
   const handleExcluirTodos = async () => {
-    if (!rows.length || !isSupabaseConfigured) return;
+    if (!rows.length || !isSupabaseConfigured()) return;
     if (!confirm('Excluir TODOS os períodos arquivados?')) return;
     try {
       for (const r of rows) {

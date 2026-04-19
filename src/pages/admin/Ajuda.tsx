@@ -34,7 +34,7 @@ const AdminAjuda: React.FC = () => {
   const [loadingCategories, setLoadingCategories] = useState(false);
 
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) return;
+    if (!isSupabaseConfigured()) return;
 
     const seedList: { id: HelpTopic; label: string }[] = [
       { id: 'instalacao', label: 'Instalando o PontoWebDesk' },
@@ -287,7 +287,7 @@ const AdminAjuda: React.FC = () => {
                   ];
 
                   const effectiveTopics =
-                    !isSupabaseConfigured || loadingCategories || !categories || categories.length === 0
+                    !isSupabaseConfigured() || loadingCategories || !categories || categories.length === 0
                       ? staticTopics
                       : categories.map((c) => ({ id: c.slug, label: c.title }));
 

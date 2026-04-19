@@ -83,7 +83,7 @@ const EmployeesPage: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = async () => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
     setIsLoadingData(true);
     try {
       // Otimização: carregar apenas colunas necessárias
@@ -155,7 +155,7 @@ const EmployeesPage: React.FC = () => {
 
   const handleAssignSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !selectedEmployee || !selectedScheduleId || !isSupabaseConfigured) return;
+    if (!user || !selectedEmployee || !selectedScheduleId || !isSupabaseConfigured()) return;
     try {
       const existing =
         (await db.select('user_schedules', [
@@ -305,7 +305,7 @@ const EmployeesPage: React.FC = () => {
   };
 
   const handleDeactivate = async (emp: EmployeeRow) => {
-    if (!isSupabaseConfigured || !user) return;
+    if (!isSupabaseConfigured() || !user) return;
     try {
       const existing = (await db.select('users', [{ column: 'id', operator: 'eq', value: emp.id }])) as any[] | null;
       const currentPrefs = existing?.[0]?.preferences ?? {};

@@ -61,7 +61,6 @@ export const ROUTE_LOADERS = {
   '/employee/profile': () => import('../pages/employee/Profile'),
   '/employee/settings': () => import('../pages/employee/Settings'),
   '/employee/time-balance': () => import('../pages/TimeBalance'),
-  '/employee/holerite': () => import('../pages/employee/Holerite'),
 
   '/dashboard-admin': () => import('../pages/admin/Dashboard'),
   '/dashboard-employee': () => import('../pages/employee/Dashboard'),

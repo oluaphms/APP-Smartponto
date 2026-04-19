@@ -17,7 +17,27 @@ function getErrorStatusCode(error: unknown): number | null {
   return match ? parseInt(match[1], 10) : null;
 }
 
-export const getGeoInsight = async (latitude: number, longitude: number) => {
+export async function getGeoInsight(
+  latitude: number,
+  longitude: number,
+): Promise<{ text: string; sources: unknown[] }> {
+  try {
+    return await getGeoInsightImpl(latitude, longitude);
+  } catch (e) {
+    if (import.meta.env?.DEV) {
+      console.warn('[Gemini Maps] getGeoInsight isolado:', e);
+    }
+    return {
+      text: 'Serviço de inteligência geográfica indisponível. Tente novamente mais tarde.',
+      sources: [],
+    };
+  }
+}
+
+async function getGeoInsightImpl(
+  latitude: number,
+  longitude: number,
+): Promise<{ text: string; sources: unknown[] }> {
   const apiKey = getGeminiApiKey();
 
   // Validação inicial da chave
@@ -69,8 +89,7 @@ export const getGeoInsight = async (latitude: number, longitude: number) => {
     if (statusCode === 400) {
       if (import.meta.env?.DEV) {
         console.warn(
-          `[Gemini Maps] Erro 400: O modelo '${model}' pode não estar disponível. ` +
-          `Tente definir VITE_GEMINI_MODEL=gemini-2.0-flash-exp ou gemini-1.5-flash`
+          `[Gemini Maps] Erro 400: o modelo '${model}' pode não estar disponível. Defina VITE_GEMINI_MODEL (ex.: gemini-1.5-flash).`,
         );
       }
       return {
@@ -79,10 +98,12 @@ export const getGeoInsight = async (latitude: number, longitude: number) => {
       };
     }
 
-    console.error("[Gemini Maps] Erro no Maps Grounding:", error);
+    if (import.meta.env?.DEV) {
+      console.warn('[Gemini Maps] Erro no Maps Grounding:', errorMsg);
+    }
     return {
       text: "Erro ao conectar com o serviço de inteligência geográfica.",
       sources: []
     };
   }
-};
+}

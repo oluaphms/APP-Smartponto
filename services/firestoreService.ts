@@ -5,11 +5,11 @@
  * Mantém compatibilidade com localStorage como fallback
  */
 
-import { db, storage, supabase, checkSupabaseConfigured } from './supabaseClient';
+import { db, storage, supabase, isSupabaseConfigured } from './supabaseClient';
 import { TimeRecord, Company, User, EmployeeSummary, CompanyKPIs } from '../types';
 
-// Verifica se Supabase está configurado (usa verificação dinâmica do cliente)
-const isSupabaseConfigured = (): boolean => checkSupabaseConfigured();
+/** Uma busca por companyId por vez evita N× db.select(companies) em paralelo (timeout 28s). */
+const getCompanyInflight = new Map<string, Promise<Company | null>>();
 
 // Converte TimeRecord para formato Supabase
 const timeRecordToSupabase = (record: TimeRecord): any => {
@@ -293,8 +293,9 @@ class SupabaseService {
    */
   async getCompany(companyId: string): Promise<Company | null> {
     if (!companyId || !companyId.trim()) return null;
+    const id = companyId.trim();
     if (!isSupabaseConfigured()) {
-      const stored = localStorage.getItem(`company_${companyId}`);
+      const stored = localStorage.getItem(`company_${id}`);
       if (!stored) return null;
       const c = JSON.parse(stored);
       const nome = c.nome ?? c.name ?? '';
@@ -305,48 +306,73 @@ class SupabaseService {
       };
     }
 
-    try {
-      const companies = await db.select(
-        'companies',
-        [{ column: 'id', operator: 'eq', value: companyId }]
-      );
-      
-      if (companies && companies.length > 0) {
-        const c = companies[0];
-        const nome = c.nome ?? c.name ?? '';
-        return {
-          id: c.id,
-          name: nome,
-          slug: c.slug ?? (nome || 'empresa').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
-          nome,
-          cnpj: c.cnpj,
-          inscricaoEstadual: c.inscricao_estadual,
-          responsavelNome: c.responsavel_nome,
-          responsavelCargo: c.responsavel_cargo,
-          responsavelEmail: c.responsavel_email,
-          endereco: c.endereco ?? c.address,
-          bairro: c.bairro,
-          cidade: c.cidade,
-          cep: c.cep,
-          estado: c.estado,
-          pais: c.pais,
-          telefone: c.telefone ?? c.phone,
-          fax: c.fax,
-          cei: c.cei,
-          numeroFolha: c.numero_folha,
-          receiptFields: c.receipt_fields,
-          useDefaultTimezone: c.use_default_timezone,
-          timezone: c.timezone,
-          geofence: c.geofence,
-          settings: c.settings,
-          createdAt: c.created_at ? new Date(c.created_at) : new Date()
-        };
+    const existing = getCompanyInflight.get(id);
+    if (existing) return existing;
+
+    const inflight = (async (): Promise<Company | null> => {
+      try {
+        const companies = await db.select(
+          'companies',
+          [{ column: 'id', operator: 'eq', value: id }],
+        );
+
+        if (companies && companies.length > 0) {
+          const c = companies[0];
+          const nome = c.nome ?? c.name ?? '';
+          return {
+            id: c.id,
+            name: nome,
+            slug: c.slug ?? (nome || 'empresa').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+            nome,
+            cnpj: c.cnpj,
+            inscricaoEstadual: c.inscricao_estadual,
+            responsavelNome: c.responsavel_nome,
+            responsavelCargo: c.responsavel_cargo,
+            responsavelEmail: c.responsavel_email,
+            endereco: c.endereco ?? c.address,
+            bairro: c.bairro,
+            cidade: c.cidade,
+            cep: c.cep,
+            estado: c.estado,
+            pais: c.pais,
+            telefone: c.telefone ?? c.phone,
+            fax: c.fax,
+            cei: c.cei,
+            numeroFolha: c.numero_folha,
+            receiptFields: c.receipt_fields,
+            useDefaultTimezone: c.use_default_timezone,
+            timezone: c.timezone,
+            geofence: c.geofence,
+            settings: c.settings,
+            createdAt: c.created_at ? new Date(c.created_at) : new Date(),
+          };
+        }
+        return null;
+      } catch (error: any) {
+        const msg = String(error?.message ?? error ?? '');
+        const isTimeout =
+          msg.includes('Tempo esgotado') ||
+          msg.includes('Tempo esgotado ao carregar dados') ||
+          msg.includes('Supabase timeout') ||
+          /timeout/i.test(msg);
+        if (isTimeout) {
+          if (import.meta.env?.DEV) {
+            console.warn(
+              '[Supabase] Timeout ao carregar companies (rede lenta ou fila de requisições).',
+            );
+          }
+        } else {
+          console.error('Erro ao buscar empresa do Supabase:', msg);
+        }
+        return null;
       }
-      return null;
-    } catch (error: any) {
-      console.error('Erro ao buscar empresa do Supabase:', error?.message ?? error);
-      return null;
-    }
+    })();
+
+    getCompanyInflight.set(id, inflight);
+    inflight.finally(() => {
+      if (getCompanyInflight.get(id) === inflight) getCompanyInflight.delete(id);
+    });
+    return inflight;
   }
 
   /**

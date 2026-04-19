@@ -29,7 +29,7 @@ export default function ReportSecurity() {
   const [loadingData, setLoadingData] = useState(false);
 
   useEffect(() => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     const cid = user.companyId!;
     const flag = onlySuspicious ? 'susp' : 'all';
     const cacheKey = adminReportCacheKey(cid, 'security', periodStart, periodEnd, flag);

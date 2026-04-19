@@ -22,7 +22,7 @@ export const LoggingService = {
       userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
     };
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured()) {
       try {
         await db.insert('audit_logs', {
           id: logEntry.id,
@@ -75,7 +75,7 @@ export const LoggingService = {
   },
 
   async getLogs(companyId: string): Promise<AuditLog[]> {
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured()) {
       try {
         const rows = await db.select(
           'audit_logs',

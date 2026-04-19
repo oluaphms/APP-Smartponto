@@ -29,7 +29,7 @@ const AdminArquivosFiscais: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
-    if (!user?.companyId || !isSupabaseConfigured) {
+    if (!user?.companyId || !isSupabaseConfigured()) {
       setLoadingData(false);
       return;
     }
@@ -64,7 +64,7 @@ const AdminArquivosFiscais: React.FC = () => {
   }, [user?.companyId]);
 
   const handleGenerate = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     if (!periodStart || !periodEnd) {
       setMessage({ type: 'error', text: 'Informe o período para geração do arquivo.' });
       return;

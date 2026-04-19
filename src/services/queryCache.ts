@@ -4,6 +4,8 @@
  * Sem dependências externas — substitui React Query para os casos mais comuns.
  */
 
+import { useCatalogStore } from '../stores/catalogStore';
+
 interface CacheEntry<T> {
   data: T;
   expiresAt: number;
@@ -91,6 +93,7 @@ export function invalidateCompanyListCaches(companyId: string): void {
   queryCache.invalidate(`users:${companyId}`);
   queryCache.invalidate(`time_records:week:${companyId}`);
   queryCache.invalidate(`admin_report:${companyId}`);
+  useCatalogStore.getState().clearCompany(companyId);
 }
 
 /**

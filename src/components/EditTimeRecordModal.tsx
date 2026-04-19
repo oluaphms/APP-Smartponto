@@ -47,7 +47,7 @@ export const EditTimeRecordModal: React.FC<EditTimeRecordModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!record || !isSupabaseConfigured) return;
+    if (!record || !isSupabaseConfigured()) return;
 
     setSubmitting(true);
     setError(null);
@@ -75,7 +75,7 @@ export const EditTimeRecordModal: React.FC<EditTimeRecordModalProps> = ({
   };
 
   const handleDelete = async () => {
-    if (!record || !isSupabaseConfigured) return;
+    if (!record || !isSupabaseConfigured()) return;
 
     if (!confirm('Tem certeza que deseja excluir esta batida?')) return;
 

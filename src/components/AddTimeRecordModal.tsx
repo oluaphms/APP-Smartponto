@@ -89,7 +89,7 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
   const [submitHint, setSubmitHint] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isOpen || !companyId || !isSupabaseConfigured) return;
+    if (!isOpen || !companyId || !isSupabaseConfigured()) return;
     const loadJustificativas = async () => {
       try {
         const rows = await db.select('justificativas', [

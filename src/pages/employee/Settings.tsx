@@ -45,7 +45,7 @@ const EmployeeSettings: React.FC = () => {
   };
 
   const handleSavePreferences = async () => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
     setSaving(true);
     setMessage(null);
     try {

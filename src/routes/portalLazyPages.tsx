@@ -68,7 +68,6 @@ export const EmployeeProfile = React.lazy(ROUTE_LOADERS['/employee/profile']);
 export const EmployeeSettings = React.lazy(ROUTE_LOADERS['/employee/settings']);
 export const MyWorkSchedule = React.lazy(ROUTE_LOADERS['/employee/work-schedule']);
 export const TimeBalancePage = React.lazy(ROUTE_LOADERS['/employee/time-balance']);
-export const EmployeeHolerite = React.lazy(ROUTE_LOADERS['/employee/holerite']);
 
 export const ProfileViewLazy = React.lazy(ROUTE_LOADERS['/profile']);
 

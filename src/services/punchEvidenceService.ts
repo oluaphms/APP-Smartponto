@@ -22,7 +22,7 @@ export interface CreateFraudAlertParams {
 }
 
 export async function savePunchEvidence(params: SavePunchEvidenceParams): Promise<void> {
-  if (!isSupabaseConfigured || !supabase) return;
+  if (!isSupabaseConfigured()) return;
   const row = {
     time_record_id: params.timeRecordId,
     photo_url: params.photoUrl ?? null,
@@ -55,7 +55,7 @@ export async function savePunchEvidence(params: SavePunchEvidenceParams): Promis
 }
 
 export async function createFraudAlert(params: CreateFraudAlertParams): Promise<void> {
-  if (!isSupabaseConfigured || !supabase) return;
+  if (!isSupabaseConfigured()) return;
   try {
     await db.insert('fraud_alerts', {
       employee_id: params.employeeId,

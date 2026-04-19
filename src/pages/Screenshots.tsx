@@ -39,7 +39,7 @@ const ScreenshotsPage: React.FC = () => {
   const [selectedScreenshot, setSelectedScreenshot] = useState<ScreenshotRow | null>(null);
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     const load = async () => {
       setIsLoadingData(true);
@@ -118,7 +118,7 @@ const ScreenshotsPage: React.FC = () => {
   });
 
   const toggleBlur = async (screenshot: ScreenshotRow) => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured()) return;
     try {
       await (db as { update: (table: string, id: string, data: any) => Promise<any> }).update(
         'screenshots',
@@ -134,7 +134,7 @@ const ScreenshotsPage: React.FC = () => {
   };
 
   const deleteScreenshot = async (screenshot: ScreenshotRow) => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured()) return;
     try {
       await (db as { delete: (table: string, id: string) => Promise<any> }).delete('screenshots', screenshot.id);
       setScreenshots((prev) => prev.filter((s) => s.id !== screenshot.id));

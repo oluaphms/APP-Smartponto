@@ -12,15 +12,15 @@ const ADMIN_HEADERS = [
   'Status',
 ] as const;
 
+/** Alinhado ao espelho do colaborador (mesmas colunas do admin, sem colaborador). */
 const EMPLOYEE_HEADERS = [
   'Data',
-  'Entrada (início)',
-  'Intervalo (pausa)',
-  'Retorno',
-  'Saída (final)',
-  'Horas trabalhadas',
-  'Locais (resumo)',
   'Status',
+  'Entrada',
+  'Saída int.',
+  'Volta int.',
+  'Saída',
+  'Total',
 ] as const;
 
 /**

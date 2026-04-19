@@ -52,7 +52,7 @@ export default function AdminSecurity() {
   const mapInstanceRef = useRef<L.Map | null>(null);
 
   useEffect(() => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
 
     const load = async () => {
       setLoadingData(true);

@@ -395,7 +395,7 @@ export async function saveInconsistencies(
   dateStr: string,
   inconsistencies: TimeInconsistency[]
 ): Promise<void> {
-  if (!isSupabaseConfigured || inconsistencies.length === 0) return;
+  if (!isSupabaseConfigured() || inconsistencies.length === 0) return;
   for (const inc of inconsistencies) {
     await db.insert('time_inconsistencies', {
       employee_id: employeeId,
@@ -417,7 +417,7 @@ export async function saveNightHours(
   dateStr: string,
   minutes: number
 ): Promise<void> {
-  if (!isSupabaseConfigured) return;
+  if (!isSupabaseConfigured()) return;
   const existing = (await db.select(
     'night_hours',
     [
@@ -512,7 +512,7 @@ export async function saveTimeAlerts(
   dateStr: string,
   alerts: { type: string; description: string; severity: string }[]
 ): Promise<void> {
-  if (!isSupabaseConfigured || alerts.length === 0) return;
+  if (!isSupabaseConfigured() || alerts.length === 0) return;
   for (const a of alerts) {
     await db.insert('time_alerts', {
       employee_id: employeeId,

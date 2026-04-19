@@ -7,23 +7,23 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import {
   isSupabaseConfigured,
   testSupabaseConnection,
-  supabase,
 } from '../../services/supabase';
+import { getSupabaseClient } from '../../src/lib/supabaseClient';
 import { auth, storage } from '../../services/supabaseClient';
 
 describe('Supabase connection', () => {
   beforeAll(() => {
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured()) {
       console.warn('Supabase not configured – set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY');
     }
   });
 
   it('is configured when env vars are set', () => {
-    expect(typeof isSupabaseConfigured).toBe('boolean');
+    expect(typeof isSupabaseConfigured).toBe('function');
   });
 
   it('connects and reads a table (employees or users)', async () => {
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured()) {
       console.warn('Skipping: Supabase not configured');
       return;
     }
@@ -36,12 +36,12 @@ describe('Supabase connection', () => {
   }, 20000);
 
   it('auth.getSession does not throw', async () => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured()) return;
     await expect(auth.getSession()).resolves.toBeDefined();
   }, 10000);
 
   it('storage list runs without throw (if bucket exists)', async () => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured()) return;
     try {
       await storage.from('avatars').list(undefined, { limit: 1 }).catch(() => null);
     } catch {
@@ -52,8 +52,8 @@ describe('Supabase connection', () => {
 
 describe('Supabase client with timeout', () => {
   it('supabase client is null when not configured', () => {
-    if (!isSupabaseConfigured) {
-      expect(supabase).toBeNull();
+    if (!isSupabaseConfigured()) {
+      expect(getSupabaseClient()).toBeNull();
     }
   });
 });

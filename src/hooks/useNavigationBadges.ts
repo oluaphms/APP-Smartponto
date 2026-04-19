@@ -14,7 +14,7 @@ export function useNavigationBadges(user: User | null): NavigationBadges {
   const { data: requestsCount = 0 } = useQuery({
     queryKey: ['requests-count', user?.id],
     queryFn: () => user ? requestsQueries.countPendingRequests(user.id).then(r => r.count || 0) : Promise.resolve(0),
-    enabled: !!user && isSupabaseConfigured,
+    enabled: !!user && isSupabaseConfigured(),
     staleTime: 1 * 60 * 1000, // 1 minuto
     refetchInterval: 60 * 1000, // Refetch a cada 60 segundos
   });
@@ -22,7 +22,7 @@ export function useNavigationBadges(user: User | null): NavigationBadges {
   const { data: notificationsCount = 0 } = useQuery({
     queryKey: ['notifications-count', user?.id],
     queryFn: () => user ? NotificationService.getUnreadCount(user.id) : Promise.resolve(0),
-    enabled: !!user && isSupabaseConfigured,
+    enabled: !!user && isSupabaseConfigured(),
     staleTime: 1 * 60 * 1000, // 1 minuto
     refetchInterval: 60 * 1000, // Refetch a cada 60 segundos
   });

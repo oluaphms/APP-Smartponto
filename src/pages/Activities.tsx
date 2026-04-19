@@ -43,7 +43,7 @@ const ActivitiesPage: React.FC = () => {
   const [details, setDetails] = useState<DetailsState | null>(null);
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     const load = async () => {
       setIsLoadingData(true);
@@ -121,7 +121,7 @@ const ActivitiesPage: React.FC = () => {
   };
 
   const updateProductivityTag = async (log: ActivityLogRow, tag: 'productive' | 'unproductive') => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured()) return;
     try {
       await (db as { update: (table: string, id: string, data: any) => Promise<any> }).update('activity_logs', log.id, {
         productivity_tag: tag,

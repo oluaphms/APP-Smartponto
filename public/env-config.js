@@ -35,22 +35,29 @@
     typeof location !== 'undefined' &&
     /^(localhost|127\.0\.0\.1)$/i.test(String(location.hostname || ''));
 
+  // Evita grupo com "URL vazia" antes do Vite: em dev o .env costuma preencher só no bundle ([ENV] no AppInitializer).
   if (isLocalDev) {
-    console.group('[Supabase Config]');
-    console.log('Environment:', activeEnv);
-    console.log('URL:', supabaseUrl || '(vazia)');
-    console.log('Source:', supabaseUrl ? 'window/localStorage' : 'import.meta.env (fallback no app)');
-    console.log('Online:', typeof navigator === 'undefined' ? true : navigator.onLine);
-    console.groupEnd();
+    if (supabaseUrl && supabaseAnonKey) {
+      console.group('[Supabase Config]');
+      console.log('Environment:', activeEnv);
+      console.log('URL:', supabaseUrl);
+      console.log('Source: window/localStorage');
+      console.log('Online:', typeof navigator === 'undefined' ? true : navigator.onLine);
+      console.groupEnd();
+    } else {
+      console.debug(
+        '[Supabase Config] URL/chave virão do Vite (.env). Detalhes em [ENV] após o AppInitializer.'
+      );
+    }
   }
 
   if (!supabaseUrl || !supabaseAnonKey) {
     // Em produção o Vite injeta VITE_* no bundle; env-config.js vazio é esperado.
     if (isLocalDev) {
-      console.info('[env-config] window.ENV sem URL/chave; o app usa import.meta.env (.env / build).');
+      console.debug('[env-config] Sem credenciais em window/localStorage — uso de import.meta.env (.env / build).');
     }
   } else if (isLocalDev) {
-    console.info('[env-config] Credenciais definidas em runtime (localStorage/window.ENV).');
+    console.debug('[env-config] Credenciais definidas em runtime (localStorage/window.ENV).');
   }
 })();
 

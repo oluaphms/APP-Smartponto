@@ -60,7 +60,7 @@ const ReportsPage: React.FC = () => {
   const [activityLogs, setActivityLogs] = useState<ActivityLogRow[]>([]);
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     const loadStatic = async () => {
       try {
@@ -90,7 +90,7 @@ const ReportsPage: React.FC = () => {
   }, [user]);
 
   const handleGenerate = async () => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
     setIsLoadingData(true);
     setError(null);
     try {

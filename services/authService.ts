@@ -13,7 +13,6 @@ import {
   isSupabaseConfigured,
   checkSupabaseConfigured,
   supabase,
-  DB_SELECT_TIMEOUT_MS,
 } from './supabaseClient';
 import { clearLocalAuthSession } from './supabase';
 import { withTimeout } from '../src/utils/withTimeout';
@@ -29,8 +28,11 @@ export interface AuthResult {
 /** Evita chamadas repetidas a auth.updateUser (causavam lentidão, refresh em loop e logout falso). */
 const TENANT_META_SYNC_KEY = 'sp_tenant_meta_sync';
 
-/** Carregar perfil pode fazer 2× `db.select` em sequência; deve ser > 2× timeout do select para não abortar antes. */
-const GET_CURRENT_USER_TIMEOUT_MS = DB_SELECT_TIMEOUT_MS * 2 + 8000;
+/**
+ * Timeout do envelope `getCurrentUser` (sessão + perfil). Não pode ser ~64s: bloqueia refresh e
+ * parece “sessão morta”. Perfil pesado já tem retries/timeouts dentro de `db.select` / fallback mínimo.
+ */
+const GET_CURRENT_USER_TIMEOUT_MS = 18_000;
 
 function persistCurrentUserToProfileStore(u: User): void {
   if (typeof window === 'undefined') return;
@@ -74,7 +76,7 @@ class AuthService {
     appUser: User,
     authUser?: { user_metadata?: Record<string, unknown> } | null,
   ): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) return;
+    if (!isSupabaseConfigured()) return;
     const tid = resolveTenantId(appUser);
     if (!tid) return;
     const meta = authUser?.user_metadata as { tenant_id?: string; company_id?: string } | undefined;
@@ -110,20 +112,28 @@ class AuthService {
     }
   }
 
-  /** Após login: sync de metadata sem bloquear a UI (idle / próximo tick). */
+  /**
+   * Após login: sync de tenant no JWT, refresh da sessão e só então auditoria.
+   * Ordem evita INSERT em tenant_audit_log com RLS antes de get_my_company_id() alinhar ao perfil.
+   */
   private enqueuePostLoginSideEffects(appUser: User, authUser: { user_metadata?: Record<string, unknown> } | null): void {
-    const run = () => {
-      void this.syncTenantUserMetadata(appUser, authUser).catch(() => {});
-      void logTenantLoginSuccess(appUser).catch(() => {});
+    const run = async () => {
+      try {
+        await this.syncTenantUserMetadata(appUser, authUser);
+        await supabase.auth.refreshSession();
+        await logTenantLoginSuccess(appUser);
+      } catch {
+        // auditoria não deve quebrar login
+      }
     };
     if (typeof window === 'undefined') {
       void run();
       return;
     }
     if ('requestIdleCallback' in window) {
-      window.requestIdleCallback(() => run(), { timeout: 3000 });
+      window.requestIdleCallback(() => void run(), { timeout: 3000 });
     } else {
-      globalThis.setTimeout(run, 0);
+      globalThis.setTimeout(() => void run(), 0);
     }
   }
 
@@ -150,7 +160,7 @@ class AuthService {
     // o app ainda NÃO tem sessão auth; então RLS costuma bloquear leitura de public.users.
     // Para funcionar sempre, chamamos uma RPC SECURITY DEFINER que ignora RLS e resolve para o email.
     let attemptedRpc = false;
-    if (!lower.includes('@') && isSupabaseConfigured && supabase) {
+    if (!lower.includes('@') && isSupabaseConfigured()) {
       try {
         attemptedRpc = true;
         const result = await supabase.rpc('resolve_login_email', { p_identifier: rawNormalized });
@@ -184,7 +194,7 @@ class AuthService {
     }
 
     // Se Supabase não está configurado, mantém o comportamento antigo
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured()) {
       return `${lower}@smartponto.com`;
     }
 
@@ -346,7 +356,7 @@ class AuthService {
   }
 
   private async safeRefreshSession(): Promise<boolean> {
-    if (!isSupabaseConfigured || !supabase || !this.isOnline()) return false;
+    if (!isSupabaseConfigured() || !this.isOnline()) return false;
     if (this._isRefreshingSession) return false;
     this._isRefreshingSession = true;
     try {
@@ -566,9 +576,9 @@ class AuthService {
               '[Auth] Sessão/GoTrue em contenção ou timeout; usando dados mínimos do Auth até sincronizar.',
             );
           }
-        } else if (typeof console !== 'undefined' && console.warn) {
-          console.warn(
-            '[Auth] Perfil em public.users demorou ou indisponível; usando dados mínimos do Auth. Próxima sincronização pode preencher empresa e permissões.',
+        } else if (import.meta.env?.DEV && typeof console !== 'undefined' && console.debug) {
+          console.debug(
+            '[Auth] Perfil em public.users demorou ou indisponível; usando dados mínimos do Auth até sincronizar.',
           );
         }
       } else {
@@ -623,7 +633,7 @@ class AuthService {
 
   /**
    * Login com email e senha.
-   * Não faz signOut antes do signIn para evitar loop e falha no segundo login (sessão é substituída pelo Supabase).
+   * Encerra sessão local antes do signIn para troca de usuário confiável (scope local evita corrida com signOut global).
    */
   async signInWithEmail(identifier: string, password: string): Promise<AuthResult> {
     let resolvedEmail = '';
@@ -640,10 +650,31 @@ class AuthService {
         };
       }
 
+      try {
+        clearCurrentUserFromAllStorages();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('current_user_changed'));
+        }
+      } catch {
+        // ignora
+      }
+      try {
+        await auth.signOut({ scope: 'local' });
+      } catch {
+        // segue: já sem sessão ou storage limpo
+      }
+      await clearLocalAuthSession();
+
       const data = await auth.signIn(resolvedEmail, password);
 
       if (!data || !data.user) {
         return { user: null, error: 'Erro ao fazer login. Tente novamente.' };
+      }
+
+      try {
+        await supabase.auth.refreshSession();
+      } catch {
+        // JWT já válido após signIn; refresh é reforço para storage/RLS
       }
 
       if (data.user) {
@@ -902,7 +933,7 @@ class AuthService {
    * Usado na recuperação de senha quando o usuário não informa e-mail.
    */
   async getEmailForReset(identifier: string): Promise<string | null> {
-    if (!isSupabaseConfigured) return null;
+    if (!isSupabaseConfigured()) return null;
     const q = identifier.trim().toLowerCase();
     if (!q) return null;
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -922,7 +953,7 @@ class AuthService {
    * Usar antes de updateUser({ password }) no fluxo de redefinir senha.
    */
   async getOrRestoreRecoverySession(): Promise<{ session: any }> {
-    if (!isSupabaseConfigured || !supabase) return { session: null };
+    if (!isSupabaseConfigured()) return { session: null };
     try {
       if (typeof supabase.auth.initialize === 'function') await supabase.auth.initialize();
       const { data: sessionData } = await auth.getSession();

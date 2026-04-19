@@ -37,7 +37,7 @@ export interface CreateInviteByLinkResult {
 
 /** Cria convite por link (tabela employee_invites). O aceite é feito na página /accept-invite e nas APIs /api/employee-invite e /api/accept-employee-invite. */
 export async function createEmployeeInviteByLink(payload: CreateInviteByLinkPayload): Promise<CreateInviteByLinkResult> {
-  if (!isSupabaseConfigured) {
+  if (!isSupabaseConfigured()) {
     return { success: false, error: 'Supabase não configurado.' };
   }
   const emailNorm = payload.email.trim().toLowerCase();

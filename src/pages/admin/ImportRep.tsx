@@ -23,7 +23,7 @@ const AdminImportRep: React.FC = () => {
   const [repDeviceId, setRepDeviceId] = useState<string>('');
 
   React.useEffect(() => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     const load = async () => {
       setLoadingDevices(true);
       try {

@@ -79,7 +79,7 @@ const AdminCalculos: React.FC = () => {
   const [showFiltrosExtra, setShowFiltrosExtra] = useState(false);
 
   useEffect(() => {
-    if (!user?.companyId || !isSupabaseConfigured) {
+    if (!user?.companyId || !isSupabaseConfigured()) {
       setLoadingListas(false);
       return;
     }

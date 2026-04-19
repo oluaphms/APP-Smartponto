@@ -28,7 +28,7 @@ const TimeRecordsPage: React.FC = () => {
   const [dateTo, setDateTo] = useState('');
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     const load = async () => {
       setIsLoadingData(true);

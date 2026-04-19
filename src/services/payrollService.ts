@@ -148,7 +148,7 @@ export async function consolidarFolhaPeriodo(
 }
 
 export async function fecharFolhaPeriodo(periodoId: string, fechadaPorUserId: string): Promise<void> {
-  if (!isSupabaseConfigured) throw new Error('Supabase não configurado.');
+  if (!isSupabaseConfigured()) throw new Error('Supabase não configurado.');
   await db.update('folha_pagamento_periodos', periodoId, {
     status: 'fechada',
     fechada_em: new Date().toISOString(),
@@ -157,7 +157,7 @@ export async function fecharFolhaPeriodo(periodoId: string, fechadaPorUserId: st
 }
 
 export async function reabrirFolhaPeriodo(periodoId: string): Promise<void> {
-  if (!isSupabaseConfigured) throw new Error('Supabase não configurado.');
+  if (!isSupabaseConfigured()) throw new Error('Supabase não configurado.');
   await db.update('folha_pagamento_periodos', periodoId, {
     status: 'rascunho',
     fechada_em: null,

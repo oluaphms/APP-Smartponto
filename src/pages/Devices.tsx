@@ -30,7 +30,7 @@ const DevicesPage: React.FC = () => {
   });
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     const load = async () => {
       setIsLoadingData(true);
@@ -72,7 +72,7 @@ const DevicesPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !isSupabaseConfigured || !form.name || !form.device_identifier) return;
+    if (!user || !isSupabaseConfigured() || !form.name || !form.device_identifier) return;
 
     try {
       const id = crypto.randomUUID();

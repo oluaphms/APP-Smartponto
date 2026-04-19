@@ -82,7 +82,7 @@ const AdminLancamentoEventos: React.FC = () => {
   });
 
   const loadEmployees = useCallback(async () => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     try {
       const rows = (await db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }])) as any[];
       setEmployees(
@@ -98,7 +98,7 @@ const AdminLancamentoEventos: React.FC = () => {
   }, [user?.companyId]);
 
   const loadEventos = useCallback(async () => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     try {
       const rows = (await db.select('eventos_folha', [{ column: 'company_id', operator: 'eq', value: user.companyId }])) as any[];
       setEventos((rows ?? []).map((r: any) => ({
@@ -113,7 +113,7 @@ const AdminLancamentoEventos: React.FC = () => {
   }, [user?.companyId]);
 
   const loadLancamentos = useCallback(async () => {
-    if (!user?.companyId || !isSupabaseConfigured) {
+    if (!user?.companyId || !isSupabaseConfigured()) {
       setLancamentos([]);
       setLoadingData(false);
       return;
@@ -223,7 +223,7 @@ const AdminLancamentoEventos: React.FC = () => {
 
   const handleSave = async (e?: React.MouseEvent) => {
     e?.preventDefault();
-    if (!isSupabaseConfigured || !user?.companyId) {
+    if (!isSupabaseConfigured() || !user?.companyId) {
       setModalError('Configuração ou empresa não identificada.');
       return;
     }
@@ -323,7 +323,7 @@ const AdminLancamentoEventos: React.FC = () => {
   };
 
   const handleCopy = async () => {
-    if (!selectedLancamentoId || !user?.companyId || !isSupabaseConfigured) return;
+    if (!selectedLancamentoId || !user?.companyId || !isSupabaseConfigured()) return;
     const lanc = lancamentos.find((l) => l.id === selectedLancamentoId);
     if (!lanc) return;
     const vezes = Math.max(1, parseInt(copyForm.vezes, 10) || 1);

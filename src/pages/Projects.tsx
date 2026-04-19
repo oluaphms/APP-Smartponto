@@ -48,7 +48,7 @@ const ProjectsPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     const load = async () => {
       setIsLoadingData(true);
@@ -132,7 +132,7 @@ const ProjectsPage: React.FC = () => {
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isSupabaseConfigured || !user) return;
+    if (!isSupabaseConfigured() || !user) return;
     if (!form.name.trim()) return;
 
     setSaving(true);
@@ -191,7 +191,7 @@ const ProjectsPage: React.FC = () => {
   };
 
   const handleDeleteProject = async (project: ProjectRow) => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured()) return;
     try {
       await (db as { delete: (table: string, id: string) => Promise<any> }).delete('projects', project.id);
       setProjects((prev) => prev.filter((p) => p.id !== project.id));
@@ -208,7 +208,7 @@ const ProjectsPage: React.FC = () => {
 
   const handleAssignMembersSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isSupabaseConfigured || !user || !selectedProjectId) return;
+    if (!isSupabaseConfigured() || !user || !selectedProjectId) return;
     try {
       const existing =
         ((await db.select('project_members', [

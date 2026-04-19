@@ -22,7 +22,7 @@ const EmployeeProfile: React.FC = () => {
   }, [user]);
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
     const load = async () => {
       if (user.schedule_id) {
         try {
@@ -45,7 +45,7 @@ const EmployeeProfile: React.FC = () => {
   }, [user?.schedule_id, (user as any)?.departmentId]);
 
   const handleSave = async () => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
     setSaving(true);
     try {
       await db.update('users', user.id, { phone: phone || null, updated_at: new Date().toISOString() });
@@ -58,7 +58,7 @@ const EmployeeProfile: React.FC = () => {
 
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user || !storage || !isSupabaseConfigured) return;
+    if (!file || !user || !storage || !isSupabaseConfigured()) return;
     setUploadingPhoto(true);
     try {
       const path = `${user.id}/avatar-${Date.now()}.jpg`;

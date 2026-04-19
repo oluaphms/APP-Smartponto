@@ -115,7 +115,7 @@ const EmployeeClockIn: React.FC = () => {
   const streamRef = useRef<MediaStream | null>(null);
 
   const loadTodayState = useCallback(async () => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
     try {
       const today = getLocalDateString();
       const dayRecords = await getDayRecords(user.id, today);
@@ -604,7 +604,7 @@ const EmployeeClockIn: React.FC = () => {
 
   const beginPunch = async (type: LogType, mode: VerificationMode, punchActionLabel: string) => {
     if (!user) return;
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured()) {
       setError('Sistema de ponto indisponível. Tente mais tarde.');
       toast.addToast('error', 'Sistema de ponto indisponível.');
       return;

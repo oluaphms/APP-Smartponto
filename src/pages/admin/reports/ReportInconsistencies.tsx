@@ -34,7 +34,7 @@ const ReportInconsistencies: React.FC = () => {
   const [loadingData, setLoadingData] = useState(false);
 
   useEffect(() => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     const cid = user.companyId!;
     setLoadingData(true);
     const cacheKey = adminReportCacheKey(cid, 'inconsistencies');

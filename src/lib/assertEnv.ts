@@ -10,19 +10,35 @@ function readRuntimeEnv(): EnvShape {
   return (window as any).ENV || {};
 }
 
+function trimKey(v: unknown): string {
+  return String(v ?? '').trim();
+}
+
+function trimUrl(v: unknown): string {
+  return String(v ?? '')
+    .trim()
+    .replace(/\/+$/, '');
+}
+
+/**
+ * Fonte única de URL/key: combina Vite (build), window.ENV (ex.: /env-config.js) e
+ * valores injetados pelo AppInitializer em __VITE_* — evita URL “vazia” por ordem errada.
+ */
 export function assertEnv(): { url: string; key: string } {
   if (typeof window !== 'undefined' && (window as any).__ENV_FATAL_ERROR) {
     throw new Error(String((window as any).__ENV_FATAL_ERROR));
   }
   const runtime = readRuntimeEnv();
-  const url =
-    runtime.SUPABASE_URL ||
-    (import.meta.env.VITE_SUPABASE_URL as string | undefined) ||
-    '';
-  const key =
-    runtime.SUPABASE_ANON_KEY ||
-    (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ||
-    '';
+  const w = typeof window !== 'undefined' ? (window as any) : null;
+  const viteUrl = trimUrl(import.meta.env.VITE_SUPABASE_URL as string | undefined);
+  const viteKey = trimKey(import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined);
+  const envUrl = trimUrl(runtime.SUPABASE_URL);
+  const envKey = trimKey(runtime.SUPABASE_ANON_KEY);
+  const injectedUrl = trimUrl(w?.__VITE_SUPABASE_URL);
+  const injectedKey = trimKey(w?.__VITE_SUPABASE_ANON_KEY);
+
+  const url = viteUrl || envUrl || injectedUrl;
+  const key = viteKey || envKey || injectedKey;
 
   if (!url || !key) {
     console.error('[ENV ERROR] Supabase não configurado corretamente');

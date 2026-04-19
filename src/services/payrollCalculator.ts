@@ -471,7 +471,7 @@ export async function getPayrollSummaries(
   startDate: string,
   endDate: string
 ): Promise<CalculatedPayrollRow[]> {
-  if (!isSupabaseConfigured) return [];
+  if (!isSupabaseConfigured()) return [];
   
   // Validação de datas
   if (!startDate || !endDate || typeof startDate !== 'string' || typeof endDate !== 'string') {
@@ -533,7 +533,7 @@ export async function markAsExported(
   summaryId: string,
   notes?: string
 ): Promise<void> {
-  if (!isSupabaseConfigured) return;
+  if (!isSupabaseConfigured()) return;
   
   await db.update('payroll_summaries', summaryId, {
     status: 'exported',

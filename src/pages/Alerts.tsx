@@ -37,7 +37,7 @@ const AlertsPage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'resolved'>('all');
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     const load = async () => {
       setIsLoadingData(true);
@@ -99,7 +99,7 @@ const AlertsPage: React.FC = () => {
   });
 
   const updateAlertResolved = async (alert: AlertRow, resolved: boolean) => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured()) return;
     try {
       await (db as { update: (table: string, id: string, data: any) => Promise<any> }).update('alerts', alert.id, {
         resolved,

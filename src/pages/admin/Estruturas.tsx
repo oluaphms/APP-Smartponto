@@ -39,7 +39,7 @@ const AdminEstruturas: React.FC = () => {
   const [modalError, setModalError] = useState<string | null>(null);
 
   const loadUsers = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     try {
       // Otimização: carregar apenas colunas necessárias
       const data = (await db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }], {
@@ -56,7 +56,7 @@ const AdminEstruturas: React.FC = () => {
   };
 
   const load = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) {
+    if (!user?.companyId || !isSupabaseConfigured()) {
       setLoadingData(false);
       return;
     }
@@ -145,7 +145,7 @@ const AdminEstruturas: React.FC = () => {
   const handleSave = async (e?: React.MouseEvent) => {
     e?.preventDefault();
     e?.stopPropagation();
-    if (!isSupabaseConfigured || !user?.companyId) {
+    if (!isSupabaseConfigured() || !user?.companyId) {
       setModalError('Configuração ou empresa não identificada.');
       return;
     }

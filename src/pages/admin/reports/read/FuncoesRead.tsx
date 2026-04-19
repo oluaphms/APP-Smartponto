@@ -11,7 +11,7 @@ export function FuncoesRead() {
   const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
-    if (!user?.companyId || !isSupabaseConfigured) {
+    if (!user?.companyId || !isSupabaseConfigured()) {
       setLoadingData(false);
       return;
     }

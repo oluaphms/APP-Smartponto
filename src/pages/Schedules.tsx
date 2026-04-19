@@ -37,7 +37,7 @@ const SchedulesPage: React.FC = () => {
   });
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     const load = async () => {
       setIsLoadingData(true);
@@ -85,7 +85,7 @@ const SchedulesPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !isSupabaseConfigured || !form.name) return;
+    if (!user || !isSupabaseConfigured() || !form.name) return;
 
     try {
       const id = crypto.randomUUID();

@@ -59,7 +59,7 @@ function classifyFailure(error: unknown): SupabaseConnectionCheckResult {
  * Nunca deve bloquear login nem inicialização do app.
  */
 export async function checkSupabaseConnection(): Promise<SupabaseConnectionCheckResult> {
-  if (!isSupabaseConfigured || !supabase) {
+  if (!isSupabaseConfigured()) {
     return { ok: false, status: 'not_configured', message: 'Supabase não configurado.' };
   }
   try {

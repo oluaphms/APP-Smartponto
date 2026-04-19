@@ -1,6 +1,12 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { DailySummary } from "../types";
 import { getGeminiApiKey, getGeminiModelId, validateGeminiApiKey } from "./geminiEnv";
+
+const FALLBACK_INSIGHT = {
+  insight:
+    'Insights por IA indisponíveis no momento. Continue registrando seu ponto normalmente.',
+  score: 8,
+} as const;
 
 function errorText(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -16,11 +22,13 @@ function isInvalidOrDeniedGeminiKey(error: unknown): boolean {
   return /API_KEY_INVALID|API key not valid|invalid api key|PERMISSION_DENIED|403/i.test(t);
 }
 
-/** 400: modelo indisponível, payload inválido ou recurso não habilitado para a chave. */
+/** 400/404: modelo indisponível, descontinuado ou payload inválido. */
 function isLikelyModelOrPayloadError(error: unknown): boolean {
   const t = errorText(error);
-  return /\b400\b|INVALID_ARGUMENT|not found|is not (found|supported)|does not exist|FAILED_PRECONDITION|Bad Request/i.test(t);
+  return /\b400\b|\b404\b|INVALID_ARGUMENT|not found|is not (found|supported)|does not exist|FAILED_PRECONDITION|Bad Request/i.test(t);
 }
+
+const GEMINI_MODEL_FALLBACK = 'gemini-1.5-flash';
 
 /** Extrai código de status HTTP do erro */
 function getErrorStatusCode(error: unknown): number | null {
@@ -44,8 +52,7 @@ function parseInsightJsonFromText(text: string): { insight: string; score: numbe
   return null;
 }
 
-// Analyze time tracking data to provide productivity and work-life balance insights
-export const getWorkInsights = async (summaries: DailySummary[]) => {
+async function getWorkInsightsImpl(summaries: DailySummary[]): Promise<{ insight: string; score: number }> {
   const apiKey = getGeminiApiKey();
 
   // Validação inicial da chave
@@ -67,11 +74,32 @@ export const getWorkInsights = async (summaries: DailySummary[]) => {
   Dados: ${JSON.stringify(summaries)}`;
 
   try {
-    // Try without responseSchema first (more compatible)
-    const response = await ai.models.generateContent({
-      model,
-      contents: plainPrompt,
-    });
+    const runGenerate = (m: string) =>
+      ai.models.generateContent({
+        model: m,
+        contents: plainPrompt,
+      });
+
+    let response;
+    try {
+      response = await runGenerate(model);
+    } catch (firstErr) {
+      const code = getErrorStatusCode(firstErr);
+      if (
+        (code === 404 || code === 400) &&
+        model !== GEMINI_MODEL_FALLBACK &&
+        isLikelyModelOrPayloadError(firstErr)
+      ) {
+        if (import.meta.env?.DEV) {
+          console.warn(
+            `[Gemini] Modelo '${model}' indisponível (${code}); tentando '${GEMINI_MODEL_FALLBACK}'.`,
+          );
+        }
+        response = await runGenerate(GEMINI_MODEL_FALLBACK);
+      } else {
+        throw firstErr;
+      }
+    }
 
     const jsonStr = response.text?.trim();
     if (!jsonStr) {
@@ -108,11 +136,11 @@ export const getWorkInsights = async (summaries: DailySummary[]) => {
     }
 
     // Tratamento específico para erro 400 (Bad Request)
-    if (statusCode === 400 || isLikelyModelOrPayloadError(error)) {
+    if (statusCode === 400 || statusCode === 404 || isLikelyModelOrPayloadError(error)) {
       if (import.meta.env?.DEV) {
         console.warn(
-          `[Gemini] Erro 400 - Possíveis causas:\n` +
-          `  1. Modelo '${model}' não disponível na API v1beta. Tente definir VITE_GEMINI_MODEL=gemini-2.0-flash-exp ou gemini-1.5-flash\n` +
+          `[Gemini] Erro de modelo (400/404) — Possíveis causas:\n` +
+          `  1. Modelo '${model}' não disponível para a chave. Defina VITE_GEMINI_MODEL (ex.: gemini-1.5-flash ou gemini-2.0-flash)\n` +
           `  2. Chave de API inválida ou sem acesso ao modelo\n` +
           `  3. Formato da requisição incompatível com a versão da biblioteca\n` +
           `Erro original:`, errorMsg
@@ -130,7 +158,21 @@ export const getWorkInsights = async (summaries: DailySummary[]) => {
 
     return { insight: "Continue mantendo o registro regular do seu ponto para análises futuras.", score: 8 };
   }
-};
+}
+
+/**
+ * Insights de produtividade — **nunca lança**: falhas da API ficam isoladas do restante do app.
+ */
+export async function getWorkInsights(summaries: DailySummary[]): Promise<{ insight: string; score: number }> {
+  try {
+    return await getWorkInsightsImpl(summaries);
+  } catch (error) {
+    if (import.meta.env?.DEV) {
+      console.warn('[Gemini] getWorkInsights falhou (isolado, sem impacto no app):', error);
+    }
+    return { ...FALLBACK_INSIGHT };
+  }
+}
 
 const HR_SYSTEM_PROMPT = `Você é um assistente de IA do SmartPonto, focado em ajudar a equipe de RH.
 Responda de forma clara e objetiva sobre: políticas de ponto, férias, ausências, escalas, banco de horas, 
@@ -138,7 +180,10 @@ ajustes de registro, dispositivos e locais de trabalho. Se não souber algo espe
 consultar o manual ou o administrador. Mantenha tom profissional e prestativo. Responda em português.`;
 
 // Chat com IA para RH: envia mensagem e retorna resposta do modelo
-export const sendHRChatMessage = async (userMessage: string, history: { role: 'user' | 'model'; text: string }[] = []): Promise<string> => {
+async function sendHRChatMessageImpl(
+  userMessage: string,
+  history: { role: 'user' | 'model'; text: string }[] = [],
+): Promise<string> {
   const apiKey = getGeminiApiKey();
 
   // Validação inicial da chave
@@ -160,10 +205,30 @@ export const sendHRChatMessage = async (userMessage: string, history: { role: 'u
   ].join('\n\n');
 
   try {
-    const response = await ai.models.generateContent({
-      model,
-      contents: contents,
-    });
+    const runChat = (m: string) =>
+      ai.models.generateContent({
+        model: m,
+        contents,
+      });
+
+    let response;
+    try {
+      response = await runChat(model);
+    } catch (firstErr) {
+      const code = getErrorStatusCode(firstErr);
+      if (
+        (code === 404 || code === 400) &&
+        model !== GEMINI_MODEL_FALLBACK &&
+        isLikelyModelOrPayloadError(firstErr)
+      ) {
+        if (import.meta.env?.DEV) {
+          console.warn(`[Gemini Chat] Modelo '${model}' falhou (${code}); tentando '${GEMINI_MODEL_FALLBACK}'.`);
+        }
+        response = await runChat(GEMINI_MODEL_FALLBACK);
+      } else {
+        throw firstErr;
+      }
+    }
 
     const text = response.text?.trim();
     return text || "Não foi possível obter uma resposta. Tente novamente.";
@@ -183,11 +248,10 @@ export const sendHRChatMessage = async (userMessage: string, history: { role: 'u
     }
 
     // Tratamento específico para erro 400
-    if (statusCode === 400 || isLikelyModelOrPayloadError(error)) {
+    if (statusCode === 400 || statusCode === 404 || isLikelyModelOrPayloadError(error)) {
       if (import.meta.env?.DEV) {
         console.warn(
-          `[Gemini] Chat - Erro 400: Verifique se o modelo '${model}' está disponível. ` +
-          `Tente usar VITE_GEMINI_MODEL=gemini-2.0-flash-exp ou gemini-1.5-flash`
+          `[Gemini] Chat: modelo '${model}' ou payload — tente VITE_GEMINI_MODEL=gemini-1.5-flash ou gemini-2.0-flash`,
         );
       }
       return "O serviço de chat com IA está temporariamente indisponível devido a uma atualização. Tente novamente mais tarde.";
@@ -195,4 +259,18 @@ export const sendHRChatMessage = async (userMessage: string, history: { role: 'u
 
     return "Ocorreu um erro ao processar sua mensagem. Verifique a conexão e a chave da API e tente novamente.";
   }
-};
+}
+
+export async function sendHRChatMessage(
+  userMessage: string,
+  history: { role: 'user' | 'model'; text: string }[] = [],
+): Promise<string> {
+  try {
+    return await sendHRChatMessageImpl(userMessage, history);
+  } catch (error) {
+    if (import.meta.env?.DEV) {
+      console.warn('[Gemini] Chat isolado (falha não propaga):', error);
+    }
+    return 'O assistente de IA está temporariamente indisponível. Tente novamente em instantes.';
+  }
+}

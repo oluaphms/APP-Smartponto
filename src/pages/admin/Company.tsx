@@ -89,7 +89,7 @@ const AdminCompany: React.FC = () => {
     const load = async () => {
       setLoadingData(true);
       try {
-        if (!isSupabaseConfigured) {
+        if (!isSupabaseConfigured()) {
           const company = await PontoService.getCompany(user.companyId);
           if (company) {
             setCompanyId(company.id);
@@ -174,7 +174,7 @@ const AdminCompany: React.FC = () => {
     try {
       const idToUse = companyId || user.companyId || user.id;
 
-      if (!isSupabaseConfigured) {
+      if (!isSupabaseConfigured()) {
         const existing = await firestoreService.getCompany(idToUse);
         const baseSettings: Company['settings'] =
           (existing as any)?.settings ||

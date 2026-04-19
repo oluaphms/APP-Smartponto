@@ -47,7 +47,7 @@ const AdminAusencias: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
 
     const loadFilters = async () => {
       try {
@@ -67,7 +67,7 @@ const AdminAusencias: React.FC = () => {
   }, [user?.companyId]);
 
   const loadAusencias = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     if (!dataIni || !dataFim) return;
 
     setLoadingData(true);

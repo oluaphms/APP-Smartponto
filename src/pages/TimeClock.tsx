@@ -26,7 +26,7 @@ const TimeClockPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
     const load = async () => {
       try {
         const rows =
@@ -54,7 +54,7 @@ const TimeClockPage: React.FC = () => {
   }, [user]);
 
   const handlePunch = async (type: LogType) => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     setIsSaving(true);
     try {

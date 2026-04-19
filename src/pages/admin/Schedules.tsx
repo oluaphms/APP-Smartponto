@@ -97,7 +97,7 @@ const AdminSchedules: React.FC = () => {
   const [copyTargetPeriod, setCopyTargetPeriod] = useState('');
 
   const load = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     setLoadingData(true);
     try {
       const [schedRows, shiftRows, userRows, ciclicasRows, mensalRow] = await Promise.all([
@@ -188,7 +188,7 @@ const AdminSchedules: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     if (!form.name.trim()) {
       setMessage({ type: 'error', text: 'Informe o nome da escala.' });
       return;
@@ -291,7 +291,7 @@ const AdminSchedules: React.FC = () => {
   };
 
   const handleSaveCiclica = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     if (!formCiclica.name.trim()) {
       setMessage({ type: 'error', text: 'Informe a descrição da escala.' });
       return;
@@ -376,7 +376,7 @@ const AdminSchedules: React.FC = () => {
   };
 
   const saveMensal = async () => {
-    if (!user?.companyId || !isSupabaseConfigured || !mensal) return;
+    if (!user?.companyId || !isSupabaseConfigured() || !mensal) return;
     setSaving(true);
     setMessage(null);
     try {
@@ -438,7 +438,7 @@ const AdminSchedules: React.FC = () => {
   };
 
   const copyToMonth = async () => {
-    if (!copyTargetPeriod || !user?.companyId || !mensal || !isSupabaseConfigured) return;
+    if (!copyTargetPeriod || !user?.companyId || !mensal || !isSupabaseConfigured()) return;
     setSaving(true);
     setMessage(null);
     try {

@@ -50,7 +50,7 @@ function mapRow(row: any): GlobalSettings | null {
  * Obtém as configurações globais (único registro).
  */
 export async function getSettings(): Promise<GlobalSettings | null> {
-  if (!checkSupabaseConfigured() || !supabase) return null;
+  if (!checkSupabaseConfigured()) return null;
   const { data, error } = await supabase
     .from(TABLE)
     .select('*')
@@ -71,7 +71,7 @@ export async function updateSettings(
   id: string,
   data: Partial<Omit<GlobalSettings, 'id' | 'created_at' | 'updated_at'>>
 ): Promise<{ data: GlobalSettings | null; error: Error | null }> {
-  if (!checkSupabaseConfigured() || !supabase) {
+  if (!checkSupabaseConfigured()) {
     return { data: null, error: new Error('Supabase não configurado') };
   }
   const payload: any = { ...data, updated_at: new Date().toISOString() };
@@ -94,7 +94,7 @@ export async function updateSettings(
  * Obtém localizações permitidas para uma empresa (geofence).
  */
 export async function getCompanyLocations(companyId: string): Promise<CompanyLocation[]> {
-  if (!checkSupabaseConfigured() || !supabase) return [];
+  if (!checkSupabaseConfigured()) return [];
   const { data, error } = await supabase
     .from(LOCATIONS_TABLE)
     .select('*')

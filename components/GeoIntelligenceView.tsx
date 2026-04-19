@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { getGeoInsight } from '../services/mapsService';
 import { Company, User } from '../types';
 import { LoadingState, Badge, Button } from './UI';
@@ -25,14 +25,21 @@ const GeoIntelligenceView: React.FC<GeoIntelligenceViewProps> = ({ admin, compan
 
   const fetchInsight = async () => {
     setIsLoading(true);
-    const result = await getGeoInsight(company.settings.fence.lat, company.settings.fence.lng);
-    setInsight(result);
-    setIsLoading(false);
+    try {
+      const result = await getGeoInsight(company.settings.fence.lat, company.settings.fence.lng);
+      setInsight(result);
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn('[GeoIntelligence] IA indisponível:', e);
+      }
+      setInsight({
+        text: 'Análise por IA indisponível no momento. O mapa e o geofence continuam funcionando normalmente.',
+        sources: [],
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
-
-  useEffect(() => {
-    fetchInsight();
-  }, [company.id]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -151,9 +158,12 @@ const GeoIntelligenceView: React.FC<GeoIntelligenceViewProps> = ({ admin, compan
                   </div>
                 </div>
               ) : (
-                <div className="h-64 flex flex-col items-center justify-center text-center opacity-40">
-                  <Info size={40} className="mb-4" />
-                  <p className="text-xs font-bold uppercase tracking-widest">Nenhuma análise disponível</p>
+                <div className="h-64 flex flex-col items-center justify-center text-center text-slate-500 dark:text-slate-400 px-6">
+                  <Info size={40} className="mb-4 opacity-50" />
+                  <p className="text-xs font-bold uppercase tracking-widest mb-2">Nenhuma análise carregada</p>
+                  <p className="text-[11px] leading-relaxed">
+                    A IA não é executada automaticamente. Use &quot;Atualizar Análise&quot; para gerar quando precisar.
+                  </p>
                 </div>
               )}
             </div>

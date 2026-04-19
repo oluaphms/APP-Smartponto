@@ -13,6 +13,11 @@ import { formatRequestType, formatWorkflowStatus } from '../../lib/i18n';
 import { useLanguage } from '../contexts/LanguageContext';
 import { ExpandableTextCell } from '../components/ClickableFullContent';
 import { queryCache, TTL } from '../services/queryCache';
+import { withRetry } from '../services/retry';
+
+function isTimeoutLike(e: unknown): boolean {
+  return /tempo esgotado|timeout/i.test(String((e as Error)?.message ?? e));
+}
 
 interface RequestRow {
   id: string;
@@ -41,7 +46,7 @@ const DashboardPage: React.FC = () => {
   const [isLoadingData, setIsLoadingData] = useState(false);
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     const load = async () => {
       setIsLoadingData(true);
@@ -49,45 +54,81 @@ const DashboardPage: React.FC = () => {
         const now = new Date();
         const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-        // Todas as queries em paralelo com cache
-        const [rows, balanceRows, reqRows] = await Promise.all([
+        // Paralelo, mas falha isolada: um timeout em `time_records` não derruba saldo/solicitações.
+        const [recRes, balRes, reqRes] = await Promise.allSettled([
           queryCache.getOrFetch(
             `time_records:user:${user.id}:recent`,
-            () => db.select(
-              'time_records',
-              [{ column: 'user_id', operator: 'eq', value: user.id }],
-              { column: 'created_at', ascending: false },
-              50,
-            ) as Promise<any[]>,
+            () =>
+              withRetry(
+                () =>
+                  db.select(
+                    'time_records',
+                    [{ column: 'user_id', operator: 'eq', value: user.id }],
+                    {
+                      // Só o necessário para os cards — menos I/O que `*`
+                      columns: 'id,user_id,company_id,type,method,created_at',
+                      orderBy: { column: 'created_at', ascending: false },
+                      limit: 50,
+                    },
+                  ) as Promise<any[]>,
+                {
+                  maxAttempts: 2,
+                  baseDelayMs: 900,
+                  maxDelayMs: 12_000,
+                  shouldRetry: (e, attempt) => attempt < 2 && isTimeoutLike(e),
+                },
+              ),
             TTL.REALTIME,
           ),
           queryCache.getOrFetch(
             `time_balance:${user.id}:${monthKey}`,
-            () => db.select(
-              'time_balance',
-              [
-                { column: 'user_id', operator: 'eq', value: user.id },
-                { column: 'month', operator: 'eq', value: monthKey },
-              ],
-              { column: 'month', ascending: false },
-              1,
-            ) as Promise<any[]>,
+            () =>
+              db.select(
+                'time_balance',
+                [
+                  { column: 'user_id', operator: 'eq', value: user.id },
+                  { column: 'month', operator: 'eq', value: monthKey },
+                ],
+                { column: 'month', ascending: false },
+                1,
+              ) as Promise<any[]>,
             TTL.NORMAL,
-          ).catch(() => []),
+          ),
           queryCache.getOrFetch(
             `requests:pending:${user.id}`,
-            () => db.select(
-              'requests',
-              [
-                { column: 'user_id', operator: 'eq', value: user.id },
-                { column: 'status', operator: 'eq', value: 'pending' },
-              ],
-              { column: 'created_at', ascending: false },
-              10,
-            ) as Promise<any[]>,
+            () =>
+              db.select(
+                'requests',
+                [
+                  { column: 'user_id', operator: 'eq', value: user.id },
+                  { column: 'status', operator: 'eq', value: 'pending' },
+                ],
+                { column: 'created_at', ascending: false },
+                10,
+              ) as Promise<any[]>,
             TTL.REALTIME,
           ),
         ]);
+
+        const rows = recRes.status === 'fulfilled' ? recRes.value : [];
+        if (recRes.status === 'rejected') {
+          const e = recRes.reason;
+          if (isTimeoutLike(e) && import.meta.env.DEV) {
+            console.debug('[Dashboard] time_records: timeout — cards de ponto sem dados até a próxima tentativa.');
+          } else {
+            console.error('[Dashboard] time_records:', e);
+          }
+        }
+
+        const balanceRows = balRes.status === 'fulfilled' ? balRes.value : [];
+        if (balRes.status === 'rejected') {
+          console.error('[Dashboard] time_balance:', balRes.reason);
+        }
+
+        const reqRows = reqRes.status === 'fulfilled' ? reqRes.value : [];
+        if (reqRes.status === 'rejected') {
+          console.error('[Dashboard] requests:', reqRes.reason);
+        }
 
         const mapped: TimeRecord[] =
           (rows ?? []).map((r: any) => ({

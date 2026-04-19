@@ -113,7 +113,7 @@ export async function calculateWorkday(
   }
 
   // Saldo banco de horas (último registro da tabela bank_hours para o funcionário até a data)
-  if (shift.banco_horas && isSupabaseConfigured) {
+  if (shift.banco_horas && isSupabaseConfigured()) {
     const bankRows = (await db.select(
       'bank_hours',
       [

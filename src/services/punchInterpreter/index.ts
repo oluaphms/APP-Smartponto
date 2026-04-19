@@ -71,7 +71,7 @@ export async function interpretPunchSequence(
     raw_records: [],
   };
 
-  if (!isSupabaseConfigured) return result;
+  if (!isSupabaseConfigured()) return result;
 
   const start = `${date}T00:00:00.000Z`;
   const end = `${date}T23:59:59.999Z`;

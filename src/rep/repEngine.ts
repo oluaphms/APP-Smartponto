@@ -98,7 +98,7 @@ export function normalizePunchRegistrationError(err: unknown): Error {
  * Usa RPC no Supabase para garantir sequência e hash no servidor.
  */
 export async function registerPunch(params: RegisterPunchParams): Promise<RegisterPunchResult> {
-  if (!isSupabaseConfigured || !supabase) {
+  if (!isSupabaseConfigured()) {
     throw new Error('Supabase não configurado. Não é possível registrar ponto REP-P.');
   }
   const {
@@ -143,7 +143,7 @@ const RPC_SECURE_NAME = 'rep_register_punch_secure';
  * Usa RPC rep_register_punch_secure quando disponível.
  */
 export async function registerPunchSecure(params: RegisterPunchSecureParams): Promise<RegisterPunchResult> {
-  if (!isSupabaseConfigured || !supabase) {
+  if (!isSupabaseConfigured()) {
     throw new Error('Supabase não configurado. Não é possível registrar ponto REP-P.');
   }
   const {
@@ -259,7 +259,7 @@ export function generatePointReceiptJson(receiptData: PointReceiptData): string 
  * Útil para auditoria e detecção de manipulação.
  */
 export async function validateIntegrity(companyId: string): Promise<IntegrityResult> {
-  if (!isSupabaseConfigured || !db) {
+  if (!isSupabaseConfigured() || !db) {
     return { valid: false, errors: ['Sistema não configurado para REP-P.'] };
   }
 

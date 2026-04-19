@@ -38,7 +38,7 @@ const AdminBankHours: React.FC = () => {
   const [loadingData, setLoadingData] = useState(false);
 
   useEffect(() => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     const load = async () => {
       // Otimização: carregar apenas colunas necessárias
       const usersRows = await queryCache.getOrFetch(
@@ -55,7 +55,7 @@ const AdminBankHours: React.FC = () => {
   }, [user?.companyId]);
 
   useEffect(() => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     const load = async () => {
       setLoadingData(true);
       try {

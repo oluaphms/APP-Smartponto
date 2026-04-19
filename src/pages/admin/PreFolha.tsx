@@ -55,7 +55,7 @@ const AdminPreFolha: React.FC = () => {
 
   // Carrega dados quando o período muda (apenas se datas válidas)
   const loadData = useCallback(async () => {
-    if (!user?.companyId || !isSupabaseConfigured || !dataInicio || !dataFim) {
+    if (!user?.companyId || !isSupabaseConfigured() || !dataInicio || !dataFim) {
       setLoadingData(false);
       return;
     }

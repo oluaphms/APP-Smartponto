@@ -6,6 +6,7 @@ import PageHeader from '../../components/PageHeader';
 import { db, auth, isSupabaseConfigured, resetSession } from '../../services/supabaseClient';
 import { resolveTenantId } from '../../services/tenantScope';
 import { invalidateCompanyListCaches } from '../../services/queryCache';
+import { useCatalogStore } from '../../stores/catalogStore';
 
 /** Chama a API para confirmar o e-mail do funcionário no Auth (permite login sem clicar em link). */
 async function confirmEmployeeEmailInAuth(email: string): Promise<void> {
@@ -258,7 +259,7 @@ const AdminEmployees: React.FC = () => {
   const [companyIdFromSession, setCompanyIdFromSession] = useState('');
   useEffect(() => {
     let cancelled = false;
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured()) {
       setCompanyIdFromSession('');
       return;
     }
@@ -376,21 +377,25 @@ const AdminEmployees: React.FC = () => {
   const estruturaSelectRef = useRef<HTMLSelectElement>(null);
 
   const loadData = async () => {
-    if (!effectiveCompanyId || !isSupabaseConfigured) {
+    if (!effectiveCompanyId || !isSupabaseConfigured()) {
       setLoadingData(false);
       return;
     }
     setLoadingData(true);
+    const loadingTimer = window.setTimeout(() => setLoadingData(false), 5000);
     try {
-      const [usersRows, legacyEmployeesRows, schedRows, shiftRows, deptRows, jobTitlesRows, motivosRows, estruturasRows, cidadesRows, estadosCivisRows] = await Promise.all([
+      await useCatalogStore.getState().ensureCatalog(effectiveCompanyId);
+      const catalog = useCatalogStore.getState().getCatalog(effectiveCompanyId);
+      const deptRows = catalog.departments;
+      const jobTitlesRows = catalog.jobTitles;
+      const estruturasRows = catalog.estruturas;
+
+      const [usersRows, legacyEmployeesRows, schedRows, shiftRows, motivosRows, cidadesRows, estadosCivisRows] = await Promise.all([
         db.select('users', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }], { column: 'created_at', ascending: false }) as Promise<any[]>,
         db.select('employees', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }]).catch(() => []) as Promise<any[]>,
         db.select('schedules', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }]) as Promise<any[]>,
         db.select('work_shifts', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }]).catch(() => []) as Promise<any[]>,
-        db.select('departments', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }]) as Promise<any[]>,
-        db.select('job_titles', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }]) as Promise<any[]>,
         db.select('motivo_demissao', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }]).catch(() => []) as Promise<any[]>,
-        db.select('estruturas', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }]).catch(() => []) as Promise<any[]>,
         db.select('cidades', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }]).catch(() => []) as Promise<any[]>,
         db.select('estados_civis', [{ column: 'company_id', operator: 'eq', value: effectiveCompanyId }]).catch(() => []) as Promise<any[]>,
       ]);
@@ -552,6 +557,7 @@ const AdminEmployees: React.FC = () => {
     } catch (e) {
       console.error(e);
     } finally {
+      window.clearTimeout(loadingTimer);
       setLoadingData(false);
     }
   };
@@ -690,7 +696,7 @@ const AdminEmployees: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured()) {
       setError('Supabase não configurado. Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.');
       scrollModalTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
@@ -1251,7 +1257,7 @@ const AdminEmployees: React.FC = () => {
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !effectiveCompanyId || !isSupabaseConfigured) return;
+    if (!file || !effectiveCompanyId || !isSupabaseConfigured()) return;
     setImportResult(null);
     setImportPreview(null);
     setImportParseError(null);

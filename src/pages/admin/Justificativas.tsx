@@ -92,7 +92,7 @@ const AdminJustificativas: React.FC = () => {
   );
 
   const load = async () => {
-    if (!user?.companyId || !isSupabaseConfigured) {
+    if (!user?.companyId || !isSupabaseConfigured()) {
       setLoadingData(false);
       return;
     }
@@ -133,7 +133,7 @@ const AdminJustificativas: React.FC = () => {
   useEffect(() => {
     const run = async () => {
       await load();
-      if (!user?.companyId || !isSupabaseConfigured) return;
+      if (!user?.companyId || !isSupabaseConfigured()) return;
       try {
         const eventosRows = (await db.select('eventos_folha', [
           { column: 'company_id', operator: 'eq', value: user.companyId },
@@ -216,7 +216,7 @@ const AdminJustificativas: React.FC = () => {
   const handleSave = async (e?: React.MouseEvent) => {
     e?.preventDefault();
     e?.stopPropagation();
-    if (!isSupabaseConfigured || !user?.companyId) {
+    if (!isSupabaseConfigured() || !user?.companyId) {
       setModalError('Configuração ou empresa não identificada.');
       return;
     }

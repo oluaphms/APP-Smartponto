@@ -5,6 +5,10 @@
 import { InAppNotification, NotificationStatus } from '../types';
 import { db, isSupabaseConfigured, supabase, type Filter } from './supabaseClient';
 
+/** Evita inundar o console quando vários componentes chamam getAll e o Supabase está lento. */
+let lastNotifSlowWarnAt = 0;
+const NOTIF_SLOW_WARN_INTERVAL_MS = 45_000;
+
 const STORAGE_KEY = 'smartponto_notifications';
 const MAX_LOCAL = 100;
 
@@ -37,7 +41,7 @@ export const NotificationService = {
       createdAt: new Date(),
     };
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured()) {
       try {
         await db.insert('notifications', {
           id: notif.id,
@@ -76,7 +80,7 @@ export const NotificationService = {
    * Por padrão exclui as já lidas (read = true) para não poluir o sino.
    */
   async getAll(userId: string, includeResolved = false): Promise<InAppNotification[]> {
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured()) {
       try {
         const filters: Filter[] = [
           { column: 'user_id', operator: 'eq', value: userId },
@@ -99,7 +103,14 @@ export const NotificationService = {
           /timeout/i.test(msg);
         if (e?.name !== 'AbortError' && !msg.includes('Lock broken') && !msg.includes('stole')) {
           if (isTimeout) {
-            console.warn('[notifications] Lista indisponível (rede lenta); usando notificações locais se houver.');
+            const now = Date.now();
+            if (now - lastNotifSlowWarnAt >= NOTIF_SLOW_WARN_INTERVAL_MS) {
+              lastNotifSlowWarnAt = now;
+              // Fallback esperado em rede lenta; não poluir o console (nível Verbose no DevTools).
+              console.debug(
+                '[notifications] Lista indisponível (rede lenta ou lock); usando notificações locais se houver.',
+              );
+            }
           } else {
             console.error('Get notifications Supabase failed:', msg);
           }
@@ -145,7 +156,7 @@ export const NotificationService = {
     }
 
     // Tentar atualizar no Supabase (background, não bloqueia)
-    if (isSupabaseConfigured && supabase) {
+    if (isSupabaseConfigured() && supabase) {
       try {
         // Tentar usar RPC primeiro
         await supabase.rpc('mark_notification_read', {
@@ -210,7 +221,7 @@ export const NotificationService = {
     }
 
     // Tentar atualizar no Supabase (background, não bloqueia)
-    if (isSupabaseConfigured && supabase) {
+    if (isSupabaseConfigured() && supabase) {
       try {
         // Tentar usar RPC de delete
         await supabase.rpc('delete_notification', {

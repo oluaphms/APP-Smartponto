@@ -48,7 +48,7 @@ const ReportOvertime: React.FC = () => {
   const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     (async () => {
       const cid = user.companyId!;
       const list = (await queryCache.getOrFetch(
@@ -67,7 +67,7 @@ const ReportOvertime: React.FC = () => {
   }, [user?.companyId]);
 
   useEffect(() => {
-    if (!user?.companyId || !isSupabaseConfigured || employees.length === 0) return;
+    if (!user?.companyId || !isSupabaseConfigured() || employees.length === 0) return;
     const cid = user.companyId!;
     const [y, m] = month.split('-').map(Number);
     let cancelled = false;

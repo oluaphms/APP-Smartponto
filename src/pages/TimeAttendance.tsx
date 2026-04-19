@@ -56,7 +56,7 @@ const TimeAttendancePage: React.FC = () => {
   const [companyIdFromSession, setCompanyIdFromSession] = useState('');
   useEffect(() => {
     let cancelled = false;
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured()) {
       setCompanyIdFromSession('');
       return;
     }
@@ -91,7 +91,7 @@ const TimeAttendancePage: React.FC = () => {
   }, [user, companyIdFromSession]);
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured || !effectiveCompanyId) return;
+    if (!user || !isSupabaseConfigured() || !effectiveCompanyId) return;
 
     const load = async () => {
       setIsLoadingData(true);
@@ -193,7 +193,7 @@ const TimeAttendancePage: React.FC = () => {
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isSupabaseConfigured || !user || !effectiveCompanyId) return;
+    if (!isSupabaseConfigured() || !user || !effectiveCompanyId) return;
     if (!form.employeeId || !form.date || !form.clockIn || !form.clockOut) return;
 
     setSaving(true);

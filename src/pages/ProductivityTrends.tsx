@@ -76,7 +76,7 @@ const ProductivityTrendsPage: React.FC = () => {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     const loadStaticData = async () => {
       try {
@@ -108,7 +108,7 @@ const ProductivityTrendsPage: React.FC = () => {
   }, [user]);
 
   const fetchLogs = async (overrideFilters?: FilterState) => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
     const activeFilters = overrideFilters ?? filters;
     setIsLoadingData(true);
     setError(null);

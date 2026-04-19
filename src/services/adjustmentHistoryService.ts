@@ -25,7 +25,7 @@ export const AdjustmentHistoryService = {
    * Obtém o histórico completo de um ajuste
    */
   async getAdjustmentHistory(adjustmentId: string): Promise<AdjustmentHistoryEntry[]> {
-    if (!checkSupabaseConfigured() || !supabase) return [];
+    if (!checkSupabaseConfigured()) return [];
 
     try {
       const { data, error } = await supabase
@@ -64,7 +64,7 @@ export const AdjustmentHistoryService = {
    * Obtém o histórico de múltiplos ajustes de uma vez
    */
   async getHistoryForAdjustments(adjustmentIds: string[]): Promise<AdjustmentHistoryEntry[]> {
-    if (!checkSupabaseConfigured() || !supabase) return [];
+    if (!checkSupabaseConfigured()) return [];
 
     try {
       const { data, error } = await supabase
@@ -110,7 +110,7 @@ export const AdjustmentHistoryService = {
     details: Record<string, any> | null,
     companyId: string | null
   ): Promise<void> {
-    if (!checkSupabaseConfigured() || !supabase) {
+    if (!checkSupabaseConfigured()) {
       console.warn('[AdjustmentHistoryService] Supabase not configured, skipping history record');
       return;
     }

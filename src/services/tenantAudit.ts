@@ -12,19 +12,22 @@ export async function logTenantAuditEvent(params: {
   action: string;
   details?: Record<string, unknown>;
 }): Promise<void> {
-  if (!isSupabaseConfigured || !supabase) return;
+  if (!isSupabaseConfigured()) return;
   const tid = (params.tenantId || '').trim();
   if (!tid) return;
   try {
     let userAgent: string | undefined;
     if (typeof navigator !== 'undefined') userAgent = navigator.userAgent;
-    await supabase.from('tenant_audit_log').insert({
+    const { error } = await supabase.from('tenant_audit_log').insert({
       tenant_id: tid,
       user_id: params.userId,
       action: params.action,
       details: params.details ?? {},
       user_agent: userAgent,
     });
+    if (error && import.meta.env?.DEV && typeof console !== 'undefined') {
+      console.debug('[tenantAudit]', error.code ?? '', error.message);
+    }
   } catch {
     // tabela pode não existir até a migration — ignorar
   }

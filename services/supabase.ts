@@ -1,23 +1,34 @@
 /**
  * Supabase Configuration and Initialization
- * 
- * ETAPA 1 - Inicialização segura e tardia
- * Usa getSupabaseClient() para lazy initialization
+ *
+ * Cliente sempre via singleton `getSupabaseClient()` — o export `supabase` é um Proxy
+ * que encaminha para a instância atual (evita valor congelado no primeiro import).
  */
 
-import { getSupabaseClient, getSupabaseClientOrThrow, resetSession } from '../src/lib/supabaseClient';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { getSupabaseClient, getSupabaseClientOrThrow, resetSession, getSupabase } from '../src/lib/supabaseClient';
 
-// Re-export resetSession para compatibilidade
-export { resetSession };
+export { resetSession, getSupabase, getSupabaseClient, getSupabaseClientOrThrow };
 
-// Exportar o cliente (será null até estar pronto)
-export const supabase = getSupabaseClient();
+/** Encaminha para o singleton; não recria cliente a cada acesso. */
+export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
+  get(_target, prop) {
+    if (prop === 'then') return undefined;
+    const client = getSupabaseClient();
+    if (!client) {
+      console.warn('[supabase] acesso sem cliente inicializado:', String(prop));
+      return undefined;
+    }
+    const value = (client as unknown as Record<string | symbol, unknown>)[prop as string];
+    return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(client) : value;
+  },
+}) as SupabaseClient;
 
-// Verificar se está configurado (valor do momento do import - para compatibilidade)
-export const isSupabaseConfigured = !!supabase;
+/** Verificação em tempo real (não use valor congelado de import). */
+export function isSupabaseConfigured(): boolean {
+  return !!getSupabaseClient();
+}
 
-// Função para verificar se está configurado em tempo de execução (dinâmico)
-// Use esta função em vez da constante quando precisar de verificação atualizada
 export function checkSupabaseConfigured(): boolean {
   return !!getSupabaseClient();
 }

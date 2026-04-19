@@ -11,7 +11,7 @@ export async function createTenantOnboarding(params: {
   slug: string;
   plan?: 'free' | 'pro' | 'enterprise';
 }): Promise<{ data: CreateTenantResult | null; error: Error | null }> {
-  if (!isSupabaseConfigured || !supabase) {
+  if (!isSupabaseConfigured()) {
     return { data: null, error: new Error('Supabase não configurado') };
   }
   const { data, error } = await supabase.rpc('create_tenant_onboarding', {

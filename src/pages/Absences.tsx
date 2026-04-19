@@ -37,7 +37,7 @@ const AbsencesPage: React.FC = () => {
   const isAdminView = user?.role === 'admin' || user?.role === 'hr';
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
 
     let cancelled = false;
     const load = async () => {
@@ -94,7 +94,7 @@ const AbsencesPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !isSupabaseConfigured || !form.absence_date || !form.reason) return;
+    if (!user || !isSupabaseConfigured() || !form.absence_date || !form.reason) return;
 
     try {
       const id = crypto.randomUUID();
@@ -137,7 +137,7 @@ const AbsencesPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured()) return;
     setDeletingId(id);
     try {
       await db.delete('absences', id);

@@ -25,6 +25,64 @@ export async function buscarDepartamentos(companyId: string): Promise<AdminTimes
   return (rows ?? []).map((d: any) => ({ id: d.id, name: d.name }));
 }
 
+/** Junta `users` + `employees` (legacy) como na tela Colaboradores — sem excluir admin. */
+function mergeEmployeesForEspelho(usersRows: any[], legacyRows: any[]): AdminTimesheetEmployee[] {
+  const byEmail = new Map(
+    (usersRows ?? [])
+      .filter((u: any) => u?.email)
+      .map((u: any) => [String(u.email).toLowerCase().trim(), u.id as string]),
+  );
+  const fromUsers: AdminTimesheetEmployee[] = (usersRows ?? []).map((u: any) => ({
+    id: u.id,
+    nome: u.nome || u.email || 'Colaborador',
+    department_id: u.department_id,
+    role: u.role,
+  }));
+  const fromLegacy: AdminTimesheetEmployee[] = (legacyRows ?? [])
+    .filter((e: any) => {
+      const email = String(e?.email || '')
+        .trim()
+        .toLowerCase();
+      if (!email) return false;
+      return !byEmail.has(email);
+    })
+    .map((e: any) => ({
+      id: String(e.id || ''),
+      nome: e.nome || e.nome_completo || e.email || 'Colaborador',
+      department_id: e.department_id || e.departamento_id,
+      role: e.role,
+    }))
+    .filter((e) => e.id);
+
+  const seen = new Set<string>();
+  const out: AdminTimesheetEmployee[] = [];
+  for (const e of [...fromUsers, ...fromLegacy]) {
+    if (seen.has(e.id)) continue;
+    seen.add(e.id);
+    out.push(e);
+  }
+  return out;
+}
+
+/**
+ * Colaboradores e departamentos para os filtros do espelho — **não depende do período**
+ * (evita dropdown vazio antes de escolher datas).
+ */
+export async function buscarFiltrosEspelhoAdmin(companyId: string): Promise<{
+  employees: AdminTimesheetEmployee[];
+  departments: AdminTimesheetDepartment[];
+}> {
+  const [usersRows, departmentsRows, legacyRows] = await Promise.all([
+    db.select('users', [{ column: 'company_id', operator: 'eq', value: companyId }]) as Promise<any[]>,
+    db.select('departments', [{ column: 'company_id', operator: 'eq', value: companyId }]) as Promise<any[]>,
+    db.select('employees', [{ column: 'company_id', operator: 'eq', value: companyId }]).catch(() => []) as Promise<any[]>,
+  ]);
+  return {
+    employees: mergeEmployeesForEspelho(usersRows, legacyRows),
+    departments: (departmentsRows ?? []).map((d: any) => ({ id: d.id, name: d.name })),
+  };
+}
+
 /** Registros de ponto no período (empresa). */
 export async function buscarEspelhoRegistros(
   companyId: string,
@@ -62,7 +120,7 @@ export async function buscarEspelhoAdmin(
   const periodStartTs = `${periodStart}T00:00:00`;
   const periodEndTs = `${periodEnd}T23:59:59.999`;
 
-  const [usersRows, recordsRows, departmentsRows, shiftsRows, holidaysRows] = await Promise.all([
+  const [usersRows, recordsRows, departmentsRows, legacyEmployeesRows, shiftsRows, holidaysRows] = await Promise.all([
     db.select('users', [{ column: 'company_id', operator: 'eq', value: companyId }]) as Promise<any[]>,
     db.select(
       'time_records',
@@ -75,6 +133,7 @@ export async function buscarEspelhoAdmin(
       8000,
     ) as Promise<any[]>,
     db.select('departments', [{ column: 'company_id', operator: 'eq', value: companyId }]) as Promise<any[]>,
+    db.select('employees', [{ column: 'company_id', operator: 'eq', value: companyId }]).catch(() => []) as Promise<any[]>,
     db.select('employee_shift_schedule', [{ column: 'company_id', operator: 'eq', value: companyId }]).catch(() => []) as Promise<any[]>,
     db
       .select('holidays', [{ column: 'company_id', operator: 'eq', value: companyId }])
@@ -83,14 +142,7 @@ export async function buscarEspelhoAdmin(
       ) as Promise<any[]>,
   ]);
 
-  const employees: AdminTimesheetEmployee[] = (usersRows ?? [])
-    .filter((u: any) => u.role !== 'admin' && u.role !== 'super_admin')
-    .map((u: any) => ({
-      id: u.id,
-      nome: u.nome || u.email,
-      department_id: u.department_id,
-      role: u.role,
-    }));
+  const employees = mergeEmployeesForEspelho(usersRows, legacyEmployeesRows);
   const departments: AdminTimesheetDepartment[] = (departmentsRows ?? []).map((d: any) => ({
     id: d.id,
     name: d.name,

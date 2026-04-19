@@ -151,7 +151,7 @@ export async function validateEmployeeImport(
   const existingCpfs = new Set<string>();
   const existingEmails = new Set<string>();
 
-  if (isSupabaseConfigured && companyId) {
+  if (isSupabaseConfigured() && companyId) {
     try {
       const [empRows, userRows] = await Promise.all([
         db.select('employees', [{ column: 'company_id', operator: 'eq', value: companyId }]) as Promise<{ cpf?: string; email?: string }[]>,
@@ -246,7 +246,7 @@ export async function importEmployeesBatch(
   companyId: string,
   importedBy: string
 ): Promise<ImportLogResult> {
-  if (!isSupabaseConfigured || !supabase) {
+  if (!isSupabaseConfigured()) {
     throw new Error('Supabase não configurado.');
   }
 

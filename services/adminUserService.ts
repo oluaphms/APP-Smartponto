@@ -39,7 +39,7 @@ class AdminUserService {
     admin: User,
     data: CreateUserData
   ): Promise<CreateUserResult> {
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured()) {
       return { success: false, error: 'Supabase não configurado' };
     }
 
@@ -140,7 +140,7 @@ class AdminUserService {
     admin: User,
     file: File
   ): Promise<ImportResult> {
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured()) {
       return { total: 0, success: 0, errors: [{ row: 0, email: '', error: 'Supabase não configurado' }] };
     }
 

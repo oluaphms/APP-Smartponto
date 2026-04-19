@@ -148,7 +148,7 @@ const AdminShifts: React.FC = () => {
   const toTimeStr = (v: string) => (v && v.length >= 5 ? v.slice(0, 5) : '—');
 
   const load = async () => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured()) return;
     setLoadingData(true);
     try {
       const filters: Filter[] | undefined = user?.companyId
@@ -303,7 +303,7 @@ const AdminShifts: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured()) return;
     const nome = (form.description || form.name || '').trim() || (form.number ? `Horário ${form.number}` : 'Novo horário');
     if (!nome) {
       setMessage({ type: 'error', text: 'Informe a descrição (nome) do horário.' });

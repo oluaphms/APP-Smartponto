@@ -154,7 +154,7 @@ function expectedMinutesFromSchedule(s: WorkScheduleInfo): number {
  * Busca registros de ponto do colaborador em uma data (timezone local do ISO).
  */
 export async function getDayRecords(employeeId: string, dateStr: string): Promise<RawTimeRecord[]> {
-  if (!isSupabaseConfigured) return [];
+  if (!isSupabaseConfigured()) return [];
 
   const start = `${dateStr}T00:00:00`;
   const end = `${dateStr}T23:59:59.999`;
@@ -180,7 +180,7 @@ export async function getEmployeeSchedule(
   employeeId: string,
   companyId: string
 ): Promise<WorkScheduleInfo | null> {
-  if (!isSupabaseConfigured || !employeeId) return null;
+  if (!isSupabaseConfigured() || !employeeId) return null;
 
   try {
     const users = (await db.select(
@@ -358,7 +358,7 @@ export async function updateBankHours(
   hoursToRemove: number,
   source: string
 ): Promise<{ balance: number }> {
-  if (!isSupabaseConfigured) return { balance: 0 };
+  if (!isSupabaseConfigured()) return { balance: 0 };
 
   try {
     const prevRows = (await db.select(

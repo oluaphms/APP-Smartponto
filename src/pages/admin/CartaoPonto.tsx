@@ -117,7 +117,7 @@ const AdminCartaoPonto: React.FC = () => {
   }, [periodStart, periodEnd]);
 
   const loadEmployees = useCallback(async () => {
-    if (!user?.companyId || !isSupabaseConfigured) return;
+    if (!user?.companyId || !isSupabaseConfigured()) return;
     try {
       const rows = (await db.select('users', [{ column: 'company_id', operator: 'eq', value: user.companyId }])) as any[];
       setEmployees(
@@ -134,7 +134,7 @@ const AdminCartaoPonto: React.FC = () => {
   }, [user?.companyId]);
 
   const loadRecordsAndDias = useCallback(async () => {
-    if (!user?.companyId || !selectedEmployee || !isSupabaseConfigured || !periodStart || !periodEnd) {
+    if (!user?.companyId || !selectedEmployee || !isSupabaseConfigured() || !periodStart || !periodEnd) {
       setRecords([]);
       setDiasMeta({});
       setLoadingData(false);
@@ -237,7 +237,7 @@ const AdminCartaoPonto: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!selectedEmployee || !user?.companyId || !isSupabaseConfigured || dirty.size === 0) {
+    if (!selectedEmployee || !user?.companyId || !isSupabaseConfigured() || dirty.size === 0) {
       if (dirty.size === 0) setMessage({ type: 'error', text: 'Nenhuma alteração para salvar.' });
       return;
     }
