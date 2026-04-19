@@ -82,7 +82,9 @@ const prefetched = new Set<string>();
 function normalizePath(path: string): string {
   const p = path.split('?')[0].trim();
   if (p.length <= 1) return p;
-  return p.replace(/\/$/, '');
+  const clean = p.replace(/\/$/, '');
+  if (clean.startsWith('/admin/reports/read/')) return '/admin/reports/read/:slug';
+  return clean;
 }
 
 /**

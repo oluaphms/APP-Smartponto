@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
-import { TrendingUp } from 'lucide-react';
+import { Link, Navigate } from 'react-router-dom';
+import { ArrowLeft, TrendingUp } from 'lucide-react';
 import { useCurrentUser } from '../../../hooks/useCurrentUser';
 import PageHeader from '../../../components/PageHeader';
 import { db, isSupabaseConfigured } from '../../../services/supabaseClient';
@@ -167,6 +167,12 @@ const ReportOvertime: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <Link
+        to="/admin/reports"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+      >
+        <ArrowLeft className="w-4 h-4" /> Voltar aos relatórios
+      </Link>
       <PageHeader
         title="Relatório de Horas Extras"
         subtitle="Visão consolidada e detalhada (50% / 100%) por colaborador"

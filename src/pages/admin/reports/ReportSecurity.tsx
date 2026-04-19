@@ -3,8 +3,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
-import { ShieldAlert, FileDown } from 'lucide-react';
+import { Link, Navigate } from 'react-router-dom';
+import { ArrowLeft, ShieldAlert, FileDown } from 'lucide-react';
 import { useCurrentUser } from '../../../hooks/useCurrentUser';
 import PageHeader from '../../../components/PageHeader';
 import { db, isSupabaseConfigured } from '../../../services/supabaseClient';
@@ -108,6 +108,12 @@ export default function ReportSecurity() {
 
   return (
     <div className="space-y-6">
+      <Link
+        to="/admin/reports"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+      >
+        <ArrowLeft className="w-4 h-4" /> Voltar aos relatórios
+      </Link>
       <PageHeader
         title="Relatório de Segurança (Antifraude)"
         subtitle="Registros suspeitos, score de fraude e localização"

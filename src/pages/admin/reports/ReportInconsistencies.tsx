@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
-import { AlertTriangle } from 'lucide-react';
+import { Link, Navigate } from 'react-router-dom';
+import { ArrowLeft, AlertTriangle } from 'lucide-react';
 import { useCurrentUser } from '../../../hooks/useCurrentUser';
 import PageHeader from '../../../components/PageHeader';
 import { db, isSupabaseConfigured } from '../../../services/supabaseClient';
@@ -78,6 +78,12 @@ const ReportInconsistencies: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <Link
+        to="/admin/reports"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+      >
+        <ArrowLeft className="w-4 h-4" /> Voltar aos relatórios
+      </Link>
       <PageHeader title="Relatório de Inconsistências" subtitle="Faltas de entrada/saída, intervalo incompleto, duplicadas" icon={<AlertTriangle className="w-5 h-5" />} />
       <div className="flex flex-wrap gap-4 items-center">
         <label className="flex items-center gap-2">

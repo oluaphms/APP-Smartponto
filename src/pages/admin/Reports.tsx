@@ -2,26 +2,17 @@ import React, { useEffect, useMemo } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import {
   BarChart3,
-  Briefcase,
-  Building2,
-  Calculator,
   CalendarClock,
   CalendarDays,
   ChevronRight,
-  ClipboardList,
   Clock,
-  FileSpreadsheet,
-  HelpCircle,
   LayoutGrid,
   List,
-  Package,
   RefreshCw,
   Scale,
   ShieldAlert,
-  Tag,
   TrendingUp,
   UserCircle2,
-  Users,
   AlertTriangle,
 } from 'lucide-react';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
@@ -55,130 +46,49 @@ const AdminReports: React.FC = () => {
   const sections: Section[] = useMemo(
     () => [
       {
-        title: 'Relatórios',
+        title: 'Leituras',
         items: [
-          {
-            label: 'Cálculos',
-            to: `${READ}/calculos`,
-            description: 'Hub de folha, arquivamento e colunas de cálculo',
-            icon: Calculator,
-          },
           {
             label: 'Ponto Diário',
             to: `${READ}/ponto-diario`,
-            description: 'Abre a visão de leitura do ponto diário',
+            description: 'Leitura do ponto diário',
             icon: CalendarDays,
           },
           {
-            label: 'Geração de Arquivos Fiscais',
-            to: `${READ}/geracao-arquivos-fiscais`,
-            description: 'Acesso à geração / leitura fiscal',
-            icon: FileSpreadsheet,
+            label: 'Absenteísmo',
+            to: `${READ}/absenteismo`,
+            description: 'Resumo de ausências',
+            icon: UserCircle2,
           },
           {
-            label: 'Funcionários',
-            to: `${READ}/funcionarios`,
-            description: 'Listagem somente leitura',
-            icon: Users,
+            label: 'Afastamentos',
+            to: `${READ}/afastamentos`,
+            description: 'Análise de ausências',
+            icon: CalendarClock,
           },
           {
-            label: 'Distribuição dos Horários',
+            label: 'Histórico de Horários',
+            to: `${READ}/historico-horarios`,
+            description: 'Vínculos por horário/escala',
+            icon: Clock,
+          },
+          {
+            label: 'Distribuição de Horários',
             to: `${READ}/distribuicao-horarios`,
-            description: 'Escolha horários ou escalas, listagem ou gráfico',
+            description: 'Distribuição por horário/escala',
             icon: LayoutGrid,
           },
           {
             label: 'Listagem de Horários',
             to: `${READ}/listagem-horarios`,
-            description: 'Relatório em tabela (como o impresso legado)',
+            description: 'Tabela de horários',
             icon: List,
           },
           {
             label: 'Escalas Cíclicas',
             to: `${READ}/escalas-ciclicas`,
-            description: 'Leitura das escalas cíclicas cadastradas',
+            description: 'Escalas cadastradas',
             icon: RefreshCw,
-          },
-        ],
-      },
-      {
-        title: 'Ocorrências',
-        items: [
-          {
-            label: 'Absenteísmo',
-            to: `${READ}/absenteismo`,
-            description: 'Leitura dos registros de ausência',
-            icon: UserCircle2,
-          },
-          {
-            label: 'Batidas rejeitadas',
-            to: `${READ}/batidas-rejeitadas`,
-            description: 'Abre o relatório de segurança / antifraude',
-            icon: ShieldAlert,
-          },
-          {
-            label: 'Funções',
-            to: `${READ}/funcoes`,
-            description: 'Cargos cadastrados (somente leitura)',
-            icon: Briefcase,
-          },
-          {
-            label: 'Inconsistências',
-            to: `${READ}/inconsistencias`,
-            description: 'Relatório analítico de inconsistências',
-            icon: AlertTriangle,
-          },
-          {
-            label: 'Afastamentos',
-            to: `${READ}/afastamentos`,
-            description: 'Atalho para a análise de ausências',
-            icon: CalendarClock,
-          },
-        ],
-      },
-      {
-        title: 'Quadro de Horários',
-        items: [
-          {
-            label: 'Números Provisórios',
-            to: `${READ}/numeros-provisorios`,
-            description: 'Em desenvolvimento (leitura)',
-            icon: Package,
-          },
-          {
-            label: 'Histórico de Horários',
-            to: `${READ}/historico-horarios`,
-            description: 'Vínculos colaborador × horário × escala',
-            icon: Clock,
-          },
-          {
-            label: 'Histórico de Centro de Custos',
-            to: `${READ}/historico-centro-custos`,
-            description: 'Estruturas / centros de custo',
-            icon: Building2,
-          },
-        ],
-      },
-      {
-        title: 'Outros',
-        items: [
-          {
-            label: 'Etiquetas',
-            to: `${READ}/etiquetas`,
-            description: 'Em desenvolvimento (leitura)',
-            icon: Tag,
-          },
-          {
-            label: 'Solicitações Web',
-            to: '/admin/requests',
-            description: 'Pedidos e aprovações',
-            icon: ClipboardList,
-          },
-          {
-            label: 'Janela Ajuda',
-            to: '/admin/ajuda',
-            description: 'Manual e suporte',
-            icon: HelpCircle,
           },
         ],
       },
@@ -189,9 +99,18 @@ const AdminReports: React.FC = () => {
   const analyticalReports = useMemo(
     () => [
       {
+        id: 'inconsistency',
+        title: 'Inconsistências',
+        description: 'Erros e faltas no ponto',
+        icon: AlertTriangle,
+        color: 'from-red-500 to-red-600',
+        path: '/admin/reports/inconsistencies',
+        badge: 'Essencial',
+      },
+      {
         id: 'journey',
-        title: 'Relatório de Jornada',
-        description: 'O funcionário cumpriu a jornada?',
+        title: 'Jornada',
+        description: 'Cumprimento da jornada',
         icon: Clock,
         color: 'from-blue-500 to-blue-600',
         path: '/admin/reports/work-hours',
@@ -199,26 +118,17 @@ const AdminReports: React.FC = () => {
       },
       {
         id: 'overtime',
-        title: 'Relatório de Horas Extras',
-        description: 'Quanto foi trabalhado além da jornada?',
+        title: 'Horas Extras',
+        description: 'Excedentes da jornada',
         icon: TrendingUp,
         color: 'from-orange-500 to-orange-600',
         path: '/admin/reports/overtime',
-        badge: 'Essencial',
-      },
-      {
-        id: 'inconsistency',
-        title: 'Relatório de Inconsistências',
-        description: 'O que está errado no ponto?',
-        icon: AlertTriangle,
-        color: 'from-red-500 to-red-600',
-        path: '/admin/reports/inconsistencies',
         badge: 'Importante',
       },
       {
         id: 'bankHours',
-        title: 'Relatório de Banco de Horas',
-        description: 'Qual o saldo de cada funcionário?',
+        title: 'Banco de Horas',
+        description: 'Saldo por funcionário',
         icon: Scale,
         color: 'from-purple-500 to-purple-600',
         path: '/admin/reports/bank-hours',
@@ -226,21 +136,12 @@ const AdminReports: React.FC = () => {
       },
       {
         id: 'security',
-        title: 'Relatório de Segurança (Antifraude)',
-        description: 'Existe comportamento suspeito?',
+        title: 'Segurança (Antifraude)',
+        description: 'Sinais de fraude',
         icon: ShieldAlert,
         color: 'from-red-600 to-red-700',
         path: '/admin/reports/security',
-        badge: 'Diferencial',
-      },
-      {
-        id: 'workedHours',
-        title: 'Relatório de Horas Trabalhadas',
-        description: 'Quanto cada funcionário trabalhou?',
-        icon: BarChart3,
-        color: 'from-green-500 to-green-600',
-        path: '/admin/reports/work-hours',
-        badge: 'Essencial',
+        badge: 'Avançado',
       },
     ],
     [],
@@ -249,19 +150,22 @@ const AdminReports: React.FC = () => {
   if (loading) return <LoadingState message="Carregando..." />;
   if (!user) return <Navigate to="/" replace />;
 
-  const indexShortcutCount = sections.reduce((acc, s) => acc + s.items.filter((i) => i.to && !i.soon).length, 0);
+  const visibleSections = sections.filter((s) => s.items.length > 0);
+  const indexShortcutCount = visibleSections.reduce((acc, s) => acc + s.items.filter((i) => i.to && !i.soon).length, 0);
   const analyticalPathCount = new Set(analyticalReports.map((r) => r.path)).size;
+  const soonItems = visibleSections.flatMap((s) => s.items.filter((i) => i.soon));
+  const soonCount = soonItems.length;
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Relatórios"
-        subtitle="Índice de relatórios e telas correlatas (modelo ERP). Use os atalhos analíticos abaixo para PDF/Excel."
+        subtitle="Relatórios analíticos e leituras resumidas para auditoria."
         icon={<BarChart3 className="w-5 h-5" />}
       />
 
       <div className="space-y-10">
-        {sections.map((section) => (
+        {visibleSections.map((section) => (
           <section key={section.title} className="space-y-3">
             <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700 pb-2">
               {section.title}
@@ -384,11 +288,15 @@ const AdminReports: React.FC = () => {
           <div className="text-3xl font-bold text-slate-900 dark:text-white">2</div>
           <div className="text-xs text-slate-600 dark:text-slate-400 mt-1">PDF + Excel (onde disponível)</div>
         </div>
-        <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 p-4">
-          <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Em breve</div>
-          <div className="text-3xl font-bold text-slate-900 dark:text-white">2</div>
-          <div className="text-xs text-slate-600 dark:text-slate-400 mt-1">Números provisórios · Etiquetas</div>
-        </div>
+        {soonCount > 0 && (
+          <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 p-4">
+            <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Em breve</div>
+            <div className="text-3xl font-bold text-slate-900 dark:text-white">{soonCount}</div>
+            <div className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+              {soonItems.map((i) => i.label).join(' · ')}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
