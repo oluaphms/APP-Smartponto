@@ -86,7 +86,6 @@ export const navigationGroups: Record<string, NavigationGroupSchema> = {
     icon: 'zap',
     items: [
       { name: 'Relógios REP', nameKey: 'menu.repDevices', path: '/admin/rep-devices', roles: ['admin', 'hr'] },
-      { name: 'Monitor REP', nameKey: 'menu.repMonitor', path: '/admin/rep-monitor', roles: ['admin', 'hr'] },
       { name: 'Importar AFD', nameKey: 'menu.importRep', path: '/admin/import-rep', roles: ['admin', 'hr'] },
       { name: 'Fiscalização REP-P', nameKey: 'menu.fiscalizacao', path: '/admin/fiscalizacao', roles: ['admin', 'hr'] },
       { name: 'Segurança e Antifraude', nameKey: 'menu.securityAntifraud', path: '/admin/security', roles: ['admin', 'hr'] },

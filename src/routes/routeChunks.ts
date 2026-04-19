@@ -35,7 +35,6 @@ export const ROUTE_LOADERS = {
   '/admin/ponto-diario-leitura': () => import('../pages/admin/PontoDiario'),
   '/admin/arquivos-fiscais': () => import('../pages/admin/ArquivosFiscais'),
   '/admin/rep-devices': () => import('../pages/admin/RepDevices'),
-  '/admin/rep-monitor': () => import('../pages/admin/RepMonitor'),
   '/admin/import-rep': () => import('../pages/admin/ImportRep'),
   '/admin/fiscalizacao': () => import('../pages/admin/Fiscalizacao'),
   '/admin/security': () => import('../pages/admin/Security'),

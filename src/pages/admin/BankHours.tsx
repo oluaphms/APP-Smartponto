@@ -6,7 +6,6 @@ import PageHeader from '../../components/PageHeader';
 import { db, isSupabaseConfigured, type Filter } from '../../services/supabaseClient';
 import { LoadingState, Input } from '../../../components/UI';
 import { formatDateForTablePtBr } from '../../utils/timeCalculations';
-import RoleGuard from '../../components/auth/RoleGuard';
 import { queryCache, TTL } from '../../services/queryCache';
 
 interface BankHoursRow {
@@ -112,8 +111,7 @@ const AdminBankHours: React.FC = () => {
   const employeeName = (id: string) => employees.find((e) => e.id === id)?.nome || id?.slice(0, 8) || '—';
 
   return (
-    <RoleGuard user={user} allowedRoles={['admin', 'hr']}>
-      <div className="space-y-6">
+    <div className="space-y-6">
         <PageHeader
           title="Banco de Horas"
           subtitle="Saldo e histórico de créditos e débitos por funcionário"
@@ -221,8 +219,7 @@ const AdminBankHours: React.FC = () => {
             </div>
           </div>
         )}
-      </div>
-    </RoleGuard>
+    </div>
   );
 };
 

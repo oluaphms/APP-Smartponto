@@ -99,7 +99,6 @@ import {
   AdminReports,
   ReportReadPage,
   AdminRepDevices,
-  AdminRepMonitor,
   AdminSchedules,
   AdminSecurity,
   AdminSettings,
@@ -1370,7 +1369,6 @@ const AppMain: React.FC = () => {
               <Route path="ponto-diario-leitura" element={<AdminPontoDiario />} />
               <Route path="arquivos-fiscais" element={<AdminArquivosFiscais />} />
               <Route path="rep-devices" element={<AdminRepDevices />} />
-              <Route path="rep-monitor" element={<AdminRepMonitor />} />
               <Route path="import-rep" element={<AdminImportRep />} />
               <Route path="live-attendance" element={<Navigate to="/admin/monitoring" replace />} />
               <Route path="fiscalizacao" element={<AdminFiscalizacao />} />
