@@ -65,6 +65,7 @@ const AdminTimesheet: React.FC = () => {
   const [filterDepartmentId, setFilterDepartmentId] = useState('');
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd] = useState('');
+  const [recordTypeFilter, setRecordTypeFilter] = useState<'all' | 'manual' | 'normal'>('all');
   const todayMax = useMemo(() => localDateKey(), []);
 
   const periodValid =
@@ -193,8 +194,11 @@ const AdminTimesheet: React.FC = () => {
 
   const displayRecords = useMemo(() => {
     if (!filterUserId) return [];
-    return records.filter((r) => sameUserId(r.user_id, filterUserId));
-  }, [records, filterUserId]);
+    const byUser = records.filter((r) => sameUserId(r.user_id, filterUserId));
+    if (recordTypeFilter === 'all') return byUser;
+    if (recordTypeFilter === 'manual') return byUser.filter((r) => isManualRecord(r));
+    return byUser.filter((r) => !isManualRecord(r));
+  }, [records, filterUserId, recordTypeFilter]);
 
   const empMirror = useMemo(() => {
     if (!periodValid) return new Map<string, DayMirror>();
@@ -575,16 +579,43 @@ const AdminTimesheet: React.FC = () => {
         </div>
       </section>
 
-      {/* Legenda */}
-      <div className="flex flex-wrap gap-4 text-sm text-slate-600 dark:text-slate-400 print:text-xs">
-        <span className="inline-flex items-center gap-2">
+      {/* Legenda + filtro de batidas */}
+      <div className="flex flex-wrap gap-3 text-sm text-slate-600 dark:text-slate-400 print:text-xs">
+        <button
+          type="button"
+          onClick={() => setRecordTypeFilter('manual')}
+          className={`inline-flex items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors ${
+            recordTypeFilter === 'manual'
+              ? 'bg-indigo-600 text-white'
+              : 'bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
+          }`}
+        >
           <span className="w-3 h-3 rounded-full bg-blue-500" />
           Batida manual (*)
-        </span>
-        <span className="inline-flex items-center gap-2">
+        </button>
+        <button
+          type="button"
+          onClick={() => setRecordTypeFilter('normal')}
+          className={`inline-flex items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors ${
+            recordTypeFilter === 'normal'
+              ? 'bg-indigo-600 text-white'
+              : 'bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
+          }`}
+        >
           <span className="w-3 h-3 rounded-full border border-slate-400" />
           Batida normal
-        </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setRecordTypeFilter('all')}
+          className={`inline-flex items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors ${
+            recordTypeFilter === 'all'
+              ? 'bg-indigo-600 text-white'
+              : 'bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
+          }`}
+        >
+          Mostrar todas
+        </button>
         <span className="inline-flex items-center gap-2">
           <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-800">FOLGA</span> /
           <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-800">FERIADO</span>

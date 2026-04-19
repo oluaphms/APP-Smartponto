@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { FileText, Info, LifeBuoy, ShieldCheck, FileSignature } from 'lucide-react';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
@@ -10,7 +10,7 @@ import { supabase, isSupabaseConfigured } from '../../services/supabaseClient';
 const AdminAjuda: React.FC = () => {
   const { user, loading } = useCurrentUser();
 
-  type HelpTopic =
+  type BaseHelpTopic =
     | 'instalacao'
     | 'atualizacao'
     | 'tela'
@@ -22,6 +22,35 @@ const AdminAjuda: React.FC = () => {
     | 'ajuda'
     | 'sobre';
 
+  const manualTopics = [
+    { id: 'manual:colaboradores', label: 'Colaboradores', file: 'colaboradores.md' },
+    { id: 'manual:departamentos', label: 'Departamentos', file: 'departamentos.md' },
+    { id: 'manual:cargos', label: 'Cargos', file: 'cargos.md' },
+    { id: 'manual:estruturas', label: 'Estruturas', file: 'estruturas.md' },
+    { id: 'manual:espelho-de-ponto', label: 'Espelho de Ponto', file: 'espelho-de-ponto.md' },
+    { id: 'manual:calculos', label: 'Cálculos', file: 'calculos.md' },
+    { id: 'manual:jornada-de-trabalho', label: 'Jornada de Trabalho', file: 'jornada-de-trabalho.md' },
+    { id: 'manual:escalas', label: 'Escalas', file: 'escalas.md' },
+    { id: 'manual:horarios', label: 'Horários', file: 'horarios.md' },
+    { id: 'manual:banco-de-horas', label: 'Banco de Horas', file: 'banco-de-horas.md' },
+    { id: 'manual:ausencias', label: 'Ausências', file: 'ausencias.md' },
+    { id: 'manual:solicitacoes', label: 'Solicitações', file: 'solicitacoes.md' },
+    { id: 'manual:justificativas', label: 'Justificativas', file: 'justificativas.md' },
+    { id: 'manual:monitoramento', label: 'Monitoramento', file: 'monitoramento.md' },
+    { id: 'manual:relatorios', label: 'Relatórios', file: 'relatorios.md' },
+    { id: 'manual:pre-folha-jornada', label: 'Pré-Folha (Jornada)', file: 'pre-folha-jornada.md' },
+    { id: 'manual:relogios-rep', label: 'Relógios REP', file: 'relogios-rep.md' },
+    { id: 'manual:importar-afd', label: 'Importar AFD', file: 'importar-afd.md' },
+    { id: 'manual:fiscalizacao-rep-p', label: 'Fiscalização REP-P', file: 'fiscalizacao-rep-p.md' },
+    { id: 'manual:seguranca-e-antifraude', label: 'Segurança e Antifraude', file: 'seguranca-e-antifraude.md' },
+    { id: 'manual:empresa', label: 'Empresa', file: 'empresa.md' },
+    { id: 'manual:configuracoes', label: 'Configurações', file: 'configuracoes.md' },
+    { id: 'manual:ajuda', label: 'Ajuda', file: 'ajuda.md' },
+  ] as const;
+
+  type ManualHelpTopic = (typeof manualTopics)[number]['id'];
+  type HelpTopic = BaseHelpTopic | ManualHelpTopic;
+
   type HelpCategory = {
     id: string | number;
     slug: HelpTopic;
@@ -29,14 +58,110 @@ const AdminAjuda: React.FC = () => {
     order_index: number | null;
   };
 
-  const [selectedTopic, setSelectedTopic] = useState<HelpTopic>('tela');
+  const [selectedTopic, setSelectedTopic] = useState<HelpTopic>('manual:colaboradores');
   const [categories, setCategories] = useState<HelpCategory[] | null>(null);
   const [loadingCategories, setLoadingCategories] = useState(false);
+
+  const manualGuides = useMemo(
+    () =>
+      import.meta.glob('../../../agent/queue/.docs/*.md', {
+        as: 'raw',
+        eager: true,
+      }) as Record<string, string>,
+    [],
+  );
+
+  const manualContentById = useMemo(() => {
+    const map = new Map<string, string>();
+    manualTopics.forEach((topic) => {
+      const entry = Object.entries(manualGuides).find(([path]) => path.endsWith(`/agent/queue/.docs/${topic.file}`));
+      if (entry) {
+        map.set(topic.id, entry[1]);
+      }
+    });
+    return map;
+  }, [manualGuides, manualTopics]);
+
+  const isManualTopic = (topic: HelpTopic): topic is ManualHelpTopic =>
+    manualTopics.some((manual) => manual.id === topic);
+
+  const renderMarkdown = (content: string) => {
+    const lines = content.split(/\r?\n/);
+    const nodes: React.ReactNode[] = [];
+    let listItems: string[] = [];
+    let listType: 'ul' | 'ol' = 'ul';
+
+    const flushList = () => {
+      if (listItems.length === 0) return;
+      const items = listItems.map((item, index) => (
+        <li key={`${item}-${index}`} className="ml-4">
+          {item}
+        </li>
+      ));
+      nodes.push(
+        listType === 'ol' ? (
+          <ol key={`list-${nodes.length}`} className="space-y-1 text-sm text-slate-700 dark:text-slate-200 list-decimal ml-4">
+            {items}
+          </ol>
+        ) : (
+          <ul key={`list-${nodes.length}`} className="space-y-1 text-sm text-slate-700 dark:text-slate-200 list-disc ml-4">
+            {items}
+          </ul>
+        ),
+      );
+      listItems = [];
+      listType = 'ul';
+    };
+
+    lines.forEach((line, index) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        flushList();
+        return;
+      }
+      if (trimmed.startsWith('# ')) {
+        flushList();
+        nodes.push(
+          <h3 key={`h1-${index}`} className="text-base font-semibold text-slate-900 dark:text-white">
+            {trimmed.replace(/^#\s+/, '')}
+          </h3>,
+        );
+        return;
+      }
+      if (trimmed.startsWith('## ')) {
+        flushList();
+        nodes.push(
+          <h4 key={`h2-${index}`} className="text-sm font-semibold text-slate-900 dark:text-white">
+            {trimmed.replace(/^##\s+/, '')}
+          </h4>,
+        );
+        return;
+      }
+      if (trimmed.startsWith('- ')) {
+        listItems.push(trimmed.replace(/^- /, ''));
+        return;
+      }
+      if (/^\d+\.\s+/.test(trimmed)) {
+        listType = 'ol';
+        listItems.push(trimmed.replace(/^\d+\.\s+/, ''));
+        return;
+      }
+      flushList();
+      nodes.push(
+        <p key={`p-${index}`} className="text-sm text-slate-700 dark:text-slate-200">
+          {trimmed}
+        </p>,
+      );
+    });
+
+    flushList();
+    return nodes;
+  };
 
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
 
-    const seedList: { id: HelpTopic; label: string }[] = [
+    const seedList: { id: BaseHelpTopic; label: string }[] = [
       { id: 'instalacao', label: 'Instalando o PontoWebDesk' },
       { id: 'atualizacao', label: 'Atualizando o PontoWebDesk' },
       { id: 'tela', label: 'Tela Principal' },
@@ -270,46 +395,31 @@ const AdminAjuda: React.FC = () => {
               </h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-[230px,1fr] gap-4">
-              {/* Menu de tópicos */}
-              <div className="space-y-2">
-                {(() => {
-                  const staticTopics: { id: HelpTopic; label: string }[] = [
-                    { id: 'instalacao', label: 'Instalando o PontoWebDesk' },
-                    { id: 'atualizacao', label: 'Atualizando o PontoWebDesk' },
-                    { id: 'tela', label: 'Tela Principal' },
-                    { id: 'cadastros', label: 'Cadastrando no PontoWebDesk' },
-                    { id: 'movimentacoes', label: 'Movimentações' },
-                    { id: 'manutencao', label: 'Manutenção' },
-                    { id: 'relatorios', label: 'Relatórios' },
-                    { id: 'janela', label: 'Janela / Navegação' },
-                    { id: 'ajuda', label: 'Ajuda' },
-                    { id: 'sobre', label: 'Sobre o sistema' },
-                  ];
-
-                  const effectiveTopics =
-                    !isSupabaseConfigured() || loadingCategories || !categories || categories.length === 0
-                      ? staticTopics
-                      : categories.map((c) => ({ id: c.slug, label: c.title }));
-
-                  return effectiveTopics.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setSelectedTopic(item.id as HelpTopic)}
-                      className={`w-full text-left px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
-                        selectedTopic === item.id
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  ));
-                })()}
+              {/* Menu de tópicos do manual */}
+              <div className="space-y-2 max-h-[min(60vh,320px)] overflow-y-auto">
+                {manualTopics.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSelectedTopic(item.id)}
+                    className={`w-full text-left px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
+                      selectedTopic === item.id
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
               </div>
 
               {/* Conteúdo do tópico selecionado */}
-              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 p-4 space-y-3 text-sm text-slate-700 dark:text-slate-200">
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 p-4 space-y-3 text-sm text-slate-700 dark:text-slate-200 max-h-[min(60vh,320px)] overflow-y-auto">
+                {isManualTopic(selectedTopic) && (
+                  <div className="space-y-3">
+                    {renderMarkdown(manualContentById.get(selectedTopic) || 'Manual não encontrado.')}
+                  </div>
+                )}
                 {selectedTopic === 'instalacao' && (
                   <>
                     <h3 className="font-semibold text-slate-900 dark:text-white">Instalando o PontoWebDesk</h3>
@@ -432,11 +542,13 @@ const AdminAjuda: React.FC = () => {
                     </p>
                   </>
                 )}
+                {!isManualTopic(selectedTopic) && selectedTopic !== 'instalacao' && selectedTopic !== 'atualizacao' && selectedTopic !== 'tela' && selectedTopic !== 'cadastros' && selectedTopic !== 'movimentacoes' && selectedTopic !== 'manutencao' && selectedTopic !== 'relatorios' && selectedTopic !== 'janela' && selectedTopic !== 'ajuda' && selectedTopic !== 'sobre' && (
+                  <p>Selecione um tópico do manual ao lado para ver o conteúdo.</p>
+                )}
               </div>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Para um manual completo (com imagens passo a passo), recomenda-se manter um documento em PDF ou página
-              interna da empresa apontando para esta tela como índice de referência.
+              Este manual reúne passo a passo de todas as páginas usadas pelo RH, com exemplos de campos e checklist.
             </p>
           </section>
         </div>
