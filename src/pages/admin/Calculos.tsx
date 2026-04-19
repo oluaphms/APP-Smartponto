@@ -485,9 +485,12 @@ const AdminCalculos: React.FC = () => {
         acc.negative += row.daily.missing_minutes;
         acc.late += row.daily.late_minutes;
         acc.missing += row.daily.missing_minutes;
+        acc.extra50 += row.overtime?.overtime_50_minutes ?? 0;
+        acc.extra100 += row.overtime?.overtime_100_minutes ?? 0;
+        acc.night += row.night_minutes;
         return acc;
       },
-      { worked: 0, positive: 0, negative: 0, late: 0, missing: 0 },
+      { worked: 0, positive: 0, negative: 0, late: 0, missing: 0, extra50: 0, extra100: 0, night: 0 },
     );
   }, [rowsToRender]);
 
@@ -509,9 +512,12 @@ const AdminCalculos: React.FC = () => {
         acc.negative += row.daily.missing_minutes;
         acc.late += row.daily.late_minutes;
         acc.missing += row.daily.missing_minutes;
+        acc.extra50 += row.overtime?.overtime_50_minutes ?? 0;
+        acc.extra100 += row.overtime?.overtime_100_minutes ?? 0;
+        acc.night += row.night_minutes;
         return acc;
       },
-      { worked: 0, positive: 0, negative: 0, late: 0, missing: 0 },
+      { worked: 0, positive: 0, negative: 0, late: 0, missing: 0, extra50: 0, extra100: 0, night: 0 },
     );
     for (const r of list) {
       const row = r as CalcDayRow & CalcGroupRow;
@@ -538,6 +544,9 @@ const AdminCalculos: React.FC = () => {
       if (c.key === 'negative') return fmtMinutos(totals.negative);
       if (c.key === 'late') return fmtMinutos(totals.late);
       if (c.key === 'missing') return fmtMinutos(totals.missing);
+      if (c.key === 'extra50') return fmtMinutos(totals.extra50);
+      if (c.key === 'extra100') return fmtMinutos(totals.extra100);
+      if (c.key === 'night') return fmtMinutos(totals.night);
       return '';
     });
     lines.push(totalsLine.join(';'));
@@ -588,9 +597,12 @@ const AdminCalculos: React.FC = () => {
           acc.negative += row.daily.missing_minutes;
           acc.late += row.daily.late_minutes;
           acc.missing += row.daily.missing_minutes;
+          acc.extra50 += row.overtime?.overtime_50_minutes ?? 0;
+          acc.extra100 += row.overtime?.overtime_100_minutes ?? 0;
+          acc.night += row.night_minutes;
           return acc;
         },
-        { worked: 0, positive: 0, negative: 0, late: 0, missing: 0 },
+        { worked: 0, positive: 0, negative: 0, late: 0, missing: 0, extra50: 0, extra100: 0, night: 0 },
       );
       const body = list.map((r) => {
         const row = r as CalcDayRow & CalcGroupRow;
@@ -619,6 +631,9 @@ const AdminCalculos: React.FC = () => {
           if (c.key === 'negative') return fmtMinutos(totals.negative);
           if (c.key === 'late') return fmtMinutos(totals.late);
           if (c.key === 'missing') return fmtMinutos(totals.missing);
+          if (c.key === 'extra50') return fmtMinutos(totals.extra50);
+          if (c.key === 'extra100') return fmtMinutos(totals.extra100);
+          if (c.key === 'night') return fmtMinutos(totals.night);
           return '';
         }),
       ];
@@ -1066,7 +1081,13 @@ const AdminCalculos: React.FC = () => {
                                     ? fmtMinutos(totalsToRender.late)
                                     : col.key === 'missing'
                                       ? fmtMinutos(totalsToRender.missing)
-                                      : '';
+                                      : col.key === 'extra50'
+                                        ? fmtMinutos(totalsToRender.extra50)
+                                        : col.key === 'extra100'
+                                          ? fmtMinutos(totalsToRender.extra100)
+                                          : col.key === 'night'
+                                            ? fmtMinutos(totalsToRender.night)
+                                            : '';
                         return (
                           <td key={col.key} className="px-2 py-2 tabular-nums whitespace-nowrap">
                             {value}
