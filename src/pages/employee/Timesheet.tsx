@@ -8,10 +8,13 @@ import { LoadingState } from '../../../components/UI';
 import {
   buildDayMirrorSummary,
   DayMirror,
+  extractLocalCalendarDateFromIso,
   formatMinutes,
   getDayStatus,
   getStatusOverride,
   isManualRecord,
+  normalizeRecordTypeForMirror,
+  recordMirrorInstant,
   type TimeRecord as MirrorTimeRecord,
   type DayScheduleWindow,
 } from '../../utils/timesheetMirror';
@@ -173,6 +176,7 @@ const EmployeeTimesheet: React.FC = () => {
       id: r.id,
       user_id: r.user_id,
       created_at: r.created_at,
+      timestamp: r.timestamp ?? null,
       type: r.type,
       manual_reason: r.manual_reason ?? null,
       latitude: r.latitude ?? null,
@@ -204,8 +208,14 @@ const EmployeeTimesheet: React.FC = () => {
   const recordsByDate = useMemo(() => {
     const byDay = new Map<string, any[]>();
     records.forEach((r: any) => {
-      const created = r.created_at || r.timestamp || '';
-      const d = created.slice(0, 10);
+      const iso = recordMirrorInstant({
+        id: r.id,
+        user_id: r.user_id,
+        created_at: r.created_at,
+        timestamp: r.timestamp ?? null,
+        type: r.type,
+      } as MirrorTimeRecord);
+      const d = iso ? extractLocalCalendarDateFromIso(iso) : '';
       if (!d) return;
       if (!byDay.has(d)) byDay.set(d, []);
       byDay.get(d)!.push(r);
@@ -213,8 +223,8 @@ const EmployeeTimesheet: React.FC = () => {
     byDay.forEach((arr) => {
       arr.sort(
         (a, b) =>
-          new Date(a.created_at || a.timestamp || 0).getTime() -
-          new Date(b.created_at || b.timestamp || 0).getTime(),
+          new Date(recordMirrorInstant(a as MirrorTimeRecord)).getTime() -
+          new Date(recordMirrorInstant(b as MirrorTimeRecord)).getTime(),
       );
     });
     return byDay;
@@ -359,18 +369,19 @@ const EmployeeTimesheet: React.FC = () => {
                       minute: '2-digit',
                       hour12: false,
                     });
-                  const recordIso = (r: MirrorTimeRecord) => r.created_at || r.timestamp || '';
+                  const recordIso = (r: MirrorTimeRecord) => recordMirrorInstant(r);
                   const fmtRecord = (r: MirrorTimeRecord) => fmt(recordIso(r));
-                  const pick = (t: string | null, typ: MirrorTimeRecord['type']) => {
+                  const pick = (t: string | null, typ: ReturnType<typeof normalizeRecordTypeForMirror>) => {
                     if (!t) return undefined;
                     return (
-                      day.records.find((r) => r.type === typ && fmtRecord(r) === t) ||
+                      day.records.find((r) => normalizeRecordTypeForMirror(r.type) === typ && fmtRecord(r) === t) ||
                       day.records.find((r) => fmtRecord(r) === t)
                     );
                   };
                   const entradaRecord = day.entradaInicio
-                    ? day.records.find((r) => r.type === 'entrada' && fmtRecord(r) === day.entradaInicio) ||
-                      day.records.find((r) => fmtRecord(r) === day.entradaInicio)
+                    ? day.records.find(
+                        (r) => normalizeRecordTypeForMirror(r.type) === 'entrada' && fmtRecord(r) === day.entradaInicio,
+                      ) || day.records.find((r) => fmtRecord(r) === day.entradaInicio)
                     : undefined;
                   const saidaIntRecord = pick(day.saidaIntervalo, 'intervalo_saida');
                   const voltaIntRecord = pick(day.voltaIntervalo, 'intervalo_volta');
@@ -426,8 +437,9 @@ const EmployeeTimesheet: React.FC = () => {
                             <div className="space-y-2">
                               {dayRecs.map((r: any) => {
                                 const ll = extractLatLng(r);
-                                const when = r.created_at
-                                  ? new Date(r.created_at).toLocaleTimeString('pt-BR', {
+                                const whenIso = recordMirrorInstant(r as MirrorTimeRecord);
+                                const when = whenIso
+                                  ? new Date(whenIso).toLocaleTimeString('pt-BR', {
                                       hour: '2-digit',
                                       minute: '2-digit',
                                     })

@@ -18,6 +18,8 @@ import {
   formatMinutes,
   getDayStatus,
   getStatusOverride,
+  normalizeRecordTypeForMirror,
+  recordMirrorInstant,
 } from '../../utils/timesheetMirror';
 import { getEmployeeSchedule, getEmployeeTimesheetScheduleContext } from '../../services/timeProcessingService';
 import type { DayScheduleWindow } from '../../utils/timesheetMirror';
@@ -718,18 +720,19 @@ const AdminTimesheet: React.FC = () => {
                       minute: '2-digit',
                       hour12: false,
                     });
-                  const recordIso = (r: TimeRecord) => r.created_at || r.timestamp || '';
+                  const recordIso = (r: TimeRecord) => recordMirrorInstant(r);
                   const fmtRecord = (r: TimeRecord) => fmt(recordIso(r));
-                  const pick = (t: string | null, typ: TimeRecord['type']) => {
+                  const pick = (t: string | null, typ: ReturnType<typeof normalizeRecordTypeForMirror>) => {
                     if (!t) return undefined;
                     return (
-                      day.records.find((r) => r.type === typ && fmtRecord(r) === t) ||
+                      day.records.find((r) => normalizeRecordTypeForMirror(r.type) === typ && fmtRecord(r) === t) ||
                       day.records.find((r) => fmtRecord(r) === t)
                     );
                   };
                   const entradaRecord = day.entradaInicio
-                    ? day.records.find((r) => r.type === 'entrada' && fmtRecord(r) === day.entradaInicio) ||
-                      day.records.find((r) => fmtRecord(r) === day.entradaInicio)
+                    ? day.records.find(
+                        (r) => normalizeRecordTypeForMirror(r.type) === 'entrada' && fmtRecord(r) === day.entradaInicio,
+                      ) || day.records.find((r) => fmtRecord(r) === day.entradaInicio)
                     : undefined;
                   const saidaIntRecord = pick(day.saidaIntervalo, 'intervalo_saida');
                   const voltaIntRecord = pick(day.voltaIntervalo, 'intervalo_volta');

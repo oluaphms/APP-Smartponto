@@ -10,12 +10,48 @@ export interface TimeRecord {
   user_id: string;
   created_at: string;
   timestamp?: string | null;
-  type: 'entrada' | 'saida' | 'intervalo_saida' | 'intervalo_volta';
+  /** Valores vindos do DB podem usar acentuação (`saída`) ou sinônimos (`pausa`, `batida`). */
+  type: 'entrada' | 'saida' | 'intervalo_saida' | 'intervalo_volta' | string;
   manual_reason?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   is_manual?: boolean;
   adjusted?: boolean;
+}
+
+/** Tipo canônico para o espelho (REP/interpretação usam grafias diferentes). */
+export type NormalizedMirrorRecordType =
+  | 'entrada'
+  | 'saida'
+  | 'intervalo_saida'
+  | 'intervalo_volta'
+  | 'unknown';
+
+/**
+ * Normaliza `type` do `time_records` para o fluxo entrada → intervalo → volta → saída.
+ * O PostgreSQL grava `saída` (com acento); o app legado usa `saida`.
+ */
+export function normalizeRecordTypeForMirror(raw: string | null | undefined): NormalizedMirrorRecordType {
+  const t = String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '');
+  if (t === 'entrada') return 'entrada';
+  if (t === 'saida') return 'saida';
+  if (t === 'intervalo_saida') return 'intervalo_saida';
+  if (t === 'intervalo_volta') return 'intervalo_volta';
+  if (t === 'pausa') return 'intervalo_saida';
+  return 'unknown';
+}
+
+/** Instante da batida para ordenação/exibição: horário oficial da batida antes do metadado de inserção. */
+export function recordMirrorInstant(record: TimeRecord): string {
+  const ts = record.timestamp;
+  const ca = record.created_at;
+  if (ts && String(ts).trim()) return ts;
+  if (ca && String(ca).trim()) return ca;
+  return new Date().toISOString();
 }
 
 export interface DayMirror {
@@ -70,7 +106,7 @@ function extractTime(isoString: string): string {
 /**
  * Data civil local (YYYY-MM-DD) a partir de um instante ISO — alinha com filtros em UTC e com batidas gravadas via horário local.
  */
-function extractDate(isoString: string): string {
+export function extractLocalCalendarDateFromIso(isoString: string): string {
   const date = new Date(isoString);
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -79,7 +115,7 @@ function extractDate(isoString: string): string {
 }
 
 function recordIso(record: TimeRecord): string {
-  return record.created_at || record.timestamp || new Date().toISOString();
+  return recordMirrorInstant(record);
 }
 
 /**
@@ -104,7 +140,9 @@ function sortRecordsByTime(records: TimeRecord[]): TimeRecord[] {
 function buildDaySummary(records: TimeRecord[]): DayMirror {
   const realRecords = records.filter((r) => !isStatusRecord(r));
   const sorted = sortRecordsByTime(realRecords);
-  const date = extractDate(recordIso((sorted[0] || records[0] || { created_at: new Date().toISOString() }) as TimeRecord));
+  const date = extractLocalCalendarDateFromIso(
+    recordIso((sorted[0] || records[0] || { created_at: new Date().toISOString() }) as TimeRecord),
+  );
   
   let entradaInicio: string | null = null;
   let saidaIntervalo: string | null = null;
@@ -114,8 +152,9 @@ function buildDaySummary(records: TimeRecord[]): DayMirror {
   // Interpreta a sequência de batidas baseado na ordem e tipo
   for (const record of sorted) {
     const time = extractTime(recordIso(record));
+    const norm = normalizeRecordTypeForMirror(record.type);
     
-    switch (record.type) {
+    switch (norm) {
       case 'entrada':
         if (!entradaInicio) {
           entradaInicio = time;
@@ -139,6 +178,8 @@ function buildDaySummary(records: TimeRecord[]): DayMirror {
       case 'intervalo_volta':
         voltaIntervalo = time;
         break;
+      default:
+        break;
     }
   }
 
@@ -150,9 +191,12 @@ function buildDaySummary(records: TimeRecord[]): DayMirror {
   if (!saidaIntervalo && middle.length > 0) saidaIntervalo = middle[0];
   if (!voltaIntervalo && middle.length > 1) voltaIntervalo = middle[middle.length - 1];
 
-  const hasIntervalType = realRecords.some((r) => r.type === 'intervalo_saida' || r.type === 'intervalo_volta');
-  const entradas = realRecords.filter((r) => r.type === 'entrada').length;
-  const saidas = realRecords.filter((r) => r.type === 'saida').length;
+  const hasIntervalType = realRecords.some((r) => {
+    const n = normalizeRecordTypeForMirror(r.type);
+    return n === 'intervalo_saida' || n === 'intervalo_volta';
+  });
+  const entradas = realRecords.filter((r) => normalizeRecordTypeForMirror(r.type) === 'entrada').length;
+  const saidas = realRecords.filter((r) => normalizeRecordTypeForMirror(r.type) === 'saida').length;
   if (!hasIntervalType && entradas === 1 && saidas === 1) {
     if (!saidaFinal && times.length > 1) saidaFinal = times[times.length - 1];
     saidaIntervalo = null;
@@ -192,7 +236,7 @@ function groupRecordsByDate(records: TimeRecord[]): Map<string, TimeRecord[]> {
   const groups = new Map<string, TimeRecord[]>();
   
   for (const record of records) {
-    const date = extractDate(recordIso(record));
+    const date = extractLocalCalendarDateFromIso(recordIso(record));
     if (!groups.has(date)) {
       groups.set(date, []);
     }
