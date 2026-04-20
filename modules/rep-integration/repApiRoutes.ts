@@ -503,11 +503,19 @@ async function handleImportAfd(request: Request): Promise<Response> {
   const contentType = request.headers.get('Content-Type') || '';
   let companyId: string;
   let repDeviceId: string | null = null;
+  let forceUserId: string | null = null;
   let fileContent: string;
   if (contentType.includes('application/json')) {
-    const body = (await request.json()) as { company_id: string; rep_device_id?: string; content?: string; filename?: string };
+    const body = (await request.json()) as {
+      company_id: string;
+      rep_device_id?: string;
+      force_user_id?: string;
+      content?: string;
+      filename?: string;
+    };
     companyId = body.company_id;
     repDeviceId = body.rep_device_id || null;
+    forceUserId = body.force_user_id?.trim() || null;
     if (!companyId) {
       return Response.json({ error: 'company_id obrigatório' }, { status: 400, headers: { ...corsImport, 'Content-Type': 'application/json' } });
     }
@@ -527,6 +535,8 @@ async function handleImportAfd(request: Request): Promise<Response> {
     const formData = await request.formData();
     companyId = (formData.get('company_id') as string) || '';
     repDeviceId = (formData.get('rep_device_id') as string) || null;
+    const rawForce = formData.get('force_user_id');
+    forceUserId = typeof rawForce === 'string' && rawForce.trim() ? rawForce.trim() : null;
     const file = formData.get('file') as File | null;
     if (!companyId || !file) {
       return Response.json({ error: 'company_id e file obrigatórios' }, { status: 400, headers: { ...corsImport, 'Content-Type': 'application/json' } });
@@ -556,7 +566,7 @@ async function handleImportAfd(request: Request): Promise<Response> {
   const supabaseAdmin = serviceKey
     ? createClient(supabaseUrl, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } })
     : supabase;
-  const result = await ingestAfdRecords(supabaseAdmin, companyId, repDeviceId, records);
+  const result = await ingestAfdRecords(supabaseAdmin, companyId, repDeviceId, records, undefined, forceUserId);
   return Response.json(
     {
       success: true,
@@ -564,6 +574,7 @@ async function handleImportAfd(request: Request): Promise<Response> {
       imported: result.imported,
       duplicated: result.duplicated,
       user_not_found: result.userNotFound,
+      force_user_id: forceUserId,
       errors: result.errors.slice(0, 10),
     },
     { status: 200, headers: { ...corsImport, 'Content-Type': 'application/json' } }

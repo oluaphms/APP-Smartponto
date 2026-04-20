@@ -147,6 +147,7 @@ export async function promoteClockEventsToEspelho(
           p_raw_data: rawData,
           p_only_staging: false,
           p_apply_schedule: false,
+          p_force_user_id: null,
         });
         rpcResult = unwrapRpcResult(rawRpc);
       } catch {

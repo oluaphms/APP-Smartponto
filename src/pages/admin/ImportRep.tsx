@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import PageHeader from '../../components/PageHeader';
 import { db, supabase, isSupabaseConfigured } from '../../services/supabaseClient';
+import { buscarFiltrosEspelhoAdmin } from '../../../services/api';
 import { LoadingState, Button } from '../../../components/UI';
 import { Upload, FileText } from 'lucide-react';
 
@@ -15,14 +16,24 @@ const getAppUrl = () => {
 
 const AdminImportRep: React.FC = () => {
   const { user, loading } = useCurrentUser();
+  const [searchParams] = useSearchParams();
   const [devices, setDevices] = useState<RepDeviceOption[]>([]);
   const [loadingDevices, setLoadingDevices] = useState(true);
+  const [employees, setEmployees] = useState<{ id: string; nome: string }[]>([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<{ imported: number; duplicated: number; user_not_found: number; errors: string[] } | null>(null);
   const [repDeviceId, setRepDeviceId] = useState<string>('');
+  /** Todas as linhas do ficheiro gravam neste colaborador (ignora PIS/CPF do AFD). */
+  const [forceUserId, setForceUserId] = useState<string>('');
 
-  React.useEffect(() => {
+  useEffect(() => {
+    const q = searchParams.get('forceUserId');
+    if (q) setForceUserId(q);
+  }, [searchParams]);
+
+  useEffect(() => {
     if (!user?.companyId || !isSupabaseConfigured()) return;
     const load = async () => {
       setLoadingDevices(true);
@@ -33,7 +44,26 @@ const AdminImportRep: React.FC = () => {
         setLoadingDevices(false);
       }
     };
-    load();
+    void load();
+  }, [user?.companyId]);
+
+  useEffect(() => {
+    if (!user?.companyId || !isSupabaseConfigured()) return;
+    let active = true;
+    (async () => {
+      setLoadingEmployees(true);
+      try {
+        const f = await buscarFiltrosEspelhoAdmin(user.companyId);
+        if (active) setEmployees(f.employees.map((e) => ({ id: e.id, nome: e.nome })));
+      } catch {
+        if (active) setEmployees([]);
+      } finally {
+        if (active) setLoadingEmployees(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, [user?.companyId]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -52,6 +82,7 @@ const AdminImportRep: React.FC = () => {
       const formData = new FormData();
       formData.set('company_id', user.companyId);
       if (repDeviceId) formData.set('rep_device_id', repDeviceId);
+      if (forceUserId.trim()) formData.set('force_user_id', forceUserId.trim());
       formData.set('file', file);
 
       const baseUrl = getAppUrl();
@@ -99,8 +130,34 @@ const AdminImportRep: React.FC = () => {
 
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 space-y-6">
         <p className="text-sm text-slate-600 dark:text-slate-400">
-          Formatos aceitos: AFD (Portaria 671), TXT ou CSV com colunas NSR, Data, Hora, PIS/CPF, Tipo (E/S).
+          Formatos aceitos: AFD (Portaria 671), TXT ou CSV com colunas NSR, Data, Hora, PIS/CPF, Tipo (E/S). Pode
+          obter o ficheiro a partir do software do relógio ou do agente local (exportação AFD), e enviar aqui.
         </p>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+            Atribuir todas as batidas a um colaborador (opcional)
+          </label>
+          <select
+            value={forceUserId}
+            onChange={(e) => setForceUserId(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+            disabled={loadingEmployees}
+          >
+            <option value="">Não — usar PIS/CPF/crachá do ficheiro (normal)</option>
+            {employees.map((emp) => (
+              <option key={emp.id} value={emp.id}>
+                {emp.nome}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-amber-800 dark:text-amber-200/90">
+            Use esta opção quando o relógio envia NIS de pessoas ainda não cadastradas no SaaS: todas as linhas do
+            arquivo passam a valer para o colaborador escolhido (idealmente um ficheiro só com as batidas dessa
+            pessoa). Se o ficheiro misturar vários NIS, todas serão gravadas no mesmo utilizador — evite salvo
+            cenário controlado.
+          </p>
+        </div>
 
         {loadingDevices && devices.length === 0 ? (
           <LoadingState message="Carregando lista de relógios..." />

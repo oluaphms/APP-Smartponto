@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { isSupabaseConfigured, supabase } from '../../services/supabaseClient';
 import { buscarEspelhoAdmin, buscarFiltrosEspelhoAdmin } from '../../../services/api';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { useToast } from '../../components/ToastProvider';
 import PageHeader from '../../components/PageHeader';
 import { LoadingState, Button } from '../../../components/UI';
-import { FileDown, FileSpreadsheet, Lock, Plus, RefreshCw } from 'lucide-react';
+import { FileDown, FileSpreadsheet, Lock, Plus, RefreshCw, Upload } from 'lucide-react';
 import { AddTimeRecordModal } from '../../components/AddTimeRecordModal';
 import { EditTimeRecordModal } from '../../components/EditTimeRecordModal';
 import { SkeletonFiltro, TimesheetTableSkeleton } from '../../components/TimesheetTableSkeleton';
@@ -600,6 +600,22 @@ const AdminTimesheet: React.FC = () => {
             <Plus className="w-4 h-4" />
             Adicionar batida
           </Button>
+          <Link
+            to={
+              filterUserId
+                ? `/admin/import-rep?forceUserId=${encodeURIComponent(filterUserId)}`
+                : '/admin/import-rep'
+            }
+            className="inline-flex items-center justify-center gap-2 font-bold rounded-2xl transition-all active:scale-[0.98] border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 px-4 py-2 text-xs"
+            title={
+              filterUserId
+                ? 'Envie um AFD/TXT do relógio e atribua as batidas a este colaborador (quando o PIS do arquivo não casa com o cadastro)'
+                : 'Importar arquivo AFD ou TXT das marcações'
+            }
+          >
+            <Upload className="w-4 h-4" aria-hidden />
+            Importar arquivo REP
+          </Link>
         </div>
       </section>
 

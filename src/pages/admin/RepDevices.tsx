@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { testRepDeviceConnection, syncRepDevice } from '../../../modules/rep-integration/repSyncJob';
 import type { RepIngestBatchProgress } from '../../../modules/rep-integration/repService';
+import { getLocalCalendarDayBoundsIso } from '../../../modules/rep-integration/repLocalDay';
 import { promotePendingRepPunchLogs } from '../../../modules/rep-integration/repService';
 import { matriculaFromAfdPisField } from '../../../modules/rep-integration/repParser';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -166,16 +167,22 @@ async function appendRepPendingQueueDiagnostics(
   client: SupabaseClient,
   companyId: string,
   deviceId: string,
-  log: (line: string) => void
+  log: (line: string) => void,
+  opts?: {
+    localWindow?: { startIso: string; endIso: string };
+    filteredByUserOnly?: boolean;
+  }
 ): Promise<void> {
-  const { data, error } = await client
+  let q = client
     .from('rep_punch_logs')
     .select('nsr, pis, cpf, matricula, data_hora')
     .eq('company_id', companyId)
     .eq('rep_device_id', deviceId)
-    .is('time_record_id', null)
-    .order('data_hora', { ascending: true })
-    .limit(5);
+    .is('time_record_id', null);
+  if (opts?.localWindow) {
+    q = q.gte('data_hora', opts.localWindow.startIso).lte('data_hora', opts.localWindow.endIso);
+  }
+  const { data, error } = await q.order('data_hora', { ascending: true }).limit(5);
 
   if (error) {
     log(`Não foi possível ler a fila pendente (diagnóstico): ${error.message}`);
@@ -183,7 +190,16 @@ async function appendRepPendingQueueDiagnostics(
   }
   if (!data?.length) return;
 
-  log('Diagnóstico — batidas ainda na fila (cruzar com PIS/CPF, nº folha ou nº crachá no utilizador):');
+  if (opts?.localWindow) {
+    log('Diagnóstico — batidas ainda na fila nesta janela de data/hora (alinhada ao consolidar «só hoje» quando aplicável):');
+  } else {
+    log('Diagnóstico — batidas ainda na fila (cruzar com PIS/CPF, nº folha ou nº crachá no utilizador):');
+  }
+  if (opts?.filteredByUserOnly) {
+    log(
+      'Nota: com «consolidar só para este colaborador», batidas de outros NIS não entram no espelho nesta operação (ficam na fila); o diagnóstico lista pendentes na mesma janela de data/hora.'
+    );
+  }
   const tailsCanon = new Set<string>();
   let sawLikelyPisNotBadge = false;
   for (const row of data) {
@@ -255,6 +271,10 @@ const AdminRepDevices: React.FC = () => {
   /** Sub-modal: escopo ao receber batidas */
   const [srReceiveDialogOpen, setSrReceiveDialogOpen] = useState(false);
   const [srReceiveScope, setSrReceiveScope] = useState<'incremental' | 'today_only'>('incremental');
+  /** Opcional: consolidar só para um colaborador (outros NIS ficam na fila). */
+  const [srConsolidateOnlyUserId, setSrConsolidateOnlyUserId] = useState('');
+  /** Botão «Consolidar»: só pendentes no dia civil deste computador (recebimento «só hoje» já usa a mesma janela automaticamente). */
+  const [srManualConsolidateLocalToday, setSrManualConsolidateLocalToday] = useState(false);
   /** Sub-modal: enviar / status / funcionários / config */
   const [srSendDialogOpen, setSrSendDialogOpen] = useState(false);
   const [srPushAllRunning, setSrPushAllRunning] = useState(false);
@@ -505,8 +525,22 @@ const AdminRepDevices: React.FC = () => {
 
         const consolidateCompanyId = d.company_id || user?.companyId;
         if (consolidateCompanyId && user?.companyId) {
-          appendSrLog('Consolidando fila pendente neste relógio (gravar no espelho quando houver cadastro)…');
-          const pr = await promotePendingRepPunchLogs(supabase, consolidateCompanyId, d.id);
+          const localDay = receiveScope === 'today_only' ? getLocalCalendarDayBoundsIso() : undefined;
+          const onlyUid = srConsolidateOnlyUserId.trim() || undefined;
+          if (receiveScope === 'today_only') {
+            appendSrLog(
+              'Consolidando fila pendente neste relógio — apenas batidas no dia de hoje (calendário deste computador), gravando no espelho quando houver cadastro…'
+            );
+          } else {
+            appendSrLog('Consolidando fila pendente neste relógio (gravar no espelho quando houver cadastro)…');
+          }
+          if (onlyUid) {
+            appendSrLog('Filtro: consolidar só para o colaborador selecionado (outros NIS ficam na fila).');
+          }
+          const pr = await promotePendingRepPunchLogs(supabase, consolidateCompanyId, d.id, {
+            localWindow: localDay,
+            onlyUserId: onlyUid,
+          });
           if (pr.success) {
             const promoted = pr.promoted ?? 0;
             const skipped = pr.skippedNoUser ?? 0;
@@ -517,13 +551,18 @@ const AdminRepDevices: React.FC = () => {
             }
             if (skipped > 0) {
               const backlogHint =
-                skipped > received
-                  ? ` Inclui batida(s) de dias/leituras anteriores — agora o relógio só enviou ${received}.`
-                  : '';
+                receiveScope === 'today_only'
+                  ? ''
+                  : skipped > received
+                    ? ` Inclui batida(s) de dias/leituras anteriores — agora o relógio só enviou ${received}.`
+                    : '';
               appendSrLog(
                 `${skipped} batida(s) deste relógio ainda só em rep_punch_logs (sem PIS/CPF/nº folha/nº identificador (crachá) que bata com o cadastro).${backlogHint} Corrija utilizadores e use «Consolidar» se precisar. Se o cadastro já estiver certo: confirme migrações REP no Supabase (20260420200000–20260420260000) e build recente da app — senão o servidor não normaliza PIS/CPF AFD (11 dígitos), deriva crachá nem casa folha/crachá.`
               );
-              await appendRepPendingQueueDiagnostics(supabase, consolidateCompanyId, d.id, appendSrLog);
+              await appendRepPendingQueueDiagnostics(supabase, consolidateCompanyId, d.id, appendSrLog, {
+                localWindow: localDay,
+                filteredByUserOnly: Boolean(onlyUid),
+              });
             }
           } else {
             appendSrLog(`Aviso: não foi possível consolidar a fila: ${pr.error ?? 'erro desconhecido'}.`);
@@ -535,9 +574,11 @@ const AdminRepDevices: React.FC = () => {
         if (imp) parts.push(`${imp} registro(s) no espelho (folha / time_records)`);
         if (stillInQueueOnly) {
           const qHint =
-            stillInQueueOnly > received
-              ? `fila do relógio: ${stillInQueueOnly} sem cadastro (o número pode ser maior que as ${received} batida(s) de agora — há pendências antigas)`
-              : `${stillInQueueOnly} ainda só em rep_punch_logs (sem cadastro)`;
+            receiveScope === 'today_only'
+              ? `fila do relógio (nesta consolidação, só o dia de hoje neste computador): ${stillInQueueOnly} sem cadastro`
+              : stillInQueueOnly > received
+                ? `fila do relógio: ${stillInQueueOnly} sem cadastro (o número pode ser maior que as ${received} batida(s) de agora — há pendências antigas)`
+                : `${stillInQueueOnly} ainda só em rep_punch_logs (sem cadastro)`;
           parts.push(qHint);
         }
         if (unf) {
@@ -566,7 +607,9 @@ const AdminRepDevices: React.FC = () => {
             stillInQueueOnly && !imp
               ? `${stillInQueueOnly} marcação(ões) só na fila (sem cadastro para consolidar). Ajuste PIS/CPF, nº folha ou nº identificador (crachá) e use «Consolidar».`
               : imp && stillInQueueOnly
-                ? `Espelho: ${imp} registro(s) — cada um no nome do colaborador cujo PIS/CPF/nº folha bateu com o AFD (não é “por quem bateu no relógio” se o aparelho enviar outro NIS). Atenção: ${stillInQueueOnly} batida(s) na fila sem cadastro; não entram no espelho até existir match (podem ser leituras antigas).`
+                ? receiveScope === 'today_only'
+                  ? `Espelho: ${imp} registro(s) — cada um no nome do colaborador cujo PIS/CPF/nº folha bateu com o AFD. Atenção: ${stillInQueueOnly} batida(s) na fila sem cadastro na janela de hoje (outros dias não entram nesta operação «só hoje»).`
+                  : `Espelho: ${imp} registro(s) — cada um no nome do colaborador cujo PIS/CPF/nº folha bateu com o AFD (não é “por quem bateu no relógio” se o aparelho enviar outro NIS). Atenção: ${stillInQueueOnly} batida(s) na fila sem cadastro; não entram no espelho até existir match (podem ser leituras antigas).`
                 : `Sincronizado. ${summary}`,
         });
       } else {
@@ -602,9 +645,21 @@ const AdminRepDevices: React.FC = () => {
     const consolidateCompanyId = d.company_id || user.companyId;
     setPromotingId(d.id);
     setMessage(null);
-    appendSrLog(`Consolidando pendentes do relógio «${d.nome_dispositivo}»…`);
+    const localDay = srManualConsolidateLocalToday ? getLocalCalendarDayBoundsIso() : undefined;
+    const onlyUid = srConsolidateOnlyUserId.trim() || undefined;
+    if (srManualConsolidateLocalToday) {
+      appendSrLog(`Consolidando pendentes do relógio «${d.nome_dispositivo}» — só o dia de hoje (calendário deste computador)…`);
+    } else {
+      appendSrLog(`Consolidando pendentes do relógio «${d.nome_dispositivo}»…`);
+    }
+    if (onlyUid) {
+      appendSrLog('Filtro: consolidar só para o colaborador selecionado (outros NIS ficam na fila).');
+    }
     try {
-      const pr = await promotePendingRepPunchLogs(supabase, consolidateCompanyId, d.id);
+      const pr = await promotePendingRepPunchLogs(supabase, consolidateCompanyId, d.id, {
+        localWindow: localDay,
+        onlyUserId: onlyUid,
+      });
       if (!pr.success) {
         const err = pr.error || 'Falha ao consolidar';
         appendSrLog(`Falha: ${err}`);
@@ -615,7 +670,10 @@ const AdminRepDevices: React.FC = () => {
       const skipped = pr.skippedNoUser ?? 0;
       appendSrLog(`Consolidado: ${promoted} registro(s) na folha; ${skipped} pendente(s) sem funcionário identificado.`);
       if (skipped > 0) {
-        await appendRepPendingQueueDiagnostics(supabase, consolidateCompanyId, d.id, appendSrLog);
+        await appendRepPendingQueueDiagnostics(supabase, consolidateCompanyId, d.id, appendSrLog, {
+          localWindow: localDay,
+          filteredByUserOnly: Boolean(onlyUid),
+        });
       }
       setMessage({
         type: 'success',
@@ -1534,7 +1592,9 @@ const AdminRepDevices: React.FC = () => {
                 <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">Opções de importação e envio</p>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-1 mb-1">
                   «Receber batidas» grava diretamente no espelho (<code className="text-[10px]">time_records</code>) quando
-                  PIS/CPF/matrícula coincidem com o cadastro; em seguida consolida pendentes antigos do mesmo relógio.
+                  PIS/CPF/matrícula coincidem com o cadastro; em seguida consolida a fila pendente do mesmo relógio. Com
+                  «Apenas o dia de hoje», essa consolidação usa só batidas do dia civil deste computador (não reprocessa
+                  filas antigas na mesma etapa).
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
                 <label className="flex gap-2 items-start cursor-pointer">
@@ -1607,6 +1667,47 @@ const AdminRepDevices: React.FC = () => {
                     </span>
                   </span>
                 </label>
+                </div>
+                <div className="rounded-lg border border-slate-200/90 dark:border-slate-600/80 p-3 mt-1 space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Fila → folha (consolidar)
+                  </p>
+                  <label className="flex gap-2 items-start cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={srManualConsolidateLocalToday}
+                      onChange={(e) => setSrManualConsolidateLocalToday(e.target.checked)}
+                      className="mt-0.5 rounded border-slate-300"
+                    />
+                    <span className="text-sm text-slate-700 dark:text-slate-300">
+                      No botão «Consolidar», processar só batidas do dia de hoje (calendário deste computador)
+                      <span className="block text-[11px] text-slate-500 dark:text-slate-400 font-normal mt-0.5">
+                        «Receber» com «Apenas o dia de hoje» já aplica esta janela na consolidação automática; marque aqui
+                        quando usar «Consolidar» manualmente sem receber de novo.
+                      </span>
+                    </span>
+                  </label>
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="rep-sr-consolidate-user"
+                      className="text-[11px] text-slate-600 dark:text-slate-400 block"
+                    >
+                      Opcional — consolidar só para este colaborador (outros NIS permanecem na fila)
+                    </label>
+                    <select
+                      id="rep-sr-consolidate-user"
+                      value={srConsolidateOnlyUserId}
+                      onChange={(e) => setSrConsolidateOnlyUserId(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                    >
+                      <option value="">Todos com cadastro compatível</option>
+                      {employees.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -1746,7 +1847,8 @@ const AdminRepDevices: React.FC = () => {
                   <span className="font-medium text-slate-900 dark:text-white">Apenas o dia de hoje</span>
                   <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     Só grava marcações cuja data/hora cai no dia de hoje no calendário deste computador (após baixar do
-                    aparelho).
+                    aparelho). A consolidação da fila nesta operação usa a mesma janela (não reabre pendentes de outros
+                    dias). Opcional: na área «Fila → folha», restrinja a um colaborador.
                   </span>
                 </span>
               </label>

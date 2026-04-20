@@ -36,6 +36,8 @@ export async function ingestPunch(
     only_staging?: boolean;
     /** Na entrada, marca is_late conforme escala + tolerância */
     apply_schedule?: boolean;
+    /** Se definido, todas as batidas desta chamada gravam neste utilizador (importação AFD / reatribuição). */
+    force_user_id?: string | null;
   }
 ): Promise<{ success: boolean; time_record_id?: string; user_not_found?: boolean; error?: string }> {
   const { data, error } = await supabase.rpc('rep_ingest_punch', {
@@ -51,6 +53,7 @@ export async function ingestPunch(
     p_raw_data: params.raw_data ?? {},
     p_only_staging: params.only_staging ?? false,
     p_apply_schedule: params.apply_schedule ?? false,
+    p_force_user_id: params.force_user_id ?? null,
   });
 
   if (error) {
@@ -76,7 +79,9 @@ export async function ingestAfdRecords(
   companyId: string,
   repDeviceId: string | null,
   records: ParsedAfdRecord[],
-  timezone?: string
+  timezone?: string,
+  /** Atribui todas as linhas do ficheiro a este colaborador (ignora PIS/CPF do AFD). */
+  forceUserId?: string | null
 ): Promise<IngestResult> {
   const result: IngestResult = { success: true, imported: 0, duplicated: 0, userNotFound: 0, errors: [] };
 
@@ -95,6 +100,7 @@ export async function ingestAfdRecords(
       tipo_marcacao: rec.tipo,
       nsr: rec.nsr,
       raw_data: { raw: rec.raw },
+      force_user_id: forceUserId ?? null,
     });
 
     if (!r.success && r.error?.includes('já importado')) {
@@ -253,17 +259,30 @@ export async function ingestPunchesFromDevice(
   return result;
 }
 
+export type PromotePendingRepPunchLogsOptions = {
+  /** Inclusivo; mesmo critério que «só hoje» no sync (calendário local → ISO). */
+  localWindow?: { startIso: string; endIso: string } | null;
+  /** Só cria espelho se o colaborador resolvido pelo AFD for este; outras batidas ficam na fila. */
+  onlyUserId?: string | null;
+};
+
 /**
  * Cria registros de ponto (time_records) para marcações que ficaram só em rep_punch_logs (modo staging).
  */
 export async function promotePendingRepPunchLogs(
   supabase: SupabaseClient,
   companyId: string,
-  repDeviceId: string
+  repDeviceId: string,
+  options?: PromotePendingRepPunchLogsOptions
 ): Promise<{ success: boolean; promoted?: number; skippedNoUser?: number; error?: string }> {
+  const win = options?.localWindow;
+  const onlyUid = options?.onlyUserId?.trim();
   const { data, error } = await supabase.rpc('rep_promote_pending_rep_punch_logs', {
     p_company_id: companyId,
     p_rep_device_id: repDeviceId,
+    p_local_window_start: win?.startIso ?? null,
+    p_local_window_end: win?.endIso ?? null,
+    p_only_user_id: onlyUid && onlyUid.length > 0 ? onlyUid : null,
   });
   if (error) {
     return { success: false, error: error.message };
