@@ -77,6 +77,8 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
     date: date || new Date().toISOString().slice(0, 10),
     time: '09:00',
     type: 'ENTRADA' as string,
+    entry_mode: 'HORARIO' as 'HORARIO' | 'STATUS',
+    status_type: 'FOLGA' as 'FOLGA' | 'FALTA' | 'EXTRA',
     manual_reason: '',
     justificativa_id: '',
   });
@@ -161,9 +163,10 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.user_id || !form.date || !form.time) return;
+    if (!form.user_id || !form.date) return;
+    if (form.entry_mode === 'HORARIO' && !form.time) return;
 
-    if (!location && !skipGps) {
+    if (form.entry_mode === 'HORARIO' && !location && !skipGps) {
       setSubmitHint('É necessário obter a localização ou marcar o registro sem GPS.');
       return;
     }
@@ -172,7 +175,7 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
     const combinedReasonPreview =
       form.manual_reason.trim() ||
       (selectedJustificativaPre ? `${selectedJustificativaPre.codigo} - ${selectedJustificativaPre.descricao}` : '');
-    if (skipGps && combinedReasonPreview.length < MIN_MANUAL_REASON_NO_GPS) {
+    if (form.entry_mode === 'HORARIO' && skipGps && combinedReasonPreview.length < MIN_MANUAL_REASON_NO_GPS) {
       setSubmitHint(
         `Sem GPS: preencha o motivo ou escolha uma justificativa (texto combinado com pelo menos ${MIN_MANUAL_REASON_NO_GPS} caracteres).`,
       );
@@ -182,18 +185,23 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
     setSubmitHint(null);
     setSubmitting(true);
     try {
-      const created_at = localDateAndTimeToIsoUtc(form.date, form.time);
+      const created_at = localDateAndTimeToIsoUtc(form.date, form.entry_mode === 'STATUS' ? '12:00' : form.time);
       const selectedJustificativa = justificativas.find(j => j.id === form.justificativa_id);
-      let reason = form.manual_reason.trim() ||
-        (selectedJustificativa ? `${selectedJustificativa.codigo} - ${selectedJustificativa.descricao}` : 'Batida adicionada manualmente');
-      if (skipGps && !location) {
+      const baseReason = form.manual_reason.trim() ||
+        (selectedJustificativa ? `${selectedJustificativa.codigo} - ${selectedJustificativa.descricao}` : '');
+      const statusTag = form.entry_mode === 'STATUS' ? `[STATUS:${form.status_type}]` : '';
+      let reason = [statusTag, baseReason || (form.entry_mode === 'STATUS' ? 'Lançamento de status' : 'Batida adicionada manualmente')]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+      if (form.entry_mode === 'HORARIO' && skipGps && !location) {
         reason = `${reason}${reason ? ' ' : ''}[Registrado sem coordenadas GPS pelo administrador]`;
       }
 
       await onSubmit({
         user_id: form.user_id,
         created_at,
-        type: mapPunchTypeToDb(form.type),
+        type: mapPunchTypeToDb(form.entry_mode === 'STATUS' ? 'ENTRADA' : form.type),
         manual_reason: reason,
         latitude: location?.lat,
         longitude: location?.lng,
@@ -203,6 +211,8 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
         date: date || new Date().toISOString().slice(0, 10),
         time: '09:00',
         type: 'ENTRADA',
+        entry_mode: 'HORARIO',
+        status_type: 'FOLGA',
         manual_reason: '',
         justificativa_id: '',
       });
@@ -223,11 +233,13 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
   }, [form.manual_reason, form.justificativa_id, justificativas]);
 
   const canSubmitForm = useMemo(() => {
-    if (!form.user_id || !form.date || !form.time) return false;
+    if (!form.user_id || !form.date) return false;
+    if (form.entry_mode === 'STATUS') return true;
+    if (!form.time) return false;
     if (location) return true;
     if (skipGps && combinedReasonLen >= MIN_MANUAL_REASON_NO_GPS) return true;
     return false;
-  }, [form.user_id, form.date, form.time, location, skipGps, combinedReasonLen]);
+  }, [form.user_id, form.date, form.time, form.entry_mode, location, skipGps, combinedReasonLen]);
 
   if (!isOpen) return null;
 
@@ -275,6 +287,22 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
               </select>
             </div>
 
+            <div>
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
+                Tipo de lançamento
+              </label>
+              <select
+                value={form.entry_mode}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, entry_mode: e.target.value as 'HORARIO' | 'STATUS' }))
+                }
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+              >
+                <option value="HORARIO">Batida (horário)</option>
+                <option value="STATUS">Status (Folga/Falta/Extra)</option>
+              </select>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
@@ -288,36 +316,57 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
-                  Horário
-                </label>
-                <input
-                  type="time"
-                  required
-                  value={form.time}
-                  onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
-                />
-              </div>
+              {form.entry_mode === 'HORARIO' ? (
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
+                    Horário
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={form.time}
+                    onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={form.status_type}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, status_type: e.target.value as 'FOLGA' | 'FALTA' | 'EXTRA' }))
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                  >
+                    <option value="FOLGA">Folga</option>
+                    <option value="FALTA">Falta</option>
+                    <option value="EXTRA">Extra</option>
+                  </select>
+                </div>
+              )}
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
-                Tipo de Batida
-              </label>
-              <select
-                value={form.type}
-                onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
-              >
-                {TIPOS_BATIDA.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {form.entry_mode === 'HORARIO' && (
+              <div>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
+                  Tipo de Batida
+                </label>
+                <select
+                  value={form.type}
+                  onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                >
+                  {TIPOS_BATIDA.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {justificativas.length > 0 && (
               <div>
@@ -355,86 +404,96 @@ export const AddTimeRecordModal: React.FC<AddTimeRecordModalProps> = ({
               </p>
             </div>
 
-            {/* Localização: rede primeiro, depois GPS; fallback sem coordenadas para admin */}
-            <div
-              className={`p-3 rounded-lg border flex flex-col gap-3 sm:flex-row sm:items-start ${
-                location
-                  ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-                  : skipGps
-                    ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
-                    : locationError
-                      ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
-                      : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
-              }`}
-            >
-              {locationLoading ? (
-                <div className="flex items-center gap-3 w-full">
-                  <Loader2 className="w-4 h-4 animate-spin text-slate-500 shrink-0" />
-                  <span className="text-xs text-slate-600 dark:text-slate-400">
-                    Obtendo localização (rede e, se necessário, GPS)…
-                  </span>
-                </div>
-              ) : location ? (
-                <div className="flex flex-col sm:flex-row sm:items-start gap-3 w-full">
-                  <MapPin className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs font-medium text-green-700 dark:text-green-300">
-                      Localização capturada
-                    </span>
-                    <p className="text-[10px] text-green-600 dark:text-green-400 break-all">
-                      {location.lat.toFixed(5)}, {location.lng.toFixed(5)} (±{Math.round(location.accuracy)} m)
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-3 w-full">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-                    <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <span className="text-xs font-medium text-red-700 dark:text-red-300 block">
-                        {locationError ? 'Não foi possível obter a posição' : 'Localização pendente'}
+            {form.entry_mode === 'HORARIO' ? (
+              <>
+                {/* Localização: rede primeiro, depois GPS; fallback sem coordenadas para admin */}
+                <div
+                  className={`p-3 rounded-lg border flex flex-col gap-3 sm:flex-row sm:items-start ${
+                    location
+                      ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                      : skipGps
+                        ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+                        : locationError
+                          ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                          : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  {locationLoading ? (
+                    <div className="flex items-center gap-3 w-full">
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-500 shrink-0" />
+                      <span className="text-xs text-slate-600 dark:text-slate-400">
+                        Obtendo localização (rede e, se necessário, GPS)…
                       </span>
-                      {locationError && (
-                        <p className="text-[11px] leading-snug text-red-600 dark:text-red-400">{locationError}</p>
-                      )}
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void runFetchLocation()}
-                      disabled={locationLoading}
-                      className="text-xs w-full sm:w-auto shrink-0"
-                    >
-                      Tentar novamente
-                    </Button>
-                  </div>
-                  <label className="flex items-start gap-2 cursor-pointer text-left">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                      checked={skipGps}
-                      onChange={(e) => {
-                        setSkipGps(e.target.checked);
-                        setSubmitHint(null);
-                      }}
-                    />
-                    <span className="text-[11px] text-slate-700 dark:text-slate-300 leading-snug">
-                      Registrar <strong>sem</strong> coordenadas GPS (útil no escritório ou se o navegador bloquear a
-                      localização). É necessário motivo ou justificativa com pelo menos {MIN_MANUAL_REASON_NO_GPS}{' '}
-                      caracteres.
-                    </span>
-                  </label>
+                  ) : location ? (
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-3 w-full">
+                      <MapPin className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-medium text-green-700 dark:text-green-300">
+                          Localização capturada
+                        </span>
+                        <p className="text-[10px] text-green-600 dark:text-green-400 break-all">
+                          {location.lat.toFixed(5)}, {location.lng.toFixed(5)} (±{Math.round(location.accuracy)} m)
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-3 w-full">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+                        <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <span className="text-xs font-medium text-red-700 dark:text-red-300 block">
+                            {locationError ? 'Não foi possível obter a posição' : 'Localização pendente'}
+                          </span>
+                          {locationError && (
+                            <p className="text-[11px] leading-snug text-red-600 dark:text-red-400">{locationError}</p>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void runFetchLocation()}
+                          disabled={locationLoading}
+                          className="text-xs w-full sm:w-auto shrink-0"
+                        >
+                          Tentar novamente
+                        </Button>
+                      </div>
+                      <label className="flex items-start gap-2 cursor-pointer text-left">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          checked={skipGps}
+                          onChange={(e) => {
+                            setSkipGps(e.target.checked);
+                            setSubmitHint(null);
+                          }}
+                        />
+                        <span className="text-[11px] text-slate-700 dark:text-slate-300 leading-snug">
+                          Registrar <strong>sem</strong> coordenadas GPS (útil no escritório ou se o navegador bloquear a
+                          localização). É necessário motivo ou justificativa com pelo menos {MIN_MANUAL_REASON_NO_GPS}{' '}
+                          caracteres.
+                        </span>
+                      </label>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-              <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
-                <strong>Atenção:</strong> esta batida fica marcada como manual no espelho. Prefira obter a localização;
-                se não for possível, use a opção sem GPS e documente bem o motivo.
-              </p>
-            </div>
+                <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
+                    <strong>Atenção:</strong> esta batida fica marcada como manual no espelho. Prefira obter a localização;
+                    se não for possível, use a opção sem GPS e documente bem o motivo.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <p className="text-xs text-slate-600 dark:text-slate-300">
+                  Este lançamento marca o dia como <strong>{form.status_type}</strong> no espelho. Não exige horário nem localização.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="shrink-0 border-t border-slate-100 dark:border-slate-800">

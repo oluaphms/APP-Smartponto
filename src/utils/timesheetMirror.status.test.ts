@@ -1,0 +1,61 @@
+import { describe, it, expect } from 'vitest';
+import { getDayStatus, type DayMirror } from './timesheetMirror';
+
+function baseDay(partial: Partial<DayMirror>): DayMirror {
+  return {
+    date: '2026-04-18',
+    entradaInicio: null,
+    saidaIntervalo: null,
+    voltaIntervalo: null,
+    saidaFinal: null,
+    workedMinutes: 0,
+    records: [],
+    ...partial,
+  };
+}
+
+describe('getDayStatus — escala com sábado útil (6x1)', () => {
+  it('sábado 18/04/2026 08:00–12:00 dentro da janela → NORMAL', () => {
+    const day = baseDay({
+      date: '2026-04-18',
+      entradaInicio: '08:00',
+      saidaFinal: '12:00',
+      saidaIntervalo: null,
+      voltaIntervalo: null,
+      workedMinutes: 240,
+      records: [{ id: '1', user_id: 'u', created_at: '2026-04-18T08:00:00', type: 'entrada' } as any],
+    });
+    const st = getDayStatus(day, [1, 2, 3, 4, 5, 6], {
+      entrada: '08:00',
+      saida: '12:00',
+      toleranceMin: 0,
+    });
+    expect(st.status).toBe('normal');
+    expect(st.label).toBe('NORMAL');
+  });
+
+  it('sábado com batidas mas fora de workDays (legado seg–sex) → EXTRA', () => {
+    const day = baseDay({
+      date: '2026-04-18',
+      entradaInicio: '08:00',
+      saidaFinal: '12:00',
+      workedMinutes: 240,
+      records: [{ id: '1', user_id: 'u', created_at: '2026-04-18T08:00:00', type: 'entrada' } as any],
+    });
+    const st = getDayStatus(day, [1, 2, 3, 4, 5]);
+    expect(st.status).toBe('extra');
+    expect(st.label).toBe('EXTRA');
+  });
+
+  it('sábado útil com entrada antes da tolerância → EXTRA', () => {
+    const day = baseDay({
+      date: '2026-04-18',
+      entradaInicio: '06:30',
+      saidaFinal: '12:00',
+      workedMinutes: 330,
+      records: [{ id: '1', user_id: 'u', created_at: '2026-04-18T06:30:00', type: 'entrada' } as any],
+    });
+    const st = getDayStatus(day, [1, 2, 3, 4, 5, 6], { entrada: '08:00', saida: '12:00', toleranceMin: 10 });
+    expect(st.status).toBe('extra');
+  });
+});

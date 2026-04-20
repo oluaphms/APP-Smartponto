@@ -30,14 +30,14 @@ DECLARE
   v_cpf_norm TEXT;
   v_matricula_norm TEXT;
   v_record_id TEXT;
-  v_existing_nsr BIGINT;
+  v_nsr_duplicate BOOLEAN := FALSE;
   v_log_id UUID;
   v_tipo_marcacao TEXT;
   v_tipo_tr TEXT;
   v_js_dow INT;
   v_day_idx INT;
   v_local_ts TIMESTAMPTZ;
-  v_shift_start TIME;
+  v_sched_entry TIME;
   v_tol INT;
   v_entrada_mins INT;
   v_start_mins INT;
@@ -49,25 +49,32 @@ BEGIN
 
   IF p_nsr IS NOT NULL THEN
     IF p_rep_device_id IS NOT NULL THEN
-      SELECT 1 INTO v_existing_nsr FROM public.rep_punch_logs
-        WHERE rep_device_id = p_rep_device_id AND nsr = p_nsr LIMIT 1;
+      v_nsr_duplicate := EXISTS (
+        SELECT 1 FROM public.rep_punch_logs
+        WHERE rep_device_id = p_rep_device_id AND nsr = p_nsr
+      );
     ELSE
-      SELECT 1 INTO v_existing_nsr FROM public.rep_punch_logs
-        WHERE company_id = p_company_id AND nsr = p_nsr AND rep_device_id IS NULL LIMIT 1;
+      v_nsr_duplicate := EXISTS (
+        SELECT 1 FROM public.rep_punch_logs
+        WHERE company_id = p_company_id AND nsr = p_nsr AND rep_device_id IS NULL
+      );
     END IF;
-    IF v_existing_nsr IS NOT NULL THEN
+    IF v_nsr_duplicate THEN
       RETURN jsonb_build_object('success', false, 'error', 'NSR já importado', 'duplicate', true);
     END IF;
   END IF;
 
-  SELECT u.id::text INTO v_user_id FROM public.users u
-  WHERE u.company_id = p_company_id
-    AND (
-      (v_pis_norm IS NOT NULL AND regexp_replace(COALESCE(u.pis_pasep, ''), '\D', '', 'g') = v_pis_norm)
-      OR (v_matricula_norm IS NOT NULL AND trim(COALESCE(u.numero_folha, '')) = v_matricula_norm)
-      OR (v_cpf_norm IS NOT NULL AND regexp_replace(COALESCE(u.cpf, ''), '\D', '', 'g') = v_cpf_norm)
-    )
-  LIMIT 1;
+  v_user_id := (
+    SELECT u.id::text
+    FROM public.users u
+    WHERE u.company_id = p_company_id
+      AND (
+        (v_pis_norm IS NOT NULL AND regexp_replace(COALESCE(u.pis_pasep, ''), '\D', '', 'g') = v_pis_norm)
+        OR (v_matricula_norm IS NOT NULL AND trim(COALESCE(u.numero_folha, '')) = v_matricula_norm)
+        OR (v_cpf_norm IS NOT NULL AND regexp_replace(COALESCE(u.cpf, ''), '\D', '', 'g') = v_cpf_norm)
+      )
+    LIMIT 1
+  );
 
   v_tipo_marcacao := UPPER(LEFT(COALESCE(NULLIF(trim(p_tipo_marcacao), ''), 'E'), 1));
   IF v_tipo_marcacao NOT IN ('E','S','P') THEN v_tipo_marcacao := 'E'; END IF;
@@ -104,24 +111,35 @@ BEGIN
 
   IF p_apply_schedule AND v_tipo_tr = 'entrada' THEN
     v_local_ts := COALESCE(p_data_hora, NOW()) AT TIME ZONE 'America/Sao_Paulo';
-    v_js_dow := EXTRACT(DOW FROM v_local_ts)::int;
+    v_js_dow := DATE_PART('dow', v_local_ts)::int;
     v_day_idx := CASE WHEN v_js_dow = 0 THEN 6 ELSE v_js_dow - 1 END;
 
-    SELECT ws.start_time, COALESCE(ws.tolerance_minutes, 0)
-    INTO v_shift_start, v_tol
-    FROM public.employee_shift_schedule ess
-    INNER JOIN public.work_shifts ws ON ws.id = ess.shift_id
-    WHERE ess.company_id = p_company_id
-      AND ess.employee_id::text = v_user_id
-      AND ess.day_of_week = v_day_idx
-      AND COALESCE(ess.is_day_off, false) = false
-    LIMIT 1;
+    v_sched_entry := (
+      SELECT ws.start_time
+      FROM public.employee_shift_schedule ess
+      INNER JOIN public.work_shifts ws ON ws.id = ess.shift_id
+      WHERE ess.company_id = p_company_id
+        AND ess.employee_id::text = v_user_id
+        AND ess.day_of_week = v_day_idx
+        AND COALESCE(ess.is_day_off, false) = false
+      LIMIT 1
+    );
+    v_tol := COALESCE((
+      SELECT COALESCE(ws.tolerance_minutes, 0)
+      FROM public.employee_shift_schedule ess
+      INNER JOIN public.work_shifts ws ON ws.id = ess.shift_id
+      WHERE ess.company_id = p_company_id
+        AND ess.employee_id::text = v_user_id
+        AND ess.day_of_week = v_day_idx
+        AND COALESCE(ess.is_day_off, false) = false
+      LIMIT 1
+    ), 0);
 
-    IF v_shift_start IS NOT NULL THEN
+    IF v_sched_entry IS NOT NULL THEN
       v_entrada_mins :=
-        EXTRACT(HOUR FROM v_local_ts)::int * 60 + EXTRACT(MINUTE FROM v_local_ts)::int;
+        DATE_PART('hour', v_local_ts)::int * 60 + DATE_PART('minute', v_local_ts)::int;
       v_start_mins :=
-        EXTRACT(HOUR FROM v_shift_start)::int * 60 + EXTRACT(MINUTE FROM v_shift_start)::int;
+        DATE_PART('hour', v_sched_entry)::int * 60 + DATE_PART('minute', v_sched_entry)::int;
       v_is_late := v_entrada_mins > (v_start_mins + COALESCE(v_tol, 0));
     END IF;
   END IF;
@@ -175,7 +193,7 @@ DECLARE
   v_js_dow INT;
   v_day_idx INT;
   v_local_ts TIMESTAMPTZ;
-  v_shift_start TIME;
+  v_sched_entry TIME;
   v_tol INT;
   v_entrada_mins INT;
   v_start_mins INT;
@@ -194,14 +212,17 @@ BEGIN
     v_cpf_norm := NULLIF(trim(regexp_replace(COALESCE(r.cpf, ''), '\D', '', 'g')), '');
     v_matricula_norm := NULLIF(trim(r.matricula), '');
 
-    SELECT u.id::text INTO v_user_id FROM public.users u
-    WHERE u.company_id = p_company_id
-      AND (
-        (v_pis_norm IS NOT NULL AND regexp_replace(COALESCE(u.pis_pasep, ''), '\D', '', 'g') = v_pis_norm)
-        OR (v_matricula_norm IS NOT NULL AND trim(COALESCE(u.numero_folha, '')) = v_matricula_norm)
-        OR (v_cpf_norm IS NOT NULL AND regexp_replace(COALESCE(u.cpf, ''), '\D', '', 'g') = v_cpf_norm)
-      )
-    LIMIT 1;
+    v_user_id := (
+      SELECT u.id::text
+      FROM public.users u
+      WHERE u.company_id = p_company_id
+        AND (
+          (v_pis_norm IS NOT NULL AND regexp_replace(COALESCE(u.pis_pasep, ''), '\D', '', 'g') = v_pis_norm)
+          OR (v_matricula_norm IS NOT NULL AND trim(COALESCE(u.numero_folha, '')) = v_matricula_norm)
+          OR (v_cpf_norm IS NOT NULL AND regexp_replace(COALESCE(u.cpf, ''), '\D', '', 'g') = v_cpf_norm)
+        )
+      LIMIT 1
+    );
 
     IF v_user_id IS NULL THEN
       v_skipped := v_skipped + 1;
@@ -218,24 +239,35 @@ BEGIN
     v_is_late := FALSE;
     IF v_tipo_tr = 'entrada' THEN
       v_local_ts := r.data_hora AT TIME ZONE 'America/Sao_Paulo';
-      v_js_dow := EXTRACT(DOW FROM v_local_ts)::int;
+      v_js_dow := DATE_PART('dow', v_local_ts)::int;
       v_day_idx := CASE WHEN v_js_dow = 0 THEN 6 ELSE v_js_dow - 1 END;
 
-      SELECT ws.start_time, COALESCE(ws.tolerance_minutes, 0)
-      INTO v_shift_start, v_tol
-      FROM public.employee_shift_schedule ess
-      INNER JOIN public.work_shifts ws ON ws.id = ess.shift_id
-      WHERE ess.company_id = p_company_id
-        AND ess.employee_id::text = v_user_id
-        AND ess.day_of_week = v_day_idx
-        AND COALESCE(ess.is_day_off, false) = false
-      LIMIT 1;
+      v_sched_entry := (
+        SELECT ws.start_time
+        FROM public.employee_shift_schedule ess
+        INNER JOIN public.work_shifts ws ON ws.id = ess.shift_id
+        WHERE ess.company_id = p_company_id
+          AND ess.employee_id::text = v_user_id
+          AND ess.day_of_week = v_day_idx
+          AND COALESCE(ess.is_day_off, false) = false
+        LIMIT 1
+      );
+      v_tol := COALESCE((
+        SELECT COALESCE(ws.tolerance_minutes, 0)
+        FROM public.employee_shift_schedule ess
+        INNER JOIN public.work_shifts ws ON ws.id = ess.shift_id
+        WHERE ess.company_id = p_company_id
+          AND ess.employee_id::text = v_user_id
+          AND ess.day_of_week = v_day_idx
+          AND COALESCE(ess.is_day_off, false) = false
+        LIMIT 1
+      ), 0);
 
-      IF v_shift_start IS NOT NULL THEN
+      IF v_sched_entry IS NOT NULL THEN
         v_entrada_mins :=
-          EXTRACT(HOUR FROM v_local_ts)::int * 60 + EXTRACT(MINUTE FROM v_local_ts)::int;
+          DATE_PART('hour', v_local_ts)::int * 60 + DATE_PART('minute', v_local_ts)::int;
         v_start_mins :=
-          EXTRACT(HOUR FROM v_shift_start)::int * 60 + EXTRACT(MINUTE FROM v_shift_start)::int;
+          DATE_PART('hour', v_sched_entry)::int * 60 + DATE_PART('minute', v_sched_entry)::int;
         v_is_late := v_entrada_mins > (v_start_mins + COALESCE(v_tol, 0));
       END IF;
     END IF;

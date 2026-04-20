@@ -1,5 +1,5 @@
                                                   -- ============================================================
-                                                  -- SmartPonto - Integração REP (Registrador Eletrônico de Ponto)
+                                                  -- PontoWebDesk - Integração REP (Registrador Eletrônico de Ponto)
                                                   -- Tabelas: rep_devices, rep_punch_logs, rep_logs
                                                   -- Campo source em time_records para origem da marcação
                                                   -- ============================================================
@@ -127,7 +127,7 @@
                                                     v_cpf_norm TEXT;
                                                     v_matricula_norm TEXT;
                                                     v_record_id TEXT;
-                                                    v_existing_nsr BIGINT;
+                                                    v_nsr_duplicate BOOLEAN := FALSE;
                                                     v_log_id UUID;
                                                     v_tipo_marcacao TEXT;
                                                   BEGIN
@@ -137,28 +137,35 @@
                                                     v_matricula_norm := NULLIF(trim(p_matricula), '');
 
                                                     -- Evitar duplicidade por NSR (por empresa ou por dispositivo)
-                                                    IF p_nsr IS NOT NULL THEN
+                                                      IF p_nsr IS NOT NULL THEN
                                                       IF p_rep_device_id IS NOT NULL THEN
-                                                        SELECT 1 INTO v_existing_nsr FROM public.rep_punch_logs
-                                                          WHERE rep_device_id = p_rep_device_id AND nsr = p_nsr LIMIT 1;
+                                                        v_nsr_duplicate := EXISTS (
+                                                          SELECT 1 FROM public.rep_punch_logs
+                                                          WHERE rep_device_id = p_rep_device_id AND nsr = p_nsr
+                                                        );
                                                       ELSE
-                                                        SELECT 1 INTO v_existing_nsr FROM public.rep_punch_logs
-                                                          WHERE company_id = p_company_id AND nsr = p_nsr AND rep_device_id IS NULL LIMIT 1;
+                                                        v_nsr_duplicate := EXISTS (
+                                                          SELECT 1 FROM public.rep_punch_logs
+                                                          WHERE company_id = p_company_id AND nsr = p_nsr AND rep_device_id IS NULL
+                                                        );
                                                       END IF;
-                                                      IF v_existing_nsr IS NOT NULL THEN
+                                                      IF v_nsr_duplicate THEN
                                                         RETURN jsonb_build_object('success', false, 'error', 'NSR já importado', 'duplicate', true);
                                                       END IF;
                                                     END IF;
 
                                                     -- Identificar funcionário: prioridade PIS > matricula > CPF
-                                                    SELECT id INTO v_user_id FROM public.users
-                                                    WHERE company_id = p_company_id
-                                                      AND (
-                                                        (v_pis_norm IS NOT NULL AND regexp_replace(COALESCE(pis_pasep, ''), '\D', '', 'g') = v_pis_norm)
-                                                        OR (v_matricula_norm IS NOT NULL AND trim(COALESCE(numero_folha, '')) = v_matricula_norm)
-                                                        OR (v_cpf_norm IS NOT NULL AND regexp_replace(COALESCE(cpf, ''), '\D', '', 'g') = v_cpf_norm)
-                                                      )
-                                                    LIMIT 1;
+                                                    v_user_id := (
+                                                      SELECT u.id::text
+                                                      FROM public.users u
+                                                      WHERE u.company_id = p_company_id
+                                                        AND (
+                                                          (v_pis_norm IS NOT NULL AND regexp_replace(COALESCE(u.pis_pasep, ''), '\D', '', 'g') = v_pis_norm)
+                                                          OR (v_matricula_norm IS NOT NULL AND trim(COALESCE(u.numero_folha, '')) = v_matricula_norm)
+                                                          OR (v_cpf_norm IS NOT NULL AND regexp_replace(COALESCE(u.cpf, ''), '\D', '', 'g') = v_cpf_norm)
+                                                        )
+                                                      LIMIT 1
+                                                    );
 
                                                     -- Normalizar tipo para exibição em rep_punch_logs (E/S/P)
                                                     v_tipo_marcacao := UPPER(LEFT(COALESCE(NULLIF(trim(p_tipo_marcacao), ''), 'E'), 1));
@@ -199,4 +206,4 @@
                                                   END;
                                                   $$;
 
-                                                  COMMENT ON FUNCTION public.rep_ingest_punch IS 'Ingere marcação REP: rep_punch_logs + time_records se funcionário identificado (PIS/matricula/CPF)';
+                                                  COMMENT ON FUNCTION public.rep_ingest_punch(text, uuid, text, text, text, text, timestamptz, text, bigint, jsonb) IS 'Ingere marcação REP: rep_punch_logs + time_records se funcionário identificado (PIS/matricula/CPF)';

@@ -5,7 +5,7 @@
  */
 
 import { db, checkSupabaseConfigured, isSupabaseConfigured } from './supabaseClient';
-import { processDailyTime, getEmployeeSchedule, getDayRecords } from './timeProcessingService';
+import { processDailyTime, getDayRecords } from './timeProcessingService';
 import { calculateNightHours } from '../engine/timeEngine';
 
 // ============ TIPOS ============
@@ -83,35 +83,18 @@ export async function calculateDailyTimesheet(
   dateStr: string,
   expectedMinutes: number = DEFAULT_EXPECTED_MINUTES
 ): Promise<DailyTimesheet> {
-  // Busca a escala do funcionário
-  const schedule = await getEmployeeSchedule(employeeId, companyId);
-  const expectedMin = schedule 
-    ? (schedule.daily_hours * 60) 
-    : expectedMinutes;
-
-  // Processa o dia usando o serviço existente
-  const dailyResult = await processDailyTime(
-    employeeId,
-    companyId,
-    dateStr,
-    schedule || {
-      start_time: '08:00',
-      end_time: '17:00',
-      break_start: '12:00',
-      break_end: '13:00',
-      tolerance_minutes: 10,
-      daily_hours: 8,
-      work_days: [1, 2, 3, 4, 5],
-    }
-  );
+  const dailyResult = await processDailyTime(employeeId, companyId, dateStr);
 
   // Calcula minutos noturnos
   const records = await getDayRecords(employeeId, dateStr);
   const nightMinutes = calculateNightHours(records);
 
-  // Determina se é falta (dia de trabalho sem marcações)
-  const dayOfWeek = new Date(dateStr).getDay();
-  const isWorkDay = schedule ? schedule.work_days.includes(dayOfWeek) : (dayOfWeek >= 1 && dayOfWeek <= 5);
+  const isWorkDay = !dailyResult.scheduled_day_off;
+  const expectedMin = isWorkDay
+    ? dailyResult.expected_minutes > 0
+      ? dailyResult.expected_minutes
+      : expectedMinutes
+    : 0;
   const isAbsence = isWorkDay && dailyResult.total_worked_minutes === 0;
 
   // Calcula minutos de falta

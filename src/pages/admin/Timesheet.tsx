@@ -17,7 +17,10 @@ import {
   isManualRecord,
   formatMinutes,
   getDayStatus,
+  getStatusOverride,
 } from '../../utils/timesheetMirror';
+import { getEmployeeSchedule, getEmployeeTimesheetScheduleContext } from '../../services/timeProcessingService';
+import type { DayScheduleWindow } from '../../utils/timesheetMirror';
 import { closeTimesheet, isTimesheetClosed } from '../../services/timeProcessingService';
 import { invalidateAfterPunch, invalidateAfterTimesheetMonthClose } from '../../services/queryCache';
 import { enumerateLocalCalendarDays } from '../../utils/localDateTimeToIso';
@@ -60,6 +63,10 @@ const AdminTimesheet: React.FC = () => {
   const [holidays, setHolidays] = useState<{ id: string; date: string; name: string }[]>([]);
   const [loadingEspelho, setLoadingEspelho] = useState(false);
   const [loadingFiltros, setLoadingFiltros] = useState(false);
+  const [scheduleWorkDays, setScheduleWorkDays] = useState<number[] | null>(null);
+  const [scheduleWindowsByDow, setScheduleWindowsByDow] = useState<Record<number, DayScheduleWindow | null> | null>(
+    null,
+  );
 
   const [filterUserId, setFilterUserId] = useState('');
   const [filterDepartmentId, setFilterDepartmentId] = useState('');
@@ -89,6 +96,37 @@ const AdminTimesheet: React.FC = () => {
   const [filtersHydrated, setFiltersHydrated] = useState(false);
 
   const holidayDates = useMemo(() => new Set(holidays.map((h) => h.date).filter(Boolean)), [holidays]);
+
+  const expectedWindowForYmd = useCallback(
+    (dateStr: string): DayScheduleWindow | null | undefined => {
+      if (!scheduleWindowsByDow) return undefined;
+      const dow = new Date(`${dateStr}T12:00:00`).getDay();
+      return scheduleWindowsByDow[dow];
+    },
+    [scheduleWindowsByDow],
+  );
+
+  useEffect(() => {
+    if (!filterUserId || !companyId || !isSupabaseConfigured()) {
+      setScheduleWorkDays(null);
+      setScheduleWindowsByDow(null);
+      return;
+    }
+    let active = true;
+    (async () => {
+      const [schedule, ctx] = await Promise.all([
+        getEmployeeSchedule(filterUserId, companyId),
+        getEmployeeTimesheetScheduleContext(filterUserId, companyId),
+      ]);
+      if (active) {
+        setScheduleWorkDays(ctx.workDays?.length ? ctx.workDays : schedule?.work_days ?? null);
+        setScheduleWindowsByDow(ctx.windowByJsDow);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [filterUserId, companyId]);
 
   /** Catálogo (colaboradores + departamentos) — não depende do período; evita selects vazios. */
   const loadFiltrosEspelho = useCallback(async () => {
@@ -306,9 +344,12 @@ const AdminTimesheet: React.FC = () => {
     for (const date of periodDates) {
       const day = empMirror.get(date);
       if (!day) continue;
-      const st = holidayDates.has(date)
-        ? 'FERIADO'
-        : getDayStatus(day).label || '';
+      const override = getStatusOverride(day);
+      const st = override
+        ? getDayStatus(day, scheduleWorkDays ?? undefined, expectedWindowForYmd(date)).label
+        : holidayDates.has(date)
+          ? 'FERIADO'
+          : getDayStatus(day, scheduleWorkDays ?? undefined, expectedWindowForYmd(date)).label || '';
       rows.push(
         [
           formatDateBR(date),
@@ -366,14 +407,15 @@ const AdminTimesheet: React.FC = () => {
   };
 
   const renderDayBadge = (day: DayMirror, dateStr: string) => {
-    if (holidayDates.has(dateStr)) {
+    const override = getStatusOverride(day);
+    if (!override && holidayDates.has(dateStr)) {
       return (
         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold border bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300">
           FERIADO
         </span>
       );
     }
-    const { label, color } = getDayStatus(day);
+    const { label, color } = getDayStatus(day, scheduleWorkDays ?? undefined, expectedWindowForYmd(dateStr));
     if (!label) return null;
     const map: Record<string, string> = {
       green: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300',
@@ -667,7 +709,7 @@ const AdminTimesheet: React.FC = () => {
                   const day = empMirror.get(date);
                   if (!day) return null;
                   const noRecords = !day.records || day.records.length === 0;
-                  const dayStatus = getDayStatus(day);
+                  const dayStatus = getDayStatus(day, scheduleWorkDays ?? undefined, expectedWindowForYmd(date));
                   const dayBadge = renderDayBadge(day, date);
                   const badgeInTotal = ['incompleto', 'folga', 'extra', 'falta'].includes(dayStatus.status);
                   const fmt = (iso: string) =>

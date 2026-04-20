@@ -28,6 +28,37 @@ export interface DayMirror {
   records: TimeRecord[];
 }
 
+/** Janela da escala no dia (entrada/saída esperadas) — opcional para status “extra” só fora da janela. */
+export interface DayScheduleWindow {
+  entrada: string;
+  saida: string;
+  toleranceMin?: number;
+}
+
+function parseHHmmToMinutes(hhmm: string | null | undefined): number | null {
+  if (!hhmm || !/^\d{1,2}:\d{2}/.test(hhmm)) return null;
+  const [h, m] = hhmm.split(':').map((x) => parseInt(x, 10));
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+const STATUS_TAG_REGEX = /\[STATUS:(FOLGA|FALTA|EXTRA)\]/i;
+
+export function isStatusRecord(record: TimeRecord): boolean {
+  return STATUS_TAG_REGEX.test(String(record.manual_reason || ''));
+}
+
+export function getStatusOverride(day: DayMirror): 'folga' | 'falta' | 'extra' | null {
+  const match = day.records
+    .map((r) => String(r.manual_reason || ''))
+    .map((reason) => reason.match(STATUS_TAG_REGEX))
+    .find(Boolean);
+  if (!match) return null;
+  const key = match[1].toLowerCase();
+  if (key === 'folga' || key === 'falta' || key === 'extra') return key;
+  return null;
+}
+
 /**
  * Extrai apenas a hora (HH:mm) de uma data ISO
  */
@@ -71,8 +102,9 @@ function sortRecordsByTime(records: TimeRecord[]): TimeRecord[] {
  * Constrói o resumo diário a partir dos registros de um dia
  */
 function buildDaySummary(records: TimeRecord[]): DayMirror {
-  const sorted = sortRecordsByTime(records);
-  const date = extractDate(recordIso(sorted[0] || { created_at: new Date().toISOString() } as TimeRecord));
+  const realRecords = records.filter((r) => !isStatusRecord(r));
+  const sorted = sortRecordsByTime(realRecords);
+  const date = extractDate(recordIso((sorted[0] || records[0] || { created_at: new Date().toISOString() }) as TimeRecord));
   
   let entradaInicio: string | null = null;
   let saidaIntervalo: string | null = null;
@@ -117,6 +149,15 @@ function buildDaySummary(records: TimeRecord[]): DayMirror {
   if (!saidaFinal && times.length > 1) saidaFinal = times[times.length - 1];
   if (!saidaIntervalo && middle.length > 0) saidaIntervalo = middle[0];
   if (!voltaIntervalo && middle.length > 1) voltaIntervalo = middle[middle.length - 1];
+
+  const hasIntervalType = realRecords.some((r) => r.type === 'intervalo_saida' || r.type === 'intervalo_volta');
+  const entradas = realRecords.filter((r) => r.type === 'entrada').length;
+  const saidas = realRecords.filter((r) => r.type === 'saida').length;
+  if (!hasIntervalType && entradas === 1 && saidas === 1) {
+    if (!saidaFinal && times.length > 1) saidaFinal = times[times.length - 1];
+    saidaIntervalo = null;
+    voltaIntervalo = null;
+  }
   
   // Calcula minutos trabalhados
   let workedMinutes = 0;
@@ -140,7 +181,7 @@ function buildDaySummary(records: TimeRecord[]): DayMirror {
     voltaIntervalo,
     saidaFinal,
     workedMinutes: Math.max(0, workedMinutes),
-    records: sorted,
+    records,
   };
 }
 
@@ -216,21 +257,33 @@ export function hasManualRecord(dayMirror: DayMirror): boolean {
 }
 
 /**
- * Retorna o status do dia (FOLGA, FERIADO, FALTA, etc.)
+ * Retorna o status do dia (FOLGA, FALTA, EXTRA, NORMAL, etc.)
+ * @param workDays dias com jornada (`Date.getDay()`: 0=dom … 6=sáb). Se omitido, assume seg–sex.
+ * @param expectedWindow jornada esperada naquele dia da semana (evita tratar sábado útil como extra).
  */
-export function getDayStatus(day: DayMirror): { status: string; label: string; color: string } {
+export function getDayStatus(
+  day: DayMirror,
+  workDays?: number[],
+  expectedWindow?: DayScheduleWindow | null
+): { status: string; label: string; color: string } {
+  const override = getStatusOverride(day);
+  if (override === 'folga') return { status: 'folga', label: 'FOLGA', color: 'green' };
+  if (override === 'falta') return { status: 'falta', label: 'FALTA', color: 'red' };
+  if (override === 'extra') return { status: 'extra', label: 'EXTRA', color: 'purple' };
+
   // Verifica se é feriado
   // TODO: Implementar verificação de feriado quando tiver dados de feriados
   
-  // Verifica se é dia de folga (fim de semana)
   // Usa T12:00:00 para evitar problemas de fuso horário
   const date = new Date(day.date + 'T12:00:00');
   const dayOfWeek = date.getDay();
-  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+  const isWorkday = Array.isArray(workDays) && workDays.length > 0
+    ? workDays.includes(dayOfWeek)
+    : !(dayOfWeek === 0 || dayOfWeek === 6);
   
-  const hasRecords = Boolean(day.records && day.records.length > 0);
+  const hasRecords = day.records.some((r) => !isStatusRecord(r));
 
-  if (isWeekend) {
+  if (!isWorkday) {
     if (hasRecords) return { status: 'extra', label: 'EXTRA', color: 'purple' };
     return { status: 'folga', label: 'FOLGA', color: 'green' };
   }
@@ -250,5 +303,20 @@ export function getDayStatus(day: DayMirror): { status: string; label: string; c
     return { status: 'incompleto', label: 'INCOMPLETO', color: 'orange' };
   }
 
-  return { status: 'presente', label: 'PRESENTE', color: 'green' };
+  if (expectedWindow) {
+    const tol = expectedWindow.toleranceMin ?? 0;
+    const startMin = parseHHmmToMinutes(expectedWindow.entrada);
+    const endMin = parseHHmmToMinutes(expectedWindow.saida);
+    const ent = parseHHmmToMinutes(day.entradaInicio);
+    const sai = parseHHmmToMinutes(day.saidaFinal);
+    if (startMin != null && endMin != null && ent != null && sai != null) {
+      const early = ent < startMin - tol;
+      const lateEnd = sai > endMin + tol;
+      if (early || lateEnd) {
+        return { status: 'extra', label: 'EXTRA', color: 'purple' };
+      }
+    }
+  }
+
+  return { status: 'normal', label: 'NORMAL', color: 'green' };
 }

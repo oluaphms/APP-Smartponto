@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { ChevronDown, ChevronRight, FileDown, MapPin } from 'lucide-react';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
@@ -10,9 +10,12 @@ import {
   DayMirror,
   formatMinutes,
   getDayStatus,
+  getStatusOverride,
   isManualRecord,
   type TimeRecord as MirrorTimeRecord,
+  type DayScheduleWindow,
 } from '../../utils/timesheetMirror';
+import { getEmployeeTimesheetScheduleContext } from '../../services/timeProcessingService';
 import { extractLatLng } from '../../utils/reverseGeocode';
 import { ExpandableStreetCell } from '../../components/ClickableFullContent';
 import { TimesheetTableSkeleton } from '../../components/TimesheetTableSkeleton';
@@ -47,6 +50,10 @@ const EmployeeTimesheet: React.FC = () => {
   const todayMax = useMemo(() => localDateKey(), []);
   const [detailOpenByDate, setDetailOpenByDate] = useState<Record<string, boolean>>({});
   const [specialBarsLayout, setSpecialBarsLayout] = useState(false);
+  const [scheduleWorkDays, setScheduleWorkDays] = useState<number[] | null>(null);
+  const [scheduleWindowsByDow, setScheduleWindowsByDow] = useState<Record<number, DayScheduleWindow | null> | null>(
+    null,
+  );
 
   useEffect(() => {
     const sync = () => setSpecialBarsLayout(readSpecialBarsPref());
@@ -65,6 +72,32 @@ const EmployeeTimesheet: React.FC = () => {
     Boolean(periodStart && periodEnd && periodStart <= periodEnd && periodEnd <= todayMax && periodStart <= todayMax);
 
   const companyId = user?.companyId || user?.company_id;
+
+  useEffect(() => {
+    if (!user?.id || !companyId || !isSupabaseConfigured()) {
+      setScheduleWorkDays(null);
+      setScheduleWindowsByDow(null);
+      return;
+    }
+    let active = true;
+    void (async () => {
+      try {
+        const ctx = await getEmployeeTimesheetScheduleContext(user.id, companyId);
+        if (active) {
+          setScheduleWorkDays(ctx.workDays ?? null);
+          setScheduleWindowsByDow(ctx.windowByJsDow);
+        }
+      } catch {
+        if (active) {
+          setScheduleWorkDays(null);
+          setScheduleWindowsByDow(null);
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [user?.id, companyId]);
 
   useEffect(() => {
     if (!user || !isSupabaseConfigured()) {
@@ -159,6 +192,15 @@ const EmployeeTimesheet: React.FC = () => {
     return enumerateLocalCalendarDays(periodStart, periodEnd);
   }, [periodStart, periodEnd, periodValid]);
 
+  const expectedWindowForYmd = useCallback(
+    (dateStr: string): DayScheduleWindow | null | undefined => {
+      if (!scheduleWindowsByDow) return undefined;
+      const dow = new Date(`${dateStr}T12:00:00`).getDay();
+      return scheduleWindowsByDow[dow];
+    },
+    [scheduleWindowsByDow],
+  );
+
   const recordsByDate = useMemo(() => {
     const byDay = new Map<string, any[]>();
     records.forEach((r: any) => {
@@ -183,14 +225,15 @@ const EmployeeTimesheet: React.FC = () => {
   };
 
   const renderDayBadge = (day: DayMirror, dateStr: string) => {
-    if (holidayDates.has(dateStr)) {
+    const override = getStatusOverride(day);
+    if (!override && holidayDates.has(dateStr)) {
       return (
         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold border bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300">
           FERIADO
         </span>
       );
     }
-    const { label, color } = getDayStatus(day);
+    const { label, color } = getDayStatus(day, scheduleWorkDays ?? undefined, expectedWindowForYmd(dateStr));
     if (!label) return null;
     const map: Record<string, string> = {
       green: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300',
@@ -306,7 +349,7 @@ const EmployeeTimesheet: React.FC = () => {
                   const day = empMirror.get(date);
                   if (!day) return null;
                   const noRecords = !day.records || day.records.length === 0;
-                  const dayStatus = getDayStatus(day);
+                  const dayStatus = getDayStatus(day, scheduleWorkDays ?? undefined, expectedWindowForYmd(date));
                   const dayBadge = renderDayBadge(day, date);
                   const badgeInTotal = ['incompleto', 'folga', 'extra', 'falta'].includes(dayStatus.status);
                   const dayRecs = recordsByDate.get(date) ?? [];

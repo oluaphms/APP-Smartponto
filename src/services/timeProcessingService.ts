@@ -38,7 +38,22 @@ export interface DailyProcessResult {
   saida: string | null;
   inicio_intervalo: string | null;
   fim_intervalo: string | null;
+  /** true quando o dia não tem jornada na escala (folga): extras = todo o trabalhado. */
+  scheduled_day_off: boolean;
 }
+
+/** Opções de `processDailyTime` (escala fixa na tela de Cálculos vs. escala por dia do colaborador). */
+export type ProcessDailyTimeOpts = {
+  fixedSchedule?: WorkScheduleInfo;
+  toleranceOverride?: number;
+};
+
+/** Janela esperada do dia (espelho / status) — alinhado a `employee_shift_schedule` + turno. */
+export type DayExpectedWindow = {
+  entrada: string;
+  saida: string;
+  toleranceMin: number;
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,6 +69,19 @@ function padTime(t: string | undefined | null, fallback: string): string {
 function timeToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map((x) => parseInt(x, 10));
   return (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
+}
+
+/**
+ * `employee_shift_schedule.day_of_week` usa o mesmo índice que `Date.getDay()` / `EXTRACT(DOW)`:
+ * 0 = domingo … 6 = sábado.
+ */
+export function jsGetDayToScheduleDayIndex(jsDow: number): number {
+  return jsDow;
+}
+
+/** Mantido por compatibilidade; ESS já está no índice JS. */
+export function scheduleDayIndexToJsGetDay(idx: number): number {
+  return idx;
 }
 
 function formatHHmm(d: Date): string {
@@ -150,6 +178,291 @@ function expectedMinutesFromSchedule(s: WorkScheduleInfo): number {
   return Math.max(0, (s.daily_hours || 8) * 60);
 }
 
+/** Monta `WorkScheduleInfo` a partir de uma linha `work_shifts` (intervalo só se válido dentro do turno). */
+export function shiftRecordToWorkScheduleInfo(sh: Record<string, unknown>): WorkScheduleInfo {
+  const start_time = padTime((sh.start_time || sh.entry_time) as string | undefined, '08:00');
+  const end_time = padTime((sh.end_time || sh.exit_time) as string | undefined, '17:00');
+  const startM = timeToMinutes(start_time);
+  const endM = timeToMinutes(end_time);
+  const span = Math.max(0, endM - startM);
+  const breakMin = Number(sh.break_minutes ?? 60);
+
+  let break_start = sh.break_start_time ? padTime(String(sh.break_start_time), '12:00') : start_time;
+  let break_end = sh.break_end_time ? padTime(String(sh.break_end_time), '13:00') : start_time;
+  const bs = timeToMinutes(break_start);
+  const be = timeToMinutes(break_end);
+  const breakInside = be > bs && bs >= startM && be <= endM;
+
+  if (!breakInside) {
+    if (span > 6 * 60 && breakMin > 0 && (!sh.break_start_time || !sh.break_end_time)) {
+      const sm = startM + Math.floor(span / 2);
+      break_start = `${String(Math.floor(sm / 60)).padStart(2, '0')}:${String(sm % 60).padStart(2, '0')}`;
+      const em = sm + breakMin;
+      break_end = `${String(Math.floor(em / 60)).padStart(2, '0')}:${String(em % 60).padStart(2, '0')}`;
+    } else {
+      break_start = start_time;
+      break_end = start_time;
+    }
+  }
+
+  const tolerance = Number(sh.tolerance_minutes ?? sh.tolerancia_entrada ?? 10);
+  const daily_hours = Number(sh.daily_hours ?? sh.limite_horas_dia ?? 8) || 8;
+
+  return {
+    start_time,
+    end_time,
+    break_start,
+    break_end,
+    tolerance_minutes: tolerance,
+    daily_hours,
+    work_days: [1, 2, 3, 4, 5],
+  };
+}
+
+export interface EmployeeShiftScheduleRow {
+  day_of_week: number;
+  shift_id: string | null;
+  work_shift_id?: string | null;
+  is_day_off: boolean | null;
+  is_workday?: boolean | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  break_start?: string | null;
+  break_end?: string | null;
+  tolerance_minutes?: number | null;
+}
+
+function essRowIsActiveWorkday(r: EmployeeShiftScheduleRow): boolean {
+  if (r.is_workday === false) return false;
+  if (r.is_day_off === true) return false;
+  const hasInline = !!(r.start_time && r.end_time);
+  const sid = r.shift_id || r.work_shift_id;
+  return hasInline || !!sid;
+}
+
+/** Monta jornada do dia a partir da linha ESS (horários inline e/ou turno já carregado). */
+function workScheduleFromEssRow(
+  row: EmployeeShiftScheduleRow,
+  shift: Record<string, unknown> | null
+): WorkScheduleInfo | null {
+  if (row.start_time && row.end_time) {
+    return shiftRecordToWorkScheduleInfo({
+      start_time: row.start_time,
+      end_time: row.end_time,
+      break_start_time: row.break_start ?? undefined,
+      break_end_time: row.break_end ?? undefined,
+      break_minutes: Number(shift?.break_minutes ?? 60),
+      tolerance_minutes: row.tolerance_minutes ?? shift?.tolerance_minutes ?? shift?.tolerancia_entrada ?? 10,
+      daily_hours: shift?.daily_hours ?? shift?.limite_horas_dia ?? 8,
+    });
+  }
+  if (shift) return shiftRecordToWorkScheduleInfo(shift);
+  return null;
+}
+
+async function fetchEmployeeShiftScheduleRows(
+  employeeId: string,
+  companyId: string
+): Promise<EmployeeShiftScheduleRow[]> {
+  if (!isSupabaseConfigured() || !employeeId || !companyId) return [];
+  try {
+    const rows = (await db.select(
+      'employee_shift_schedule',
+      [
+        { column: 'employee_id', operator: 'eq', value: employeeId },
+        { column: 'company_id', operator: 'eq', value: companyId },
+      ],
+      { column: 'day_of_week', ascending: true },
+      20
+    )) as EmployeeShiftScheduleRow[];
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchWorkShiftById(
+  shiftId: string,
+  companyId: string
+): Promise<Record<string, unknown> | null> {
+  const shifts = (await db.select(
+    'work_shifts',
+    [
+      { column: 'id', operator: 'eq', value: shiftId },
+      { column: 'company_id', operator: 'eq', value: companyId },
+    ],
+    undefined,
+    1
+  )) as Record<string, unknown>[];
+  return shifts?.[0] ?? null;
+}
+
+/**
+ * Resolve a jornada do colaborador na data civil `dateStr` (America-friendly: use T12:00:00 no caller).
+ * Prioriza `employee_shift_schedule`; se vazio, usa `users` → `schedules` → `work_shifts`.
+ * `schedule === null` = dia sem jornada (folga na escala).
+ */
+export async function resolveEmployeeScheduleForDate(
+  employeeId: string,
+  companyId: string,
+  dateStr: string
+): Promise<{ schedule: WorkScheduleInfo | null; jsDayOfWeek: number }> {
+  const jsDayOfWeek = new Date(`${dateStr}T12:00:00`).getDay();
+  const ess = await fetchEmployeeShiftScheduleRows(employeeId, companyId);
+
+  if (ess.length > 0) {
+    const row = ess.find((r) => r.day_of_week === jsDayOfWeek);
+    if (!row) {
+      const legacy = await getLegacyScheduleFromUser(employeeId, companyId);
+      if (legacy && legacy.work_days.includes(jsDayOfWeek)) {
+        return { schedule: legacy, jsDayOfWeek };
+      }
+      return { schedule: null, jsDayOfWeek };
+    }
+    if (!essRowIsActiveWorkday(row)) {
+      return { schedule: null, jsDayOfWeek };
+    }
+    const shiftId = row.shift_id || row.work_shift_id;
+    const sh = shiftId ? await fetchWorkShiftById(shiftId, companyId) : null;
+    const info = workScheduleFromEssRow(row, sh);
+    if (!info) return { schedule: null, jsDayOfWeek };
+    const workDays = ess.filter(essRowIsActiveWorkday).map((r) => r.day_of_week);
+    return {
+      schedule: { ...info, work_days: workDays.length ? [...new Set(workDays)].sort((a, b) => a - b) : info.work_days },
+      jsDayOfWeek,
+    };
+  }
+
+  const legacy = await getLegacyScheduleFromUser(employeeId, companyId);
+  if (!legacy) return { schedule: null, jsDayOfWeek };
+  if (!legacy.work_days.includes(jsDayOfWeek)) {
+    return { schedule: null, jsDayOfWeek };
+  }
+  return { schedule: legacy, jsDayOfWeek };
+}
+
+/**
+ * Contexto para o espelho: dias úteis reais e janela entrada/saída por `getDay()` JS.
+ */
+export async function getEmployeeTimesheetScheduleContext(
+  employeeId: string,
+  companyId: string
+): Promise<{ workDays: number[]; windowByJsDow: Record<number, DayExpectedWindow | null> }> {
+  const windowByJsDow: Record<number, DayExpectedWindow | null> = {
+    0: null,
+    1: null,
+    2: null,
+    3: null,
+    4: null,
+    5: null,
+    6: null,
+  };
+
+  const ess = await fetchEmployeeShiftScheduleRows(employeeId, companyId);
+  if (ess.length > 0) {
+    const shiftCache = new Map<string, Record<string, unknown> | null>();
+    for (const r of ess) {
+      const js = r.day_of_week;
+      if (!essRowIsActiveWorkday(r)) {
+        windowByJsDow[js] = null;
+        continue;
+      }
+      const shiftId = r.shift_id || r.work_shift_id;
+      let sh: Record<string, unknown> | null = null;
+      if (shiftId) {
+        if (!shiftCache.has(shiftId)) {
+          shiftCache.set(shiftId, await fetchWorkShiftById(shiftId, companyId));
+        }
+        sh = shiftCache.get(shiftId) ?? null;
+      }
+      const info = workScheduleFromEssRow(r, sh);
+      if (info) {
+        windowByJsDow[js] = {
+          entrada: info.start_time,
+          saida: info.end_time,
+          toleranceMin: info.tolerance_minutes ?? 0,
+        };
+      } else {
+        windowByJsDow[js] = null;
+      }
+    }
+    const workDays = ess.filter(essRowIsActiveWorkday).map((r) => r.day_of_week);
+    return {
+      workDays: workDays.length ? [...new Set(workDays)].sort((a, b) => a - b) : [1, 2, 3, 4, 5],
+      windowByJsDow,
+    };
+  }
+
+  const legacy = await getLegacyScheduleFromUser(employeeId, companyId);
+  const workDays = legacy?.work_days?.length ? legacy.work_days : [1, 2, 3, 4, 5];
+  const win = legacy
+    ? {
+        entrada: legacy.start_time,
+        saida: legacy.end_time,
+        toleranceMin: legacy.tolerance_minutes ?? 0,
+      }
+    : null;
+  for (let d = 0; d <= 6; d++) {
+    windowByJsDow[d] = win && workDays.includes(d) ? win : null;
+  }
+  return { workDays, windowByJsDow };
+}
+
+async function getLegacyScheduleFromUser(
+  employeeId: string,
+  companyId: string
+): Promise<WorkScheduleInfo | null> {
+  if (!isSupabaseConfigured() || !employeeId) return null;
+
+  try {
+    const users = (await db.select(
+      'users',
+      [{ column: 'id', operator: 'eq', value: employeeId }],
+      undefined,
+      1
+    )) as { schedule_id?: string | null }[];
+
+    const scheduleId = users?.[0]?.schedule_id;
+    if (!scheduleId) return null;
+
+    const schedules = (await db.select(
+      'schedules',
+      [{ column: 'id', operator: 'eq', value: scheduleId }],
+      undefined,
+      1
+    )) as { shift_id?: string | null; work_days?: number[] | null; days?: number[] | null }[];
+
+    const shiftId = schedules?.[0]?.shift_id;
+    if (!shiftId) return null;
+
+    const shifts = (await db.select(
+      'work_shifts',
+      [
+        { column: 'id', operator: 'eq', value: shiftId },
+        { column: 'company_id', operator: 'eq', value: companyId },
+      ],
+      undefined,
+      1
+    )) as Record<string, unknown>[];
+
+    const sh = shifts?.[0];
+    if (!sh) return null;
+
+    const base = shiftRecordToWorkScheduleInfo(sh);
+    const sched = schedules[0];
+    const work_days = Array.isArray(sched?.days)
+      ? (sched.days as number[])
+      : Array.isArray(sched?.work_days)
+        ? (sched.work_days as number[])
+        : [1, 2, 3, 4, 5];
+
+    return { ...base, work_days };
+  } catch (e) {
+    console.warn('[timeProcessingService] getLegacyScheduleFromUser:', e);
+    return null;
+  }
+}
+
 /**
  * Busca registros de ponto do colaborador em uma data (timezone local do ISO).
  */
@@ -174,7 +487,9 @@ export async function getDayRecords(employeeId: string, dateStr: string): Promis
 }
 
 /**
- * Busca escala padrão do colaborador (users → schedules → work_shifts).
+ * Busca escala padrão do colaborador.
+ * Se existir `employee_shift_schedule`, `work_days` reflete os dias com jornada (ex.: 6x1 com sábado).
+ * Horários padrão exibidos seguem o turno da segunda-feira (ou primeiro dia com trabalho).
  */
 export async function getEmployeeSchedule(
   employeeId: string,
@@ -183,70 +498,26 @@ export async function getEmployeeSchedule(
   if (!isSupabaseConfigured() || !employeeId) return null;
 
   try {
-    const users = (await db.select(
-      'users',
-      [{ column: 'id', operator: 'eq', value: employeeId }],
-      undefined,
-      1
-    )) as { schedule_id?: string | null }[];
-
-    const scheduleId = users?.[0]?.schedule_id;
-    if (!scheduleId) return null;
-
-    const schedules = (await db.select(
-      'schedules',
-      [{ column: 'id', operator: 'eq', value: scheduleId }],
-      undefined,
-      1
-    )) as { shift_id?: string | null; work_days?: number[] | null }[];
-
-    const shiftId = schedules?.[0]?.shift_id;
-    if (!shiftId) return null;
-
-    const shifts = (await db.select(
-      'work_shifts',
-      [
-        { column: 'id', operator: 'eq', value: shiftId },
-        { column: 'company_id', operator: 'eq', value: companyId },
-      ],
-      undefined,
-      1
-    )) as Record<string, unknown>[];
-
-    const sh = shifts?.[0];
-    if (!sh) return null;
-
-    const start_time = padTime(
-      (sh.start_time || sh.entry_time) as string | undefined,
-      '08:00'
-    );
-    const end_time = padTime((sh.end_time || sh.exit_time) as string | undefined, '17:00');
-
-    let break_start = padTime(sh.break_start_time as string | undefined, '12:00');
-    let break_end = padTime(sh.break_end_time as string | undefined, '13:00');
-    const breakMin = Number(sh.break_minutes ?? 60);
-    if (
-      (!sh.break_start_time && !sh.break_end_time && breakMin > 0) ||
-      timeToMinutes(break_end) <= timeToMinutes(break_start)
-    ) {
-      const sm = timeToMinutes(start_time) + Math.floor((timeToMinutes(end_time) - timeToMinutes(start_time)) / 2);
-      break_start = `${String(Math.floor(sm / 60)).padStart(2, '0')}:${String(sm % 60).padStart(2, '0')}`;
-      const em = sm + breakMin;
-      break_end = `${String(Math.floor(em / 60)).padStart(2, '0')}:${String(em % 60).padStart(2, '0')}`;
+    const ess = await fetchEmployeeShiftScheduleRows(employeeId, companyId);
+    if (ess.length > 0) {
+      const active = ess.filter(essRowIsActiveWorkday);
+      const workDays = active.map((r) => r.day_of_week);
+      const sortedDays = [...new Set(workDays)].sort((a, b) => a - b);
+      const dowOrder = [1, 2, 3, 4, 5, 6, 0];
+      const pickRow =
+        dowOrder.map((d) => active.find((r) => r.day_of_week === d)).find(Boolean) || active[0];
+      if (!pickRow) return null;
+      const shiftId = pickRow.shift_id || pickRow.work_shift_id;
+      const sh = shiftId ? await fetchWorkShiftById(shiftId, companyId) : null;
+      const base = workScheduleFromEssRow(pickRow, sh);
+      if (!base) return null;
+      return {
+        ...base,
+        work_days: sortedDays.length ? sortedDays : base.work_days,
+      };
     }
 
-    const tolerance = Number(sh.tolerance_minutes ?? sh.tolerancia_entrada ?? 10);
-    const daily_hours = Number(sh.daily_hours ?? sh.limite_horas_dia ?? 8) || 8;
-
-    return {
-      start_time,
-      end_time,
-      break_start,
-      break_end,
-      tolerance_minutes: tolerance,
-      daily_hours,
-      work_days: Array.isArray(schedules[0]?.work_days) ? (schedules[0].work_days as number[]) : [1, 2, 3, 4, 5],
-    };
+    return getLegacyScheduleFromUser(employeeId, companyId);
   } catch (e) {
     console.warn('[timeProcessingService] getEmployeeSchedule:', e);
     return null;
@@ -308,15 +579,47 @@ function summarizeDayRecords(records: RawTimeRecord[]): {
 
 /**
  * Processa um dia: minutos trabalhados, esperados, extras e atraso na entrada.
+ * Usa `employee_shift_schedule` + turno do dia quando disponível; senão, escala legacy do cadastro.
  */
 export async function processDailyTime(
   employeeId: string,
   companyId: string,
   dateStr: string,
-  schedule: WorkScheduleInfo
+  opts?: ProcessDailyTimeOpts
 ): Promise<DailyProcessResult> {
   const records = await getDayRecords(employeeId, dateStr);
   const { totalMinutes, entrada, saida, inicio_intervalo, fim_intervalo } = summarizeDayRecords(records);
+
+  let schedule: WorkScheduleInfo | null = null;
+  let scheduled_day_off = false;
+
+  if (opts?.fixedSchedule) {
+    const dow = new Date(`${dateStr}T12:00:00`).getDay();
+    scheduled_day_off = !opts.fixedSchedule.work_days.includes(dow);
+    schedule = scheduled_day_off ? null : { ...opts.fixedSchedule };
+  } else {
+    const r = await resolveEmployeeScheduleForDate(employeeId, companyId, dateStr);
+    scheduled_day_off = r.schedule === null;
+    schedule = r.schedule;
+  }
+
+  if (schedule && opts?.toleranceOverride != null) {
+    schedule = { ...schedule, tolerance_minutes: opts.toleranceOverride };
+  }
+
+  if (scheduled_day_off || !schedule) {
+    return {
+      total_worked_minutes: totalMinutes,
+      expected_minutes: 0,
+      overtime_minutes: totalMinutes,
+      late_minutes: 0,
+      entrada,
+      saida,
+      inicio_intervalo,
+      fim_intervalo,
+      scheduled_day_off: true,
+    };
+  }
 
   const expected = expectedMinutesFromSchedule(schedule);
   const overtime = Math.max(0, totalMinutes - expected);
@@ -344,6 +647,7 @@ export async function processDailyTime(
     saida,
     inicio_intervalo,
     fim_intervalo,
+    scheduled_day_off: false,
   };
 }
 

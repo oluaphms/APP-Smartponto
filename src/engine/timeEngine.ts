@@ -7,8 +7,8 @@
 import { db, isSupabaseConfigured } from '../services/supabaseClient';
 import {
   getDayRecords,
-  getEmployeeSchedule,
   processDailyTime,
+  resolveEmployeeScheduleForDate,
   updateBankHours,
   type RawTimeRecord,
   type WorkScheduleInfo,
@@ -188,12 +188,19 @@ export function detectInconsistencies(
   employeeId: string,
   dateStr: string,
   records: RawTimeRecord[],
-  schedule: WorkScheduleInfo | null
+  schedule: WorkScheduleInfo | null,
+  /** Quando informado, ignora `schedule.work_days` (ex.: escala por `employee_shift_schedule`). */
+  explicitIsWorkDay?: boolean
 ): TimeInconsistency[] {
   const list: TimeInconsistency[] = [];
   const parsed = parseTimeRecords(records);
-  const dayOfWeek = new Date(dateStr).getDay();
-  const isWorkDay = schedule ? schedule.work_days.includes(dayOfWeek) : true;
+  const dayOfWeek = new Date(`${dateStr}T12:00:00`).getDay();
+  const isWorkDay =
+    explicitIsWorkDay !== undefined
+      ? explicitIsWorkDay
+      : schedule
+        ? schedule.work_days.includes(dayOfWeek)
+        : false;
 
   if (records.length === 0) {
     if (isWorkDay) list.push({ employee_id: employeeId, date: dateStr, type: 'missing_entry', description: 'Falta de entrada (dia de trabalho sem marcação)' });
@@ -299,13 +306,18 @@ export async function processEmployeeDay(
   companyId: string,
   dateStr: string
 ): Promise<DaySummary> {
-  const schedule = await getEmployeeSchedule(employeeId, companyId);
+  const resolved = await resolveEmployeeScheduleForDate(employeeId, companyId, dateStr);
   const records = await getDayRecords(employeeId, dateStr);
-  const daily = await processDailyTime(employeeId, companyId, dateStr, schedule || defaultSchedule());
-  const inconsistencies = detectInconsistencies(employeeId, dateStr, records, schedule);
+  const daily = await processDailyTime(employeeId, companyId, dateStr);
+  const inconsistencies = detectInconsistencies(
+    employeeId,
+    dateStr,
+    records,
+    resolved.schedule,
+    resolved.schedule ? undefined : false
+  );
   const night_minutes = calculateNightHours(records);
-  const dayOfWeek = new Date(dateStr).getDay();
-  const isOff = schedule ? !schedule.work_days.includes(dayOfWeek) : false;
+  const isOff = resolved.schedule === null;
   const overtime = calculateOvertime(
     dateStr,
     daily.total_worked_minutes,

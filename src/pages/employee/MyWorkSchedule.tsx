@@ -16,8 +16,8 @@ import { LoadingState } from '../../../components/UI';
 import { i18n } from '../../../lib/i18n';
 import type { WeeklyScheduleDay } from '../../../types';
 
-/** Grade semanal (horário): 0 = segunda … 6 = domingo. */
-const DAY_MON_FIRST = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+/** Alinhado à ESS / Date.getDay(): 0 = domingo … 6 = sábado. */
+const DAY_JS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 /** Dias na escala simples (admin): mesmo índice que `schedules.days` — 0 = domingo. */
 const SCHEDULE_DAY_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -370,7 +370,7 @@ const MyWorkSchedule: React.FC = () => {
             {empDays.map((row) => (
               <li key={row.day_of_week} className="px-6 py-3 flex justify-between items-center gap-4">
                 <span className="font-medium text-slate-900 dark:text-white">
-                  {DAY_MON_FIRST[row.day_of_week] ?? `Dia ${row.day_of_week}`}
+                  {DAY_JS[row.day_of_week] ?? `Dia ${row.day_of_week}`}
                 </span>
                 <span className="text-sm text-slate-600 dark:text-slate-400">
                   {row.is_day_off

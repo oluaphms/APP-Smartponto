@@ -29,6 +29,7 @@ import {
   getDayRecords,
   getEmployeeSchedule,
   processDailyTime,
+  resolveEmployeeScheduleForDate,
   type DailyProcessResult,
   type WorkScheduleInfo,
 } from '../../services/timeProcessingService';
@@ -229,12 +230,19 @@ const AdminCalculos: React.FC = () => {
     async (employeeId: string, companyId: string, dateStr: string): Promise<CalcDayRow> => {
       const schedule = await buildSchedule(employeeId, companyId);
       const records = await getDayRecords(employeeId, dateStr);
-      const dailyBase = await processDailyTime(employeeId, companyId, dateStr, schedule);
+      const tol = calcOptions.useTolerance ? calcOptions.toleranceMinutes : 0;
+      const dailyBase = await processDailyTime(
+        employeeId,
+        companyId,
+        dateStr,
+        calcOptions.useEmployeeSchedule
+          ? { toleranceOverride: tol }
+          : { fixedSchedule: schedule, toleranceOverride: tol },
+      );
       const parsed = parseTimeRecords(records);
 
-      const dayOfWeek = new Date(`${dateStr}T12:00:00`).getDay();
-      const isDayOff = !schedule.work_days.includes(dayOfWeek);
       const isHoliday = holidayDates.has(dateStr);
+      const isDayOff = dailyBase.scheduled_day_off || isHoliday;
 
       let workedMinutes = dailyBase.total_worked_minutes;
       const expectedMinutes = dailyBase.expected_minutes;
@@ -281,7 +289,16 @@ const AdminCalculos: React.FC = () => {
 
       let nightMinutes = calcOptions.includeNight ? calculateNightHours(records) : 0;
 
-      const inconsistencies = detectInconsistencies(employeeId, dateStr, records, schedule);
+      const dayScheduleForDetect = calcOptions.useEmployeeSchedule
+        ? (await resolveEmployeeScheduleForDate(employeeId, companyId, dateStr)).schedule
+        : schedule;
+      const inconsistencies = detectInconsistencies(
+        employeeId,
+        dateStr,
+        records,
+        dayScheduleForDetect,
+        calcOptions.useEmployeeSchedule ? !dailyBase.scheduled_day_off : undefined,
+      );
       if (calcOptions.enforceMinBreak) {
         const threshold = Math.max(0, calcOptions.minBreakAfterHours) * 60;
         const hasMissingBreak = breakMinutes < calcOptions.minBreakMinutes && workedMinutes > threshold;
@@ -336,6 +353,7 @@ const AdminCalculos: React.FC = () => {
       calcOptions.roundingMinutes,
       calcOptions.toleranceMinutes,
       calcOptions.useTolerance,
+      calcOptions.useEmployeeSchedule,
       holidayDates,
     ],
   );

@@ -129,10 +129,13 @@ BEGIN
     WHEN 6 THEN 5
   END;
   
-  SELECT is_day_off INTO v_is_day_off
-  FROM public.employee_shift_schedule
-  WHERE employee_id = p_employee_id
-    AND day_of_week = v_day_of_week;
+  v_is_day_off := (
+    SELECT is_day_off
+    FROM public.employee_shift_schedule
+    WHERE employee_id = p_employee_id
+      AND day_of_week = v_day_of_week
+    LIMIT 1
+  );
   
   RETURN COALESCE(v_is_day_off, false);
 END;
@@ -146,11 +149,11 @@ CREATE OR REPLACE FUNCTION is_company_holiday(
 DECLARE
   v_is_holiday boolean;
 BEGIN
-  SELECT EXISTS (
+  v_is_holiday := EXISTS (
     SELECT 1 FROM public.holidays
     WHERE company_id = p_company_id
       AND date = p_date
-  ) INTO v_is_holiday;
+  );
   
   RETURN COALESCE(v_is_holiday, false);
 END;
