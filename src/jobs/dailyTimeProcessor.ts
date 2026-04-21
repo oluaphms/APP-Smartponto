@@ -5,7 +5,7 @@
  * Pode ser chamado por cron (ex.: 23:59) ou pela API /api/process-daily-time.
  */
 
-import { db, isSupabaseConfigured } from '../services/supabaseClient';
+import { isSupabaseConfigured } from '../services/supabaseClient';
 import {
   processEmployeeDay,
   saveInconsistencies,
@@ -13,6 +13,7 @@ import {
   calculateBankHours,
   detectFraudAlerts,
   saveTimeAlerts,
+  getCompanyRules,
 } from '../engine/timeEngine';
 
 export interface DailyProcessorResult {
@@ -43,9 +44,9 @@ export async function runDailyTimeProcessor(dateStr?: string): Promise<DailyProc
       await saveInconsistencies(emp.id, emp.company_id, date, summary.inconsistencies);
       await saveNightHours(emp.id, emp.company_id, date, summary.night_minutes);
 
-      const rules = (await db.select('overtime_rules', [{ column: 'company_id', operator: 'eq', value: emp.company_id }], undefined, 1)) as any[];
-      const bankEnabled = rules?.[0]?.bank_hours_enabled !== false;
-      const overtimeHours = ((summary.overtime?.overtime_50_minutes || 0) + (summary.overtime?.overtime_100_minutes || 0)) / 60;
+      const companyRules = await getCompanyRules(emp.company_id);
+      const bankEnabled = companyRules.time_bank_enabled;
+      const overtimeHours = Number(summary.bank_hours_delta || 0) / 60;
       const missingHours = summary.daily.missing_minutes / 60;
       await calculateBankHours(emp.id, emp.company_id, date, overtimeHours, missingHours, bankEnabled);
 
