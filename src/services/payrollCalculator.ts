@@ -6,7 +6,7 @@
 
 import { db, checkSupabaseConfigured, isSupabaseConfigured } from './supabaseClient';
 import { processDailyTime, getDayRecords } from './timeProcessingService';
-import { calculateNightHours } from '../engine/timeEngine';
+import { calculateNightHours, calculateOvertime, classifyDay, getCompanyRules } from '../engine/timeEngine';
 
 // ============ TIPOS ============
 
@@ -84,6 +84,8 @@ export async function calculateDailyTimesheet(
   expectedMinutes: number = DEFAULT_EXPECTED_MINUTES
 ): Promise<DailyTimesheet> {
   const dailyResult = await processDailyTime(employeeId, companyId, dateStr);
+  const companyRules = await getCompanyRules(companyId);
+  const dayType = await classifyDay({ date: dateStr, company: { id: companyId } });
 
   // Calcula minutos noturnos
   const records = await getDayRecords(employeeId, dateStr);
@@ -105,19 +107,31 @@ export async function calculateDailyTimesheet(
     absenceMinutes = expectedMin - dailyResult.total_worked_minutes;
   }
 
+  const overtimeByRule = calculateOvertime({
+    date: dateStr,
+    dayType,
+    workedMinutes: dailyResult.total_worked_minutes,
+    expectedMinutes: dailyResult.expected_minutes,
+    companyRules,
+    schedule: null,
+  });
+
   return {
     employee_id: employeeId,
     company_id: companyId,
     date: dateStr,
     worked_minutes: dailyResult.total_worked_minutes,
     expected_minutes: isWorkDay ? expectedMin : 0,
-    overtime_minutes: dailyResult.overtime_minutes,
+    overtime_minutes: overtimeByRule.overtime_50_minutes + overtimeByRule.overtime_100_minutes,
     absence_minutes: absenceMinutes,
     night_minutes: nightMinutes,
     late_minutes: dailyResult.late_minutes,
     is_absence: isAbsence,
-    is_holiday: false, // TODO: integrar com tabela de feriados
+    is_holiday: dayType === 'HOLIDAY',
     raw_data: {
+      day_type: dayType,
+      overtime_50_minutes: overtimeByRule.overtime_50_minutes,
+      overtime_100_minutes: overtimeByRule.overtime_100_minutes,
       entrada: dailyResult.entrada,
       saida: dailyResult.saida,
       inicio_intervalo: dailyResult.inicio_intervalo,
