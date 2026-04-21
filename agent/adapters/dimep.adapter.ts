@@ -45,8 +45,11 @@ function parseAfdLine(line: string, device: DeviceConfig, tz: string): Punch | n
 
   if (hh > 23 || mm > 59 || ss > 59) return null;
 
-  // Construir timestamp ISO
-  const isoString = `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+  // Construir timestamp ISO com offset explícito para evitar interpretação como UTC.
+  // O AFD da Portaria 1510 armazena horário local (sem offset).
+  // Usamos -03:00 (BRT) como fallback; o timezone configurável é preferido via afd_timezone.
+  const offsetStr = tz === 'America/Sao_Paulo' ? '-03:00' : '+00:00';
+  const isoString = `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}${offsetStr}`;
   const date = new Date(isoString);
 
   if (Number.isNaN(date.getTime())) return null;

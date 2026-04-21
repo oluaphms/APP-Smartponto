@@ -1,6 +1,9 @@
 /**
  * Ponto de entrada do agente local PontoWebDesk: fila offline + sync periódico → Supabase.
  *
+ * PIPELINE ÚNICO (ARQUITETURA HÍBRIDA CORRIGIDA):
+ * Relógio → Adapter → SQLite (time_records) → syncService.js → clock_event_logs → espelho
+ *
  * Variáveis: `.env` / `.env.local` na raiz do projeto (ver `agent/config`).
  * Uso: npm run clock-sync-agent
  */
@@ -50,15 +53,37 @@ async function main(): Promise<void> {
 
   log.connOk(`Agente iniciado - próximo ciclo em ${cfg.intervalMs / 1000}s`);
 
+  // Iniciar worker de sincronização local → Supabase (pipeline único via clock_event_logs)
+  // Controlado por CLOCK_LOCAL_TIME_RECORDS_SYNC (default: '1' = ativo)
   if ((process.env.CLOCK_LOCAL_TIME_RECORDS_SYNC || '1').trim() !== '0') {
     const syncInterval = parseInt(process.env.LOCAL_TIME_RECORDS_SYNC_INTERVAL_MS || '15000', 10) || 15000;
-    startSyncService({
-      sqliteDbPath: cfg.sqliteDbPath,
-      supabaseUrl: cfg.supabaseUrl,
-      serviceRoleKey: cfg.serviceRoleKey,
-      intervalMs: Math.max(5000, syncInterval),
-    });
-    log.connOk(`Sync local → Supabase: intervalo ${Math.max(5000, syncInterval) / 1000}s (desligar: CLOCK_LOCAL_TIME_RECORDS_SYNC=0)`);
+    const effectiveInterval = Math.max(5000, syncInterval);
+
+    if (!cfg.supabaseUrl || !cfg.serviceRoleKey) {
+      log.warn('SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY ausentes — worker de sync desativado. Configure as variáveis para habilitar.');
+    } else {
+      const worker = startSyncService({
+        sqliteDbPath: cfg.sqliteDbPath,
+        supabaseUrl: cfg.supabaseUrl,
+        serviceRoleKey: cfg.serviceRoleKey,
+        intervalMs: effectiveInterval,
+      });
+      log.connOk(`Worker sync local → clock_event_logs: intervalo ${effectiveInterval / 1000}s (desligar: CLOCK_LOCAL_TIME_RECORDS_SYNC=0)`);
+
+      // Logar status do circuit breaker a cada 5 minutos
+      setInterval(() => {
+        const cbStatus = worker.cb.getStatus();
+        if (cbStatus.state !== 'CLOSED') {
+          log.warn(`Circuit breaker: ${cbStatus.state} (falhas: ${cbStatus.failureRate}%)`, cbStatus);
+        }
+        const metrics = worker.queue.getMetrics();
+        if (metrics.pending > 0 || metrics.failed > 0) {
+          log.log('info', 'queue', `Fila: ${metrics.pending} pendentes, ${metrics.failed} falhos, taxa erro: ${metrics.errorRate}%`, metrics);
+        }
+      }, 5 * 60_000);
+    }
+  } else {
+    log.connOk('Worker sync local desativado (CLOCK_LOCAL_TIME_RECORDS_SYNC=0)');
   }
 
   await tick(cfg);

@@ -355,12 +355,9 @@ async function syncOneDevice(
 
     let nextLastSync: string | undefined = row.last_sync ?? undefined;
     if (insertedRecords.length > 0) {
-      let maxMs = 0;
-      for (const r of insertedRecords) {
-        const t = new Date(r.timestamp).getTime();
-        if (!Number.isNaN(t) && t > maxMs) maxMs = t;
-      }
-      nextLastSync = maxMs > 0 ? new Date(maxMs).toISOString() : new Date().toISOString();
+      // Usar o momento atual do sync, não o timestamp da última batida.
+      // Isso evita reprocessar batidas antigas em ciclos futuros.
+      nextLastSync = new Date().toISOString();
       await restPatch(cfg, `devices?id=eq.${encodeURIComponent(deviceId)}`, { last_sync: nextLastSync });
     }
 

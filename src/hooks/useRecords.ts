@@ -5,18 +5,47 @@ import { PontoService } from '../../services/pontoService';
 import { OfflinePunchService } from '../../services/offlinePunchService';
 import { timeRecordsQueries } from '../../services/queryOptimizations';
 import { invalidateAfterPunch } from '../services/queryCache';
+import { supabase } from '../../services/supabase';
 
 export const useRecords = (userId: string | undefined, companyId: string | undefined) => {
   const [error, setError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  // ✅ OTIMIZADO: Usar React Query para cache automático
+  // Cache com staleTime zero: dados do relógio chegam a cada 10-15s,
+  // não faz sentido manter cache de 1 minuto.
   const { data: records = [], isLoading, refetch } = useQuery({
     queryKey: ['records', userId],
     queryFn: () => userId ? timeRecordsQueries.getRecordsByUser(userId, 50, 0).then(r => r.data || []) : Promise.resolve([]),
     enabled: !!userId,
-    staleTime: 1 * 60 * 1000, // 1 minuto
+    staleTime: 0,
   });
+
+  // Realtime: invalida cache automaticamente quando time_records recebe INSERT
+  // Isso garante que batidas do relógio aparecem sem refresh manual.
+  useEffect(() => {
+    if (!userId || !companyId) return;
+
+    const channel = supabase
+      .channel(`time_records:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'time_records',
+          filter: `company_id=eq.${companyId}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['records', userId] });
+          invalidateAfterPunch(userId, companyId);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, companyId, queryClient]);
 
   const refreshRecords = useCallback(async (force = false) => {
     if (force) {

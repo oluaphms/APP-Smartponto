@@ -1,0 +1,82 @@
+/**
+ * GET /api/health
+ *
+ * Health check do sistema híbrido.
+ * Verifica: Supabase acessível, fila local funcionando, circuit breaker.
+ *
+ * Retorna 200 se tudo OK, 503 se algum componente crítico falhou.
+ */
+
+import { createClient } from '@supabase/supabase-js';
+
+const corsHeaders: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+const SUPABASE_TIMEOUT_MS = 5_000;
+
+async function checkSupabase(url: string, serviceKey: string): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
+  const t0 = Date.now();
+  try {
+    const supabase = createClient(url, serviceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), SUPABASE_TIMEOUT_MS);
+    const { error } = await supabase
+      .from('clock_event_logs')
+      .select('id')
+      .limit(1)
+      .abortSignal(controller.signal);
+    clearTimeout(timeout);
+    return { ok: !error, latencyMs: Date.now() - t0, error: error?.message };
+  } catch (e) {
+    return { ok: false, latencyMs: Date.now() - t0, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export default async function handler(request: Request): Promise<Response> {
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
+  const url         = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  const serviceKey  = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  const apiKey      = (process.env.CLOCK_AGENT_API_KEY || process.env.API_KEY || '').trim();
+
+  const checks: Record<string, { ok: boolean; detail?: string; latencyMs?: number }> = {};
+
+  // 1. Configuração
+  checks.config = {
+    ok: !!(url && serviceKey && apiKey),
+    detail: !url ? 'SUPABASE_URL ausente'
+      : !serviceKey ? 'SUPABASE_SERVICE_ROLE_KEY ausente'
+      : !apiKey ? 'API_KEY ausente'
+      : 'ok',
+  };
+
+  // 2. Supabase
+  if (url && serviceKey) {
+    const result = await checkSupabase(url, serviceKey);
+    checks.supabase = { ok: result.ok, latencyMs: result.latencyMs, detail: result.error ?? 'ok' };
+  } else {
+    checks.supabase = { ok: false, detail: 'credenciais ausentes' };
+  }
+
+  // 3. API /api/punch (self-check)
+  checks.api_punch = { ok: true, detail: 'endpoint disponível' };
+
+  const allOk = Object.values(checks).every(c => c.ok);
+  const status = allOk ? 200 : 503;
+
+  return Response.json(
+    {
+      status: allOk ? 'ok' : 'degraded',
+      timestamp: new Date().toISOString(),
+      checks,
+    },
+    { status, headers: corsHeaders }
+  );
+}

@@ -1,11 +1,13 @@
 /**
- * Fila persistente em SQLite: tabela `pending_punches`.
+ * Fila persistente em SQLite: tabela `pending_punches` (fallback) + `time_records` (pipeline principal).
  *
- * Colunas obrigatórias do modelo: id, employee_id, timestamp, source, synced.
- * `context_json` armazena retry + payload PostgREST (timeLogsTable, deviceId, row, …).
+ * PIPELINE ÚNICO (ARQUITETURA HÍBRIDA CORRIGIDA):
+ * - `time_records`: tabela principal. Batidas do relógio são gravadas aqui (synced=0).
+ *   O worker `services/syncService.js` lê e envia para `clock_event_logs` no Supabase.
+ * - `pending_punches`: tabela de fallback para o modo direto (deferCloud=false).
+ *   Quando CLOCK_SYNC_DEFER_CLOUD_TO_WORKER=1 (padrão), esta tabela NÃO é usada.
  *
- * Política de dados: não há DELETE nesta tabela — pendências permanecem até envio bem-sucedido
- * (`synced=1`); linhas corrompidas não são apagadas (ficam fora do flush até correção manual).
+ * Política de dados: não há DELETE — pendências permanecem até envio bem-sucedido (synced=1).
  */
 
 import { mkdirSync } from 'node:fs';
@@ -28,7 +30,7 @@ CREATE INDEX IF NOT EXISTS idx_pending_punches_synced_retry
   ON pending_punches (synced, timestamp);
 `;
 
-/** Espelho para `services/syncService.js` — não substitui a fila `pending_punches`. */
+/** `time_records` local: fonte principal do pipeline único → syncService.js → clock_event_logs. */
 const TIME_RECORDS_LOCAL_SCHEMA = `
 CREATE TABLE IF NOT EXISTS time_records (
   id TEXT PRIMARY KEY NOT NULL,

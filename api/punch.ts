@@ -23,53 +23,9 @@ const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-// ===== RATE LIMITING (in-memory, por instância) =====
-interface RateLimitEntry {
-  count: number;
-  resetAt: number;
-}
-
-const rateLimitMap = new Map<string, RateLimitEntry>();
-
-const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minuto
-const RATE_LIMIT_MAX_REQUESTS = 60;  // 60 requests por minuto por device
-
-function getRateLimitKey(deviceId: string, companyId: string): string {
-  return `${deviceId}:${companyId}`;
-}
-
-function checkRateLimit(deviceId: string, companyId: string): { allowed: boolean; remaining: number; resetIn: number } {
-  const key = getRateLimitKey(deviceId, companyId);
-  const now = Date.now();
-  
-  let entry = rateLimitMap.get(key);
-  
-  // Se não existe ou já expirou, criar novo
-  if (!entry || entry.resetAt <= now) {
-    entry = { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS };
-    rateLimitMap.set(key, entry);
-    return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - 1, resetIn: RATE_LIMIT_WINDOW_MS };
-  }
-  
-  // Incrementar contador
-  entry.count++;
-  
-  if (entry.count > RATE_LIMIT_MAX_REQUESTS) {
-    return { allowed: false, remaining: 0, resetIn: entry.resetAt - now };
-  }
-  
-  return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - entry.count, resetIn: entry.resetAt - now };
-}
-
-// Limpar entradas antigas a cada 5 minutos (evitar memory leak)
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of rateLimitMap.entries()) {
-    if (entry.resetAt <= now) {
-      rateLimitMap.delete(key);
-    }
-  }
-}, 5 * 60_000);
+// NOTA: Rate limiting em memória não funciona em serverless (Vercel).
+// A proteção real é feita pela validação de device_id + API_KEY.
+// Para rate limiting persistente, use Upstash Redis ou uma tabela Supabase.
 
 // Schema de validação Zod
 const PunchSchema = z.object({
@@ -156,20 +112,6 @@ export default async function handler(request: Request): Promise<Response> {
 
   const { deviceId, companyId, punches } = parsed.data;
 
-  // ===== RATE LIMITING =====
-  const rateLimit = checkRateLimit(deviceId, companyId);
-  if (!rateLimit.allowed) {
-    return Response.json(
-      { 
-        error: 'Rate limit exceeded.',
-        retryAfter: Math.ceil(rateLimit.resetIn / 1000),
-        deviceId,
-        companyId,
-      },
-      { status: 429, headers: corsHeaders }
-    );
-  }
-
   // Conexão Supabase (service role - NUNCA exposta no frontend)
   const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim().replace(/\/$/, '');
   const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
@@ -238,26 +180,14 @@ export default async function handler(request: Request): Promise<Response> {
     created_at: now,
   }));
 
-  // Inserção em lote (ignore-duplicates)
+  // Upsert idempotente: ON CONFLICT (dedupe_hash) DO NOTHING
+  // Garante que lotes com duplicatas parciais não descartam registros novos.
   try {
     const { error } = await supabase
       .from(timeLogsTable)
-      .insert(rows, { count: 'estimated' });
+      .upsert(rows, { onConflict: 'dedupe_hash', ignoreDuplicates: true });
 
     if (error) {
-      // Se for erro de violação única (dedupe), tratar como sucesso parcial
-      if (error.code === '23505' || error.message?.includes('dedupe_hash')) {
-        return Response.json(
-          {
-            success: true,
-            partial: true,
-            inserted: 0,
-            duplicates: rows.length,
-            message: 'Todos os registros já existem (duplicados).',
-          },
-          { status: 200, headers: corsHeaders }
-        );
-      }
       throw error;
     }
 

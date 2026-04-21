@@ -37,7 +37,7 @@ function mapTipoToEventType(t: string): string {
   const u = (t || 'E').toString().toUpperCase();
   if (u.startsWith('E') || u === 'IN' || u === '1') return 'entrada';
   if (u.startsWith('S') || u === 'OUT' || u === '2') return 'saida';
-  if (u.startsWith('P') || u === 'BREAK' || u === '3') return 'batida';
+  if (u.startsWith('P') || u === 'BREAK' || u === '3') return 'pausa';
   return 'batida';
 }
 
