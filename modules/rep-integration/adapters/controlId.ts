@@ -551,10 +551,10 @@ const ControlIdAdapter: RepVendorAdapter = {
       attempt = retry;
     }
 
+    const failedAttempt = attempt as { ok: false; addHint: string; updHint: string };
     return {
       ok: false,
-      message: `Control iD: inclusão falhou (${!attempt.ok ? attempt.addHint : ''}).` +
-        ` Atualização também falhou (${!attempt.ok ? attempt.updHint : ''}).${hint671}`,
+      message: `Control iD: inclusão falhou (${failedAttempt.addHint}). Atualização também falhou (${failedAttempt.updHint}).${hint671}`,
     };
   },
 
