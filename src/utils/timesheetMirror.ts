@@ -210,6 +210,28 @@ function sortRecordsByTime(records: TimeRecord[], dayDateStr: string): TimeRecor
 }
 
 /**
+ * Deduplicação defensiva para colisões de batidas REP:
+ * alguns fluxos podem gravar a mesma marcação (mesmo tipo/horário) mais de uma vez.
+ * No espelho isso polui a sequência e pode repetir horários em colunas erradas.
+ */
+function dedupeRepRecordsForMirror(records: TimeRecord[], dayDateStr: string): TimeRecord[] {
+  const kept = new Map<string, TimeRecord>();
+  for (const r of records) {
+    if (!isRepMirrorRecord(r) || isManualRecord(r)) {
+      kept.set(`raw:${r.id}`, r);
+      continue;
+    }
+    const norm = normalizeRecordTypeForMirror(r.type);
+    const hhmm = extractTime(recordEffectiveMirrorInstant(r, dayDateStr));
+    const key = `rep:${norm}:${hhmm}`;
+    if (!kept.has(key)) {
+      kept.set(key, r);
+    }
+  }
+  return Array.from(kept.values());
+}
+
+/**
  * Constrói o resumo diário a partir dos registros de um dia
  */
 /** Indica tipo «pausa» vindo do hardware (E/S/P) ou texto legado. */
@@ -245,7 +267,8 @@ export function classifyPunch(recordsDoDia: TimeRecord[], dayDateStr: string): {
 
 function buildDaySummary(records: TimeRecord[], dayDateStr: string): DayMirror {
   const realRecords = records.filter((r) => !isStatusRecord(r));
-  const sorted = sortRecordsByTime(realRecords, dayDateStr);
+  const sanitized = dedupeRepRecordsForMirror(realRecords, dayDateStr);
+  const sorted = sortRecordsByTime(sanitized, dayDateStr);
   const date = dayDateStr;
 
   let entradaInicio: string | null = null;
@@ -319,12 +342,12 @@ function buildDaySummary(records: TimeRecord[], dayDateStr: string): DayMirror {
   if (!saidaIntervalo && middle.length > 0) saidaIntervalo = middle[0];
   if (!voltaIntervalo && middle.length > 1) voltaIntervalo = middle[middle.length - 1];
 
-  const hasIntervalType = realRecords.some((r) => {
+  const hasIntervalType = sanitized.some((r) => {
     const n = normalizeRecordTypeForMirror(r.type);
     return n === 'intervalo_saida' || n === 'intervalo_volta';
   });
-  const entradas = realRecords.filter((r) => normalizeRecordTypeForMirror(r.type) === 'entrada').length;
-  const saidas = realRecords.filter((r) => normalizeRecordTypeForMirror(r.type) === 'saida').length;
+  const entradas = sanitized.filter((r) => normalizeRecordTypeForMirror(r.type) === 'entrada').length;
+  const saidas = sanitized.filter((r) => normalizeRecordTypeForMirror(r.type) === 'saida').length;
   if (!hasIntervalType && entradas === 1 && saidas === 1) {
     if (!saidaFinal && times.length > 1) saidaFinal = times[times.length - 1];
     saidaIntervalo = null;

@@ -61,6 +61,12 @@ function nsrFromRaw(raw: Record<string, unknown> | null | undefined): number | n
   return null;
 }
 
+function asUuidOrNull(value: string | null | undefined): string | null {
+  const v = String(value ?? '').trim();
+  if (!v) return null;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v) ? v : null;
+}
+
 function unwrapRpcResult(raw: unknown): Record<string, unknown> {
   if (raw == null) return {};
   if (typeof raw === 'string') {
@@ -131,12 +137,13 @@ export async function promoteClockEventsToEspelho(
         clock_event_log_id: ev.id,
         clock_device_id: ev.device_id,
       };
+      const repDeviceId = asUuidOrNull(ev.device_id);
 
       let rpcResult: Record<string, unknown> = {};
       try {
         const rawRpc = await restRpc<unknown>(cfg, 'rep_ingest_punch', {
           p_company_id: ev.company_id,
-          p_rep_device_id: null,
+          p_rep_device_id: repDeviceId,
           p_pis: pis,
           p_cpf: cpf,
           p_matricula: matricula,

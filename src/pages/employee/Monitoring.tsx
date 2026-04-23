@@ -36,21 +36,31 @@ const EmployeeMonitoring: React.FC = () => {
       ]);
       const users = usersRows ?? [];
       const records = [...(recordsRows ?? [])].sort((a, b) => recordPunchInstantMs(b) - recordPunchInstantMs(a));
-      const lastByUser = new Map<string, { type: string; at: string; lat?: number; lng?: number }>();
+      const lastByUser = new Map<string, { type: string; at: string }>();
+      const lastGpsByUser = new Map<string, { lat: number; lng: number; at: string }>();
       records.forEach((r: any) => {
         if (!lastByUser.has(r.user_id)) {
-          const coord = extractLatLng(r);
           const atIso = recordPunchInstantIso(r);
           lastByUser.set(r.user_id, {
             type: r.type,
             at: atIso,
-            lat: coord?.lat,
-            lng: coord?.lng,
           });
+        }
+        if (!lastGpsByUser.has(r.user_id)) {
+          const coord = extractLatLng(r);
+          if (coord && Number.isFinite(coord.lat) && Number.isFinite(coord.lng)) {
+            const atIso = recordPunchInstantIso(r);
+            lastGpsByUser.set(r.user_id, {
+              lat: coord.lat,
+              lng: coord.lng,
+              at: atIso,
+            });
+          }
         }
       });
       const statusList: EmployeeStatus[] = users.map((u: any) => {
         const last = lastByUser.get(u.id);
+        const lastGps = lastGpsByUser.get(u.id);
         let status: Status = 'Offline';
         if (last) {
           const dt = new Date(last.at).getTime();
@@ -67,8 +77,8 @@ const EmployeeMonitoring: React.FC = () => {
           status,
           lastRecordType: last?.type,
           lastRecordAt: last?.at ? new Date(last.at).toLocaleString('pt-BR') : undefined,
-          lat: last?.lat,
-          lng: last?.lng,
+          lat: lastGps?.lat,
+          lng: lastGps?.lng,
         };
       });
       setList(statusList);

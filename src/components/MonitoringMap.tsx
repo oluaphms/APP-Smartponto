@@ -54,9 +54,11 @@ const MonitoringMap: React.FC<MonitoringMapProps> = ({
     loadLeafletCSS();
   }, []);
 
-  const withLocation = employees.filter(
-    (e) => e.lat != null && e.lng != null && Number(e.lat) !== 0 && Number(e.lng) !== 0
-  );
+  const withLocation = employees.filter((e) => {
+    const lat = Number(e.lat);
+    const lng = Number(e.lng);
+    return Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0;
+  });
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -127,6 +129,7 @@ const MonitoringMap: React.FC<MonitoringMapProps> = ({
     }
 
     setTimeout(() => map.invalidateSize(), 100);
+    setTimeout(() => map.invalidateSize(), 350);
 
     return () => {
       markersRef.current.forEach((m) => m.remove());

@@ -132,20 +132,29 @@ const AdminMonitoring: React.FC = () => {
       ]);
       const users = usersRows ?? [];
       const records = [...(recentRecords ?? [])].sort((a, b) => recordPunchInstantMs(b) - recordPunchInstantMs(a));
-      const lastByUser = new Map<string, { type: string; at: string; lat?: number; lng?: number }>();
+      const lastByUser = new Map<string, { type: string; at: string }>();
+      const lastGpsByUser = new Map<string, { lat: number; lng: number; at: string }>();
       records.forEach((r: TimeRecordRow) => {
         if (!lastByUser.has(r.user_id)) {
-          const coord = extractLatLng(r);
           lastByUser.set(r.user_id, {
             type: r.type,
             at: recordPunchInstantIso(r),
-            lat: coord?.lat,
-            lng: coord?.lng,
           });
+        }
+        if (!lastGpsByUser.has(r.user_id)) {
+          const coord = extractLatLng(r);
+          if (coord && Number.isFinite(coord.lat) && Number.isFinite(coord.lng)) {
+            lastGpsByUser.set(r.user_id, {
+              lat: coord.lat,
+              lng: coord.lng,
+              at: recordPunchInstantIso(r),
+            });
+          }
         }
       });
       const statusList: EmployeeStatus[] = users.map((u: UserRow) => {
         const last = lastByUser.get(u.id);
+        const lastGps = lastGpsByUser.get(u.id);
         let status: MapStatus = 'Offline';
         if (last) {
           const dt = new Date(last.at).getTime();
@@ -162,8 +171,8 @@ const AdminMonitoring: React.FC = () => {
           status,
           lastRecordType: last?.type,
           lastRecordAt: last?.at ? new Date(last.at).toLocaleString('pt-BR') : undefined,
-          lat: last?.lat,
-          lng: last?.lng,
+          lat: lastGps?.lat,
+          lng: lastGps?.lng,
         };
       });
       setMapList(statusList);
