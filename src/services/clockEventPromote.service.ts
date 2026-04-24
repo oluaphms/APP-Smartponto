@@ -38,18 +38,45 @@ function eventTypeToRepTipo(eventType: string): string {
   return 'B';
 }
 
+/**
+ * Converte employee_id (PIS/CPF/crachá) para os campos da RPC rep_ingest_punch.
+ * Segue a mesma lógica do SQL rep_afd_canonical_11_digits:
+ * - 11 dígitos exatos → PIS/CPF
+ * - 12-14 dígitos → pega os últimos 11 (AFD com zeros à esquerda ou dígitos extras)
+ * - <= 10 dígitos → matrícula/crachá
+ * - > 14 dígitos → pega os primeiros 11
+ */
 function employeeFields(employeeId: string): { pis: string | null; cpf: string | null; matricula: string | null } {
   const digits = String(employeeId || '').replace(/\D/g, '');
-  if (digits.length === 11) {
-    return { pis: digits, cpf: digits, matricula: null };
-  }
-  if (digits.length > 0 && digits.length < 11) {
-    return { pis: null, cpf: null, matricula: String(employeeId).trim() };
-  }
   const trimmed = String(employeeId || '').trim();
+
+  // Calcula PIS canônico (11 dígitos) seguindo a lógica do SQL
+  let pisCanonical: string | null = null;
+  if (digits.length > 0) {
+    if (digits.length <= 11) {
+      pisCanonical = digits.padStart(11, '0');
+    } else if (digits.length <= 14) {
+      pisCanonical = digits.slice(-11);
+    } else {
+      pisCanonical = digits.slice(0, 11);
+    }
+  }
+
+  // Se temos um PIS canônico de 11 dígitos, usa como PIS/CPF
+  if (pisCanonical && pisCanonical.length === 11) {
+    return { pis: pisCanonical, cpf: pisCanonical, matricula: null };
+  }
+
+  // Se tem menos de 11 dígitos após limpar, trata como matrícula
+  if (digits.length > 0 && digits.length < 11) {
+    return { pis: null, cpf: null, matricula: trimmed };
+  }
+
+  // Fallback para IDs não numéricos
   if (trimmed && trimmed !== 'unknown') {
     return { pis: null, cpf: null, matricula: trimmed };
   }
+
   return { pis: null, cpf: null, matricula: null };
 }
 
