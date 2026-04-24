@@ -11,7 +11,6 @@ import {
   Clock,
   Download,
   LayoutGrid,
-  Layers,
   Plus,
   Pencil,
   Server,
@@ -55,18 +54,6 @@ type RepDeviceRow = {
   usuario?: string | null;
   senha?: string | null;
   config_extra?: Record<string, unknown> | null;
-};
-
-type TimeclockHubDeviceRow = {
-  id: string;
-  company_id: string;
-  type: string;
-  ip: string | null;
-  port: number | null;
-  nome_dispositivo: string | null;
-  ativo: boolean | null;
-  rep_device_id: string | null;
-  updated_at: string | null;
 };
 
 const HUB_PROVIDER_OPTIONS = [
@@ -269,9 +256,6 @@ async function appendRepPendingQueueDiagnostics(
 const AdminRepDevices: React.FC = () => {
   const { user, loading } = useCurrentUser();
   const [devices, setDevices] = useState<RepDeviceRow[]>([]);
-  const [hubDevices, setHubDevices] = useState<TimeclockHubDeviceRow[]>([]);
-  const [hubLoading, setHubLoading] = useState(false);
-  const [hubError, setHubError] = useState<string | null>(null);
   const [loadingList, setLoadingList] = useState(true);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
@@ -334,7 +318,10 @@ const AdminRepDevices: React.FC = () => {
     if (!user?.companyId || !isSupabaseConfigured()) return;
     setLoadingList(true);
     try {
-      const list = (await db.select('rep_devices', [{ column: 'company_id', operator: 'eq', value: user.companyId }])) as RepDeviceRow[];
+      const list = (await db.select('rep_devices', [
+        { column: 'company_id', operator: 'eq', value: user.companyId },
+        { column: 'ativo', operator: 'eq', value: true }
+      ])) as RepDeviceRow[];
       setDevices(list || []);
     } catch (e) {
       setMessage({ type: 'error', text: (e as Error).message });
@@ -343,33 +330,9 @@ const AdminRepDevices: React.FC = () => {
     }
   };
 
-  const loadHubDevices = useCallback(async () => {
-    if (!user?.companyId || !isSupabaseConfigured()) return;
-    setHubLoading(true);
-    setHubError(null);
-    try {
-      const list = (await db.select(
-        'timeclock_devices',
-        [{ column: 'company_id', operator: 'eq', value: user.companyId }],
-        { column: 'nome_dispositivo', ascending: true },
-        200
-      )) as TimeclockHubDeviceRow[];
-      setHubDevices(list || []);
-    } catch (e) {
-      setHubError((e as Error).message);
-      setHubDevices([]);
-    } finally {
-      setHubLoading(false);
-    }
-  }, [user?.companyId]);
-
   useEffect(() => {
     if (user?.companyId) loadDevices();
   }, [user?.companyId]);
-
-  useEffect(() => {
-    if (user?.companyId) void loadHubDevices();
-  }, [user?.companyId, loadHubDevices]);
 
   const loadEmployeesForRep = async () => {
     if (!user?.companyId || !isSupabaseConfigured()) return;
@@ -440,11 +403,6 @@ const AdminRepDevices: React.FC = () => {
     [devices, showInactiveDevices]
   );
   const hiddenDevicesCount = Math.max(0, devices.length - visibleDevices.length);
-
-  const hubStats = useMemo(() => {
-    const linked = hubDevices.filter((h) => h.rep_device_id).length;
-    return { total: hubDevices.length, linked };
-  }, [hubDevices]);
 
   const srSelectedDevice = useMemo(
     () => (srDeviceId ? devices.find((d) => d.id === srDeviceId) ?? null : null),
@@ -555,7 +513,6 @@ const AdminRepDevices: React.FC = () => {
               text: `Dispositivo desativado (não removido), pois possui ${logsCount} batida(s) no histórico sem destino seguro para migração.`,
             });
             await loadDevices();
-            await loadHubDevices();
             return;
           }
 
@@ -637,7 +594,6 @@ const AdminRepDevices: React.FC = () => {
               text: `Não foi possível migrar o histórico para "${target.nome_dispositivo}" (${moveErr.message}). O relógio foi apenas desativado para evitar perda/duplicidade.`,
             });
             await loadDevices();
-            await loadHubDevices();
             return;
           }
           movedCount = movedRows?.length ?? 0;
@@ -657,7 +613,6 @@ const AdminRepDevices: React.FC = () => {
               : 'Dispositivo removido.',
       });
       await loadDevices();
-      await loadHubDevices();
     } catch (e) {
       setMessage({ type: 'error', text: (e as Error).message });
     } finally {
@@ -1322,7 +1277,6 @@ const AdminRepDevices: React.FC = () => {
             });
             setModalOpen(false);
             void loadDevices();
-            void loadHubDevices();
             return;
           }
         }
@@ -1383,7 +1337,6 @@ const AdminRepDevices: React.FC = () => {
             });
             setModalOpen(false);
             void loadDevices();
-            void loadHubDevices();
             return;
           }
         }
@@ -1391,7 +1344,6 @@ const AdminRepDevices: React.FC = () => {
       }
       setModalOpen(false);
       void loadDevices();
-      void loadHubDevices();
     } catch (e) {
       setMessage({ type: 'error', text: (e as Error).message });
     }
@@ -1494,88 +1446,6 @@ const AdminRepDevices: React.FC = () => {
         </div>
       )}
 
-      {!loadingList && (
-        <section
-          className="mb-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden"
-          aria-labelledby="hub-timeclock-heading"
-        >
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/40">
-            <div className="flex items-start gap-3 min-w-0">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 dark:bg-violet-900/40">
-                <Layers className="text-violet-700 dark:text-violet-300" size={20} aria-hidden />
-              </div>
-              <div className="min-w-0">
-                <h2
-                  id="hub-timeclock-heading"
-                  className="text-sm font-semibold text-slate-900 dark:text-white tracking-tight"
-                >
-                  Hub TimeClock
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Vista somente leitura da tabela <code className="text-[11px]">timeclock_devices</code>
-                  {hubStats.total > 0 ? (
-                    <>
-                      {' '}
-                      — {hubStats.total} registro(s), {hubStats.linked} com vínculo a um REP.
-                    </>
-                  ) : null}
-                </p>
-              </div>
-            </div>
-            <Button type="button" variant="outline" size="sm" loading={hubLoading} onClick={() => void loadHubDevices()}>
-              Atualizar lista
-            </Button>
-          </div>
-          <div className="p-4">
-            {hubError ? (
-              <p className="text-sm text-amber-800 dark:text-amber-200" role="alert">
-                Não foi possível carregar o hub: {toUiString(hubError, hubError)}
-                {' — '}
-                confira se as migrações <code className="text-xs">timeclock_devices</code> foram aplicadas.
-              </p>
-            ) : hubLoading && hubDevices.length === 0 ? (
-              <LoadingState message="Carregando cadastro do hub…" />
-            ) : hubDevices.length === 0 ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Nenhum registro no hub. Ao salvar um relógio REP, o sistema tenta criar ou atualizar o espelho aqui.
-              </p>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-600">
-                <table className="w-full text-sm text-left min-w-[640px]">
-                  <thead className="bg-slate-50 dark:bg-slate-900/50 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    <tr>
-                      <th className="px-3 py-2 font-medium">Nome</th>
-                      <th className="px-3 py-2 font-medium">Tipo</th>
-                      <th className="px-3 py-2 font-medium">IP</th>
-                      <th className="px-3 py-2 font-medium">Porta</th>
-                      <th className="px-3 py-2 font-medium">REP (id)</th>
-                      <th className="px-3 py-2 font-medium">Ativo</th>
-                      <th className="px-3 py-2 font-medium">Atualizado</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 dark:divide-slate-700 text-slate-800 dark:text-slate-100">
-                    {hubDevices.map((h) => (
-                      <tr key={h.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/20">
-                        <td className="px-3 py-2 font-medium">{toUiString(h.nome_dispositivo || '—')}</td>
-                        <td className="px-3 py-2">
-                          <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{h.type}</code>
-                        </td>
-                        <td className="px-3 py-2 tabular-nums">{h.ip || '—'}</td>
-                        <td className="px-3 py-2 tabular-nums">{h.port ?? '—'}</td>
-                        <td className="px-3 py-2 font-mono text-xs">{shortUuid(h.rep_device_id)}</td>
-                        <td className="px-3 py-2">{h.ativo === false ? 'Não' : 'Sim'}</td>
-                        <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                          {formatDate(h.updated_at)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
 
       {repDeploymentNote && (
         <details className="mb-6 rounded-xl border border-amber-200/90 dark:border-amber-800/80 bg-amber-50/90 dark:bg-amber-950/35 text-amber-950 dark:text-amber-100">

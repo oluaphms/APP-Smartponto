@@ -19,6 +19,8 @@ export const TTL = {
   STATIC: 5 * 60 * 1000,       // 5 min
   /** Dados que mudam com frequência moderada: funcionários, configurações */
   NORMAL: 60 * 1000,            // 1 min
+  /** Dados de curta duração: dashboard admin, listas frequentes */
+  SHORT: 30 * 1000,             // 30 s
   /** Dados em tempo real: registros de ponto, badges */
   REALTIME: 15 * 1000,          // 15 s
 } as const;
@@ -93,6 +95,9 @@ export function invalidateCompanyListCaches(companyId: string): void {
   queryCache.invalidate(`users:${companyId}`);
   queryCache.invalidate(`time_records:week:${companyId}`);
   queryCache.invalidate(`time_records:admin_dash:v3:${companyId}`);
+  queryCache.invalidate(`time_records:admin_dash:chart:${companyId}`);
+  queryCache.invalidate(`time_records:admin_dash:recent:${companyId}`);
+  queryCache.invalidate(`users:${companyId}:minimal`);
   queryCache.invalidate(`admin_report:${companyId}`);
   useCatalogStore.getState().clearCompany(companyId);
 }

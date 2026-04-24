@@ -100,14 +100,21 @@ export async function getAdminDashboardData(companyId: string): Promise<AdminDas
     startChart.setHours(0, 0, 0, 0);
     const minInstantMs = startChart.getTime() - 36e6; // margem TZ
 
-    const [usersRows, recordsRaw] = await Promise.all([
+    // Otimização: buscar apenas campos necessários dos usuários
+    const [usersRows, recordsRaw, recentRecordsRaw] = await Promise.all([
       queryCache.getOrFetch(
-        `users:${companyId}`,
-        () => db.select('users', [{ column: 'company_id', operator: 'eq', value: companyId }]) as Promise<any[]>,
-        TTL.NORMAL,
+        `users:${companyId}:minimal`,
+        () => db.select('users', 
+          [{ column: 'company_id', operator: 'eq', value: companyId }],
+          undefined,
+          1000,
+          'id,nome,email,role,status'
+        ) as Promise<any[]>,
+        TTL.SHORT,
       ),
+      // Apenas registros dos últimos 14 dias para o gráfico
       queryCache.getOrFetch(
-        `time_records:admin_dash:v3:${companyId}:${todayLocal}`,
+        `time_records:admin_dash:chart:${companyId}:${todayLocal}`,
         () =>
           db.select(
             'time_records',
@@ -116,7 +123,19 @@ export async function getAdminDashboardData(companyId: string): Promise<AdminDas
               { column: 'created_at', operator: 'gte', value: new Date(minInstantMs).toISOString() },
             ],
             { column: 'created_at', ascending: false },
-            5000,
+            500, // Reduzido de 5000 para 500
+          ) as Promise<any[]>,
+        TTL.SHORT,
+      ),
+      // Apenas 5 registros mais recentes para "lastRecords"
+      queryCache.getOrFetch(
+        `time_records:admin_dash:recent:${companyId}`,
+        () =>
+          db.select(
+            'time_records',
+            [{ column: 'company_id', operator: 'eq', value: companyId }],
+            { column: 'created_at', ascending: false },
+            5,
           ) as Promise<any[]>,
         TTL.REALTIME,
       ),
@@ -124,6 +143,7 @@ export async function getAdminDashboardData(companyId: string): Promise<AdminDas
 
     const users = usersRows ?? [];
     const records = dedupeTimeRecordsByRepKey(recordsRaw ?? []);
+    const recentRecords = recentRecordsRaw ?? [];
 
     const todayRecords = records.filter((r: any) => {
       const iso = recordPunchInstantIso(r);
@@ -225,10 +245,8 @@ export async function getAdminDashboardData(companyId: string): Promise<AdminDas
       lowCount: low.count,
     };
 
-    const sortedNewest = [...records].sort((a, b) => recordPunchInstantMs(b) - recordPunchInstantMs(a));
-    const lastFive = sortedNewest.slice(0, 5);
-
-    const lastRecords: AdminDashboardLastRecord[] = lastFive.map((r: any) => {
+    // Usar recentRecords diretamente (já vem ordenado do banco)
+    const lastRecords: AdminDashboardLastRecord[] = recentRecords.map((r: any) => {
       const iso = recordPunchInstantIso(r);
       const t = new Date(iso);
       const timeStr = Number.isFinite(t.getTime())
