@@ -182,6 +182,7 @@ MASTER_OWNER_2_EMAIL=${owner2Email}
 MASTER_OWNER_2_PASSWORD=${owner2Password}
 MASTER_OWNER_2_NAME=${owner2Name}
 RATE_LIMIT_REDIS_REQUIRED=false
+DATA_API_WRITES_ENABLED=true
 CORS_ORIGINS=http://127.0.0.1:3010,http://localhost:3010
 `;
     fs.mkdirSync(this.paths.configDir, { recursive: true });

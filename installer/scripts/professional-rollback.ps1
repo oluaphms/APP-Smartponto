@@ -39,14 +39,14 @@ if ((Test-Path -LiteralPath $pgCtl) -and (Test-Path -LiteralPath $pgData)) {
 }
 
 # Libera portas e mata processos órfãos que sobrevivem ao sc delete / pg_ctl stop.
-foreach ($port in @(3000, 3010, 55432)) {
+foreach ($port in @(3000, 3010, 55432, 55433, 55434, 55435, 55436)) {
   try {
-    $pids = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
+    $listenPids = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
       Select-Object -ExpandProperty OwningProcess -Unique)
-    foreach ($pid in $pids) {
-      if ($pid -and $pid -gt 0) {
-        & taskkill.exe /F /PID $pid 2>&1 | Out-Null
-        Write-Log "Porta $port: taskkill PID $pid"
+    foreach ($listenPid in $listenPids) {
+      if ($listenPid -and $listenPid -gt 0) {
+        & taskkill.exe /F /PID $listenPid 2>&1 | Out-Null
+        Write-Log "Porta ${port}: taskkill PID ${listenPid}"
       }
     }
   } catch { }

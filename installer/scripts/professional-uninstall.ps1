@@ -2,7 +2,10 @@ param(
   [Parameter(Mandatory = $true)][string]$InstallDir,
   [Parameter(Mandatory = $true)][string]$ProgramDataDir,
   [string]$LogFile = (Join-Path $ProgramDataDir 'Logs\installer.log'),
-  [switch]$KeepProgramData
+  # Padrao: PRESERVA ProgramData (banco, secrets, MachineId, autorizacao).
+  # Remocao so com -RemoveProgramData explicito (task Inno "removedata").
+  [switch]$KeepProgramData,
+  [switch]$RemoveProgramData
 )
 $ErrorActionPreference = 'Continue'
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -23,8 +26,10 @@ Write-Log 'professional-uninstall iniciado'
   -LogFile $LogFile `
   -Reason 'desinstalacao solicitada'
 
-if (-not $KeepProgramData) {
-  Write-Log 'Removendo ProgramData (dados locais)...' 'WARN'
+# Compat: -KeepProgramData (legado) ou ausencia de -RemoveProgramData → preservar dados.
+$wipe = $RemoveProgramData -and -not $KeepProgramData
+if ($wipe) {
+  Write-Log 'Removendo ProgramData (opcao explicita -RemoveProgramData)...' 'WARN'
   if (Test-Path -LiteralPath $ProgramDataDir) {
     try {
       Remove-Item -LiteralPath $ProgramDataDir -Recurse -Force -ErrorAction Stop
@@ -34,7 +39,8 @@ if (-not $KeepProgramData) {
     }
   }
 } else {
-  Write-Log 'ProgramData preservado (-KeepProgramData)'
+  Write-Log "ProgramData preservado (banco/secrets/MachineId): $ProgramDataDir"
+  Write-Log 'Para apagar dados do cliente explicitamente, use -RemoveProgramData na desinstalacao.'
 }
 
 Write-Log 'professional-uninstall OK'

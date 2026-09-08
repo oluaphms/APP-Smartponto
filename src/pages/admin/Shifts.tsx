@@ -306,7 +306,10 @@ const AdminShifts: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured()) {
+      setMessage({ type: 'error', text: 'Camada de dados não configurada. Verifique a API local.' });
+      return;
+    }
     const nome = (form.description || form.name || '').trim() || (form.number ? `Horário ${form.number}` : 'Novo horário');
     if (!nome) {
       setMessage({ type: 'error', text: 'Informe a descrição (nome) do horário.' });
@@ -363,7 +366,12 @@ const AdminShifts: React.FC = () => {
       if (user?.companyId) invalidateStaticCatalogCaches(user.companyId);
       load();
     } catch (e: any) {
-      setMessage({ type: 'error', text: e?.message || 'Erro ao salvar.' });
+      const code = e?.code || e?.body?.code || e?.body?.error;
+      const text =
+        code === 'data_api_writes_disabled'
+          ? 'Escritas desativadas na API. No Professional, defina DATA_API_WRITES_ENABLED=true e reinicie o serviço.'
+          : e?.message || 'Erro ao salvar.';
+      setMessage({ type: 'error', text });
     } finally {
       setSaving(false);
     }
@@ -512,6 +520,18 @@ const AdminShifts: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {message && (
+              <div
+                className={`p-3 rounded-xl text-sm ${
+                  message.type === 'success'
+                    ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                }`}
+              >
+                {message.text}
+              </div>
+            )}
 
             {/* Incluir horário: Número, Descrição e Tipo de Jornada */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

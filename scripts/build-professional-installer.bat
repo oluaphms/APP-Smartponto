@@ -52,13 +52,16 @@ if not exist "%STAGING%\Database\bin\postgres.exe" (
 
 echo.
 echo [3/5] Sincronizando versao Inno com staging VERSION ...
-for /f "usebackq delims=" %%V in (`powershell -NoProfile -Command "(Get-Content -LiteralPath '%STAGING%\VERSION' -Raw).Trim().Replace('\"','')"` ) do set "STAGING_VERSION=%%V"
-> "%ROOT%\installer\rc2-staging-version.inc" (
-  echo ; Gerado por build-professional-installer.bat
-  echo #define MyAppVersion "%STAGING_VERSION%"
-)
+set "STAGING_VERSION="
+for /f "usebackq delims=" %%V in ("%STAGING%\VERSION") do set "STAGING_VERSION=%%V"
 if not defined STAGING_VERSION (
   echo [AVISO] Nao foi possivel ler VERSION do staging; usando rc2-staging-version.inc existente
+) else (
+  > "%ROOT%\installer\rc2-staging-version.inc" (
+    echo ; Gerado por build-professional-installer.bat
+    echo #define MyAppVersion "%STAGING_VERSION%"
+  )
+  echo      MyAppVersion=%STAGING_VERSION%
 )
 
 echo.

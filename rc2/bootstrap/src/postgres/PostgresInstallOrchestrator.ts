@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { BootstrapPaths, PostgresConnectionConfig } from '../types.js';
 import type { Logger } from '../Logger.js';
 import { PostgresDiscovery } from './PostgresDiscovery.js';
-import { allocatePostgresPort } from './PostgresPortCheck.js';
+import { allocatePostgresPort, isPortFree } from './PostgresPortCheck.js';
 import { SecretsStore } from './SecretsStore.js';
 import { PostgresEmbeddedService } from './PostgresEmbeddedService.js';
 import { DatabaseProvisioner } from './DatabaseProvisioner.js';
@@ -64,8 +64,20 @@ export class PostgresInstallOrchestrator {
   }
 
   private async installPostgresql(discovered: Awaited<ReturnType<PostgresDiscovery['discover']>>): Promise<void> {
-    const port = this.secrets.load()?.port ?? (await allocatePostgresPort());
-    const secrets = this.secrets.loadOrCreate(port);
+    const existing = this.secrets.load();
+    let port = existing?.port;
+    if (port == null || !(await isPortFree(port))) {
+      const allocated = await allocatePostgresPort();
+      if (port != null && port !== allocated) {
+        this.log.warn('Postgres port from secrets is busy — reallocating', { from: port, to: allocated });
+      }
+      port = allocated;
+    }
+    let secrets = this.secrets.loadOrCreate(port);
+    if (secrets.port !== port) {
+      secrets = { ...secrets, port };
+      this.secrets.save(secrets);
+    }
     const pg = new PostgresEmbeddedService(this.paths, this.log, discovered);
     await pg.initCluster({ port, superuserPassword: secrets.postgresSuperuserPassword });
     if (process.platform === 'win32') {

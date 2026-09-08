@@ -229,37 +229,30 @@ logging_collector = off
   }
 
   async setSuperuserPassword(password: string, port: number): Promise<void> {
-    const probe = await execFileAsync(
-      this.discovery.psqlExe,
-      ['-h', '127.0.0.1', '-p', String(port), '-U', 'postgres', '-d', 'postgres', '-c', 'SELECT 1;'],
-      { env: this.pgEnv({ PGPASSWORD: password }), timeoutMs: 15_000 },
-    );
-    if (probe.exitCode === 0) {
-      this.log.info('PostgresEmbeddedService.setSuperuserPassword skipped — password already valid');
-      return;
-    }
-
+    // Sempre força ALTER via trust temporário. Com HBA em trust o probe PGPASSWORD
+    // “passa” sem a senha existir — depois writeProductionHba + SCRAM quebra create_database.
     await this.writeBootstrapHbaTrust();
-    await this.reloadHba();
-
-    const r = await execFileAsync(
-      this.discovery.psqlExe,
-      [
-        '-h',
-        '127.0.0.1',
-        '-p',
-        String(port),
-        '-U',
-        'postgres',
-        '-d',
-        'postgres',
-        '-c',
-        `ALTER USER postgres WITH PASSWORD '${password.replace(/'/g, "''")}';`,
-      ],
-      { env: this.pgEnv({ PGPASSWORD: '' }), timeoutMs: 30_000 },
-    );
-    if (r.exitCode !== 0) {
-      throw new Error(`PG_SUPERUSER_PASSWORD_FAILED: ${r.stderr || r.stdout}`);
+    try {
+      await this.reloadHba();
+    } catch {
+      /* cluster pode ter acabado de subir; retry abaixo */
     }
+
+    const alterSql = `ALTER USER postgres WITH PASSWORD '${password.replace(/'/g, "''")}';`;
+    let lastErr = '';
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const r = await execFileAsync(
+        this.discovery.psqlExe,
+        ['-h', '127.0.0.1', '-p', String(port), '-U', 'postgres', '-d', 'postgres', '-c', alterSql],
+        { env: this.pgEnv({ PGPASSWORD: '' }), timeoutMs: 30_000 },
+      );
+      if (r.exitCode === 0) {
+        this.log.info('PostgresEmbeddedService.setSuperuserPassword OK');
+        return;
+      }
+      lastErr = r.stderr || r.stdout;
+      await new Promise((res) => setTimeout(res, 500));
+    }
+    throw new Error(`PG_SUPERUSER_PASSWORD_FAILED: ${lastErr}`);
   }
 }

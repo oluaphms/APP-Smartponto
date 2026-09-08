@@ -199,6 +199,7 @@ describe('DatabaseProvisioner.writeBackendEnv Master', () => {
     expect(env).toMatch(/^MASTER_OWNER_2_PASSWORD=.+$/m);
     expect(env).toMatch(/^MASTER_OWNER_2_NAME=.+$/m);
     expect(env).toMatch(/^RATE_LIMIT_REDIS_REQUIRED=false$/m);
+    expect(env).toMatch(/^DATA_API_WRITES_ENABLED=true$/m);
     expect(env).toMatch(
       /^CORS_ORIGINS=http:\/\/127\.0\.0\.1:3010,http:\/\/localhost:3010$/m,
     );

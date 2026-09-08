@@ -91,6 +91,52 @@ function Test-PostInstallHealth {
   }
 }
 
+function Import-CloudActivationIntoEnv {
+  <#
+    Mecanismo oficial (ordem):
+    1) cloud-activation.pending.json em ProgramData\Config (escrito pelo wizard Inno — sem pac_* na cmdline)
+    2) Variáveis de ambiente do processo pai: RC2_CLOUD_MASTER_URL + RC2_ACTIVATION_TOKEN
+    Nunca loga o plaintext do token.
+  #>
+  $pending = Join-Path $ProgramDataDir 'Config\cloud-activation.pending.json'
+  $hasUrl = -not [string]::IsNullOrWhiteSpace($env:RC2_CLOUD_MASTER_URL)
+  $hasToken = -not [string]::IsNullOrWhiteSpace($env:RC2_ACTIVATION_TOKEN)
+
+  if (Test-Path -LiteralPath $pending) {
+    try {
+      $raw = Get-Content -LiteralPath $pending -Raw -Encoding UTF8
+      $doc = $raw | ConvertFrom-Json
+      if ($doc.cloudMasterUrl) { $env:RC2_CLOUD_MASTER_URL = [string]$doc.cloudMasterUrl; $hasUrl = $true }
+      if ($doc.cloudActivationToken) {
+        $tok = [string]$doc.cloudActivationToken
+        if ($tok.StartsWith('pac_')) {
+          $env:RC2_ACTIVATION_TOKEN = $tok
+          $hasToken = $true
+        }
+      }
+      Remove-Item -LiteralPath $pending -Force -ErrorAction SilentlyContinue
+      Write-Log 'Ativacao Cloud: pending.json consumido (token nao logado)'
+    } catch {
+      Write-Log "Ativacao Cloud: pending.json invalido — $($_.Exception.Message)" 'WARN'
+      Remove-Item -LiteralPath $pending -Force -ErrorAction SilentlyContinue
+    }
+  }
+
+  # Professional installer exige ativação Cloud (pac_*) — sem licenseKey como auth.
+  $env:RC2_ACTIVATION_REQUIRED = 'true'
+
+  if ($hasUrl) {
+    Write-Log 'RC2_CLOUD_MASTER_URL definida (valor nao logado integralmente)'
+  } else {
+    Write-Log 'RC2_CLOUD_MASTER_URL ausente' 'WARN'
+  }
+  if ($hasToken) {
+    Write-Log 'RC2_ACTIVATION_TOKEN presente (pac_* — nao impresso)'
+  } else {
+    Write-Log 'RC2_ACTIVATION_TOKEN ausente — first_run deve falhar com ACTIVATION_REQUIRED' 'WARN'
+  }
+}
+
 try {
   Write-Log -Message 'RC2.4.3 professional-install iniciado'
   Write-Log -Message "InstallDir=$InstallDir ProgramDataDir=$ProgramDataDir"
@@ -110,7 +156,13 @@ try {
     Write-Log -Message "ProgramData OK: $d"
   }
 
-  # Retentativa apos falha: limpa RECOVERY/FAILED para o bootstrap nao recusar (ordem de paste nao importa).
+  Import-CloudActivationIntoEnv
+
+  # Cluster quebrado: estado INSTALLED sem PG_VERSION (ex.: uninstall parcial / pgdata vazio).
+  $pgVersion = Join-Path $ProgramDataDir 'Database\pgdata\PG_VERSION'
+  $clusterBroken = -not (Test-Path -LiteralPath $pgVersion)
+
+  # Retentativa: limpa RECOVERY/FAILED; tambem INSTALLED se o cluster embutido sumiu.
   foreach ($sf in @(
       (Join-Path $ProgramDataDir 'install-state.json'),
       (Join-Path $ProgramDataDir 'Config\install-state.json')
@@ -118,15 +170,29 @@ try {
     if (Test-Path -LiteralPath $sf) {
       try {
         $doc = Get-Content -LiteralPath $sf -Raw -ErrorAction Stop | ConvertFrom-Json
-        if ($doc.state -in @('RECOVERY', 'FAILED')) {
+        $resetStates = @('RECOVERY', 'FAILED')
+        if ($clusterBroken) { $resetStates += 'INSTALLED' }
+        if ($doc.state -in $resetStates) {
           Remove-Item -LiteralPath $sf -Force
-          Write-Log -Message "install-state $($doc.state) removido para retentativa: $sf"
+          Write-Log -Message "install-state $($doc.state) removido para retentativa: $sf$(if ($clusterBroken) { ' (pgdata sem PG_VERSION)' })"
         }
       } catch {
         Remove-Item -LiteralPath $sf -Force -ErrorAction SilentlyContinue
         Write-Log -Message "install-state invalido removido: $sf" 'WARN'
       }
     }
+  }
+
+  # Aviso: Docker/Local SaaS na mesma maquina costuma roubar 3000/3010/5432/55432.
+  try {
+    $dockerConflict = @(docker ps --format '{{.Names}} {{.Ports}}' 2>$null) |
+      Where-Object { $_ -match ':(3000|3010|5432|55432)->' }
+    if ($dockerConflict -and $dockerConflict.Count -gt 0) {
+      Write-Log -Message 'Conflito Docker detectado nas portas do Professional (3000/3010/5432/55432). Pare os containers SaaS/Local antes do bootstrap.' 'WARN'
+      foreach ($line in $dockerConflict) { Write-Log -Message "  docker: $line" 'WARN' }
+    }
+  } catch {
+    # docker CLI ausente — OK para instalacao nativa
   }
 
   $templates = Join-Path $InstallDir 'Config\templates'
@@ -149,9 +215,10 @@ try {
   $env:RC2_PROGRAM_FILES_ROOT = $InstallDir
   $env:RC2_PROGRAM_DATA_ROOT = $ProgramDataDir
   $env:RC2_BOOTSTRAP_MODE = 'embedded'
+  # RC2_ACTIVATION_REQUIRED / URL / TOKEN ja definidos em Import-CloudActivationIntoEnv
+  # Token NAO vai em ArgumentList do processo — apenas env herdado + SecretsStore no first_run.
 
-  Write-Log -Message 'Executando Bootstrap (embedded): PostgreSQL embedded + API + Frontend'
-  # ArgumentList exige aspas explicitas quando InstallDir contem espacos (ex.: Program Files).
+  Write-Log -Message 'Executando Bootstrap (embedded): PostgreSQL embedded + API + Frontend + activation gate'
   $bootstrapArg = "`"$bootstrapEntry`""
   $proc = Start-Process -FilePath $nodeExe `
     -ArgumentList $bootstrapArg `
@@ -161,10 +228,22 @@ try {
     -RedirectStandardError (Join-Path $ProgramDataDir 'Logs\bootstrap-stderr.log')
 
   if ($proc.ExitCode -ne 0) {
+    $stderrTail = ''
+    $errLog = Join-Path $ProgramDataDir 'Logs\bootstrap-stderr.log'
+    if (Test-Path -LiteralPath $errLog) {
+      $stderrTail = (Get-Content -LiteralPath $errLog -Tail 20 -ErrorAction SilentlyContinue) -join ' | '
+    }
+    if ($stderrTail -match 'ACTIVATION_REQUIRED|ACTIVATION_NETWORK|ACTIVATION_FAILED|RC2_ACTIVATION') {
+      throw "BOOTSTRAP_ACTIVATION_GATE: exit $($proc.ExitCode) — ativacao Professional obrigatoria falhou (ver bootstrap-stderr.log). Sem token/URL validos a instalacao nao fica operacional."
+    }
     throw "BOOTSTRAP_FAILED: exit $($proc.ExitCode) - ver Logs\bootstrap-stderr.log e Config\install-state.json"
   }
 
   Write-Log -Message 'Bootstrap concluido com exit 0'
+
+  & (Join-Path $scriptDir 'professional-secure-config.ps1') `
+    -ProgramDataDir $ProgramDataDir `
+    -LogFile $LogFile
 
   Test-PostInstallHealth
   Write-Log -Message 'Pos-install: servicos, portas 3000/3010 e HTTP health OK'
