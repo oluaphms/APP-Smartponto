@@ -25,6 +25,7 @@ import { DEFAULT_EXPIRY_WARNING_DAYS, LICENSE_MODES, LICENSE_STATUSES } from './
 import type { LicenseManagerStore } from './ports/LicenseManagerStore.js';
 import { InMemoryLicenseManagerStore } from './adapters/InMemoryLicenseManagerStore.js';
 import { appendLicenseHistory } from './composeLicenseCentral.js';
+import { generateLicenseKey } from '../localLicense/localLicense.fingerprint.js';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -312,6 +313,11 @@ export class LicenseManagerService {
         : new Date(Date.now() + durationDays * 86_400_000).toISOString();
 
     const ruleOverrides = { ...(input.ruleOverrides || {}) };
+    const meta: Record<string, unknown> = { simulated: true, operationalAuthWired: false };
+    // Professional Local/HYBRID: chave de ativação (não é o JWT Master).
+    if (mode === 'LOCAL' || mode === 'HYBRID') {
+      meta.licenseKey = generateLicenseKey();
+    }
     const row: CompanyLicense = {
       id: `lic_${randomUUID().replace(/-/g, '').slice(0, 12)}`,
       tenantId,
@@ -327,7 +333,7 @@ export class LicenseManagerService {
       blockedReason: status === 'Bloqueada' ? 'created_blocked' : null,
       createdAt: now,
       updatedAt: now,
-      meta: { simulated: true, operationalAuthWired: false },
+      meta,
     };
     return this.store.save(row);
   }
@@ -507,9 +513,11 @@ export class LicenseManagerService {
         break;
       case 'set_mode_local':
         next = { ...next, mode: 'LOCAL' };
+        if (!meta.licenseKey) meta.licenseKey = generateLicenseKey();
         break;
       case 'set_mode_hybrid':
         next = { ...next, mode: 'HYBRID' };
+        if (!meta.licenseKey) meta.licenseKey = generateLicenseKey();
         break;
       case 'delete': {
         const removed = await this.store.delete(id);

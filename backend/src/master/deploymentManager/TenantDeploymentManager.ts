@@ -274,6 +274,9 @@ export class TenantDeploymentManager {
         ...input.synchronization,
       },
       capabilities: defaults ? defaults.capabilities : current.capabilities,
+      meta: input.meta
+        ? { ...(current.meta || {}), ...input.meta }
+        : current.meta,
       updatedAt: nowIso(),
     };
 

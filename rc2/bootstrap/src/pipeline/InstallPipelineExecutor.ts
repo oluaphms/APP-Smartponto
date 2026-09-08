@@ -5,6 +5,7 @@ import type { InstallStepId } from '../installSteps.js';
 import { fetchHealthJson } from '@pontowebdesk/api-runtime';
 import { SecretsStore } from '../postgres/SecretsStore.js';
 import { execFileAsync, pgProcessEnv } from '../postgres/exec.js';
+import { runProfessionalCloudActivation } from '../license/runProfessionalCloudActivation.js';
 
 const PG_STEPS = new Set<InstallStepId>([
   'install_postgresql',
@@ -331,7 +332,7 @@ export class InstallPipelineExecutor {
 
     if (this.ctx.mode === 'full' && !this.ctx.postgresStub) {
       const secrets = new SecretsStore(this.ctx.paths.secretsFile);
-      secrets.loadOrCreate(5432);
+      secrets.loadOrCreate(55432);
     }
 
     if (this.ctx.mode === 'full' && this.ctx.backendInstall && !this.ctx.backendInstallStub) {
@@ -352,6 +353,14 @@ export class InstallPipelineExecutor {
         this.ctx.log.warn('first_run frontend health failed', { err: String(err) });
         throw err;
       }
+    }
+
+    // Identidade local + ativação/revalidação Cloud (pac_*). Sem sync operacional.
+    // Stub estrutural não exige Cloud (testes); installer real nunca usa postgresStub.
+    if (this.ctx.mode === 'full' && !this.ctx.postgresStub) {
+      await runProfessionalCloudActivation({ paths: this.ctx.paths, log: this.ctx.log });
+    } else if (this.ctx.postgresStub) {
+      this.ctx.log.info('first_run: cloud activation skipped (postgresStub)');
     }
 
     this.ctx.log.info('first_run OK — config inicial preparada');

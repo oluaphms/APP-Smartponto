@@ -2,7 +2,7 @@ export { Bootstrap, type BootstrapOptions } from './Bootstrap.js';
 export { ConfigManager, type ConfigManagerOptions } from './ConfigManager.js';
 export { InstallStateStore } from './InstallState.js';
 export { InstallManager } from './InstallManager.js';
-export { Logger, type LogLevel } from './Logger.js';
+export { Logger, type LogLevel, redactSecrets } from './Logger.js';
 export { RecoveryManager } from './RecoveryManager.js';
 export { ServiceManager, type ServiceKind } from './ServiceManager.js';
 export { Validation } from './Validation.js';

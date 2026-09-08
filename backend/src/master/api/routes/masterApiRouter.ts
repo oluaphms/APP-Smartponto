@@ -138,6 +138,11 @@ import {
   postInitializeOperationalCommercial,
 } from '../controllers/operationalDiscovery.controllers.js';
 import { getSecurityCompliance } from '../controllers/securityCompliance.controllers.js';
+import {
+  postProfessionalActivate,
+  postProfessionalRevalidate,
+  postIssueProfessionalActivationToken,
+} from '../controllers/professionalActivation.controllers.js';
 
 const router = Router();
 
@@ -169,6 +174,28 @@ router.post('/auth/refresh', masterAuthRateLimit, postMasterRefresh);
 router.post('/auth/logout', postMasterLogout);
 router.post('/auth/forgot-password', masterAuthRateLimit, postMasterForgotPassword);
 router.post('/auth/reset-password', masterAuthRateLimit, postMasterResetPassword);
+
+/**
+ * Ativação Professional — pública, autenticada por pac_* (não Master JWT).
+ * Isolada do UpdateAgent (uag_*). Rate limit anti-abuso.
+ */
+const professionalActivationRateLimit = rateLimit({
+  keyPrefix: 'master:professional-activation',
+  maxRequests: 20,
+  windowMs: 15 * 60 * 1000,
+  key: (req) => String(req.ip || 'unknown'),
+});
+
+router.post(
+  '/licenses/professional/activate',
+  professionalActivationRateLimit,
+  postProfessionalActivate,
+);
+router.post(
+  '/licenses/professional/revalidate',
+  professionalActivationRateLimit,
+  postProfessionalRevalidate,
+);
 
 router.use(requireMasterLogin());
 
@@ -404,6 +431,11 @@ router.post(
   '/deployments/:id/actions/:action',
   requireMasterPermission('deployments:write'),
   postTenantDeploymentAction,
+);
+router.post(
+  '/deployments/:id/activation-token',
+  requireMasterPermission('deployments:write'),
+  postIssueProfessionalActivationToken,
 );
 router.get('/updates/releases', requireMasterPermission('deployments:read'), getMasterReleases);
 router.post('/updates/releases', requireMasterPermission('deployments:write'), postMasterRelease);

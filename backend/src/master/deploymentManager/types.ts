@@ -109,6 +109,8 @@ export type UpdateTenantDeploymentInput = {
   repAgent?: Partial<TenantDeploymentRepAgent>;
   realtime?: Partial<TenantDeploymentRealtime>;
   synchronization?: Partial<TenantDeploymentSync>;
+  /** Extensível — ex.: machineId da ativação Professional. */
+  meta?: Record<string, unknown>;
 };
 
 export type TenantDeploymentAction =

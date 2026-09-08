@@ -1,10 +1,52 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import type { PostgresConnectionConfig } from '../types.js';
 import {
   resolveProfessionalMasterDefaults,
 } from './professionalSeedDefaults.js';
+
+/** Restringe leitura do arquivo de secrets (Windows ACL / unix 0600).
+ * Em Windows aplica icacls apenas sob ProgramData (ou RC2_APPLY_SECRETS_ACL=1),
+ * para não quebrar testes em %TEMP% sob UAC filtrado.
+ */
+export function restrictSecretsFilePermissions(secretsFile: string): void {
+  if (!fs.existsSync(secretsFile)) return;
+  const forceAcl =
+    process.env.RC2_APPLY_SECRETS_ACL === '1' ||
+    process.env.RC2_APPLY_SECRETS_ACL === 'true';
+  const underProgramData = /(?:^|[\\/])ProgramData[\\/]/i.test(secretsFile);
+
+  if (process.platform === 'win32') {
+    if (!forceAcl && !underProgramData) return;
+    try {
+      execFileSync('icacls', [secretsFile, '/inheritance:r'], { stdio: 'ignore' });
+      const grants = ['Administrators:F', 'SYSTEM:F'];
+      const domain = String(process.env.USERDOMAIN || '').trim();
+      const user = String(process.env.USERNAME || '').trim();
+      if (user) {
+        grants.push(domain ? `${domain}\\${user}:F` : `${user}:F`);
+      }
+      execFileSync('icacls', [secretsFile, '/grant:r', ...grants], { stdio: 'ignore' });
+      for (const remove of ['Users', 'Authenticated Users', 'Everyone', 'Todos']) {
+        try {
+          execFileSync('icacls', [secretsFile, '/remove', remove], { stdio: 'ignore' });
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch {
+      /* best-effort — não falha o install por ACL */
+    }
+    return;
+  }
+  try {
+    fs.chmodSync(secretsFile, 0o600);
+  } catch {
+    /* ignore */
+  }
+}
 
 export {
   DEFAULT_MASTER_OWNER_1_EMAIL,
@@ -30,6 +72,10 @@ export interface SecretsDocument {
   masterOwner2Email?: string;
   masterOwner2Password?: string;
   masterOwner2Name?: string;
+  /** URL do Master Cloud (https). Não é secret, mas fica no vault local. */
+  cloudMasterUrl?: string;
+  /** Credencial pac_* de ativação Professional (secret). */
+  cloudActivationToken?: string;
   port: number;
   createdAt: string;
 }
@@ -128,6 +174,7 @@ export class SecretsStore {
     fs.mkdirSync(path.dirname(this.secretsFile), { recursive: true });
     // UTF-8 sem BOM — evita JSON.parse falhar no bootstrap.
     fs.writeFileSync(this.secretsFile, `${JSON.stringify(doc, null, 2)}\n`, { encoding: 'utf8' });
+    restrictSecretsFilePermissions(this.secretsFile);
   }
 
   load(): SecretsDocument | null {
@@ -142,6 +189,27 @@ export class SecretsStore {
     const doc = this.generate(port);
     this.save(doc);
     return doc;
+  }
+
+  /** Persiste credencial Cloud sem sobrescrever se já existir (salvo force). */
+  upsertCloudActivation(
+    doc: SecretsDocument,
+    input: { cloudMasterUrl?: string; cloudActivationToken?: string; force?: boolean },
+  ): SecretsDocument {
+    let changed = false;
+    const next: SecretsDocument = { ...doc };
+    const url = String(input.cloudMasterUrl || '').trim();
+    const token = String(input.cloudActivationToken || '').trim();
+    if (url && (input.force || !next.cloudMasterUrl)) {
+      next.cloudMasterUrl = url;
+      changed = true;
+    }
+    if (token.startsWith('pac_') && (input.force || !next.cloudActivationToken)) {
+      next.cloudActivationToken = token;
+      changed = true;
+    }
+    if (changed) this.save(next);
+    return next;
   }
 
   toConnectionConfig(secrets: SecretsDocument): Omit<PostgresConnectionConfig, 'database'> {

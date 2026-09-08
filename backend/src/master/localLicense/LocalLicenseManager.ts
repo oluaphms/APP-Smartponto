@@ -18,7 +18,9 @@ import {
 import { validateOffline } from './localLicense.validator.js';
 import type {
   BindLocalLicenseInput,
+  HardwareHash,
   IssueLocalLicenseInput,
+  LicenseKey,
   LocalLicenseRecord,
   LocalLicenseValidationResult,
   MachineId,
@@ -149,8 +151,47 @@ export class LocalLicenseManager {
     });
   }
 
+  /**
+   * Binding Cloud→máquina com metadados comerciais (tenant/licenseId).
+   * Idempotente para o mesmo machineId+licenseKey.
+   */
+  async applyCloudBinding(input: {
+    machineId: MachineId;
+    licenseKey: LicenseKey;
+    hardwareHash: HardwareHash;
+    expirationDate?: string | null;
+    plan?: string | null;
+    meta?: Record<string, unknown>;
+  }): Promise<LocalLicenseRecord> {
+    const bound = await this.bind({
+      machineId: input.machineId,
+      licenseKey: input.licenseKey,
+      hardwareHash: input.hardwareHash,
+    });
+    const now = this.clock();
+    const updated: LocalLicenseRecord = {
+      ...bound,
+      hardwareHash: input.hardwareHash,
+      expirationDate:
+        input.expirationDate !== undefined ? input.expirationDate : bound.expirationDate,
+      plan: input.plan !== undefined ? input.plan : bound.plan,
+      heartbeat: nowIso(now),
+      meta: {
+        ...(bound.meta || {}),
+        offline: true,
+        networkRequired: false,
+        ...(input.meta || {}),
+      },
+    };
+    return this.store.save(updated);
+  }
+
   async getByMachineId(machineId: MachineId): Promise<LocalLicenseRecord | null> {
     return this.store.findByMachineId(machineId);
+  }
+
+  async getByLicenseKey(licenseKey: LicenseKey): Promise<LocalLicenseRecord | null> {
+    return this.store.findByLicenseKey(licenseKey);
   }
 
   /** Heartbeat local — prova de vida sem internet. */

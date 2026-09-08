@@ -10,6 +10,7 @@ import {
   isCommercialGateUnavailableError,
   readCompanySessionGate,
 } from '../master/commercial/companySessionRevocation.js';
+import { evaluateProfessionalLocalGate } from '../platform/professionalLocalLicenseGate.js';
 
 export type AuthLoginRow = {
   id: string;
@@ -367,6 +368,26 @@ export async function authenticateLogin(
   const secret = String(process.env.JWT_SECRET || '').trim();
   if (!secret) {
     return { status: 503, error: 'JWT_SECRET não configurado no servidor.' };
+  }
+
+  const professionalGate = evaluateProfessionalLocalGate();
+  if (professionalGate.enforced && !professionalGate.allow) {
+    logger.warn({
+      module: 'auth.login',
+      action: 'PROFESSIONAL_LICENSE_GATE',
+      message: 'login bloqueado por autorização Professional local',
+      meta: { mode: professionalGate.mode },
+    });
+    return {
+      status: 403,
+      error: 'Licença Professional indisponível para esta instalação.',
+      code:
+        professionalGate.mode === 'revoked' || professionalGate.mode === 'blocked'
+          ? 'PROFESSIONAL_LICENSE_REVOKED'
+          : professionalGate.mode === 'offline_exceeded'
+            ? 'PROFESSIONAL_OFFLINE_EXCEEDED'
+            : 'PROFESSIONAL_LICENSE_INVALID',
+    };
   }
 
   logger.info({
